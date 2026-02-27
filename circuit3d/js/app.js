@@ -183,6 +183,12 @@
     const startHole   = state.wireStart.holeRef;
     const endHole     = endPin.holeRef;
 
+    // Capture component-pin references for battery / off-board pins.
+    // These let simulate.js connect free pins (e.g. battery terminals) to
+    // the breadboard graph even though they carry no holeRef.
+    const sPm = state.wireStart.pinMesh;
+    const ePm = endPin.pinMesh || null;
+
     // Build the wire visual (coloured arc with leg stubs into holes)
     const wireGroup = buildWireGroup(startWorld, endWorld, state.wireColor);
     App.scene.add(wireGroup);
@@ -192,9 +198,13 @@
     if (sp) { sp.userData.isWireStart = false; sp.material.emissiveIntensity = 0.4; }
 
     state.wires.push({
-      group:      wireGroup,
-      startWorld, endWorld,
-      startHole,  endHole,   // ← used by simulate.js for connectivity
+      group:        wireGroup,
+      startWorld,   endWorld,
+      startHole,    endHole,          // breadboard hole refs (null for off-board pins)
+      startComp:    sPm?.userData.ownerComp  ?? null,
+      startPinIdx:  sPm?.userData.pinIndex   ?? -1,
+      endComp:      ePm?.userData.ownerComp  ?? null,
+      endPinIdx:    ePm?.userData.pinIndex   ?? -1,
     });
 
     state.wireStart = null;
@@ -218,25 +228,30 @@
     const mat = new THREE.MeshLambertMaterial({ color: hexColor });
     const LEG_H = 0.28;
 
-    // Leg stubs (slightly into the board)
+    // Leg stubs only for board-level pins (y ≈ 0); skip for elevated terminals
     const legGeo = new THREE.CylinderGeometry(0.04, 0.04, LEG_H, 7);
     [start, end].forEach(p => {
+      if (p.y > 0.15) return;   // battery/elevated pins — no leg into the board
       const leg = new THREE.Mesh(legGeo, mat.clone());
       leg.position.set(p.x, -LEG_H / 2 + 0.06, p.z);
       g.add(leg);
     });
 
-    // Arc body
+    // Use actual pin height for arc endpoints (fall back to 0.06 for board holes)
+    const startY = start.y > 0.15 ? start.y : 0.06;
+    const endY   = end.y   > 0.15 ? end.y   : 0.06;
+
+    // Arc body — mid-point rises above the higher of the two endpoints
     const dist = start.distanceTo(end);
     const mid  = new THREE.Vector3(
       (start.x + end.x) / 2,
-      dist * 0.22 + 0.38,
+      Math.max(startY, endY) + dist * 0.22 + 0.38,
       (start.z + end.z) / 2
     );
     const curve   = new THREE.CatmullRomCurve3([
-      new THREE.Vector3(start.x, 0.06, start.z),
+      new THREE.Vector3(start.x, startY, start.z),
       mid,
-      new THREE.Vector3(end.x,   0.06, end.z),
+      new THREE.Vector3(end.x,   endY,   end.z),
     ]);
     const tubeGeo = new THREE.TubeGeometry(curve, 26, 0.043, 7, false);
     const tube    = new THREE.Mesh(tubeGeo, mat.clone());

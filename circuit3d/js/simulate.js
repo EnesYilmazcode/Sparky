@@ -79,12 +79,25 @@
       });
     });
 
-    // 2. Wires merge nodes — wires now store startHole / endHole
+    // 2. Wires merge nodes — wires store startHole/endHole for breadboard
+    //    holes and startComp/startPinIdx for off-board pins (e.g. battery).
     wires.forEach(wire => {
-      const { startHole, endHole } = wire;
-      // A wire can have holeRefs (placed on board) or be null if free
-      const na = startHole ? bbNodeId(startHole.col, startHole.row) : null;
-      const nb = endHole   ? bbNodeId(endHole.col,   endHole.row)   : null;
+      const { startHole, endHole, startComp, startPinIdx, endComp, endPinIdx } = wire;
+
+      // Resolve each endpoint to a node string
+      let na = startHole ? bbNodeId(startHole.col, startHole.row) : null;
+      let nb = endHole   ? bbNodeId(endHole.col,   endHole.row)   : null;
+
+      // Fall back to component free-pin node when no board hole was recorded
+      if (!na && startComp) {
+        const ci = components.indexOf(startComp);
+        if (ci >= 0 && pinNode[ci]?.[startPinIdx] != null) na = pinNode[ci][startPinIdx];
+      }
+      if (!nb && endComp) {
+        const ci = components.indexOf(endComp);
+        if (ci >= 0 && pinNode[ci]?.[endPinIdx] != null) nb = pinNode[ci][endPinIdx];
+      }
+
       if (na && nb) uf.union(na, nb);
     });
 
@@ -123,13 +136,8 @@
           for (let outPin = 0; outPin < ns.length; outPin++) {
             if (outPin === inPin) continue;
 
-            // ── Polarity check for LED ───────────────────
-            // Current enters at anode (pin 1) and exits at cathode (pin 0).
-            // So valid traversal: inPin=1, outPin=0.
-            if (entry.comp.type === 'led') {
-              if (inPin !== 1 || outPin !== 0) continue;
-            }
-            // ─────────────────────────────────────────────
+            // LED is treated as bidirectional — current flows either way.
+            // (Real diodes are unidirectional but we keep it simple here.)
 
             const next = ns[outPin];
             if (visited.has(next)) continue;

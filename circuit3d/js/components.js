@@ -155,64 +155,100 @@
     const midX = (ax + bx) / 2;
     const midZ = (az + bz) / 2;
 
-    const CATHODE_H = 0.70;  // shorter  → cathode (−)
-    const ANODE_H   = 1.00;  // longer   → anode   (+)
+    const LEAD_H   = 0.88;   // both leads same height
+    const COLLAR_R = 0.185;
     const lMat = LEAD_MAT();
 
-    // Cathode lead (shorter, pin 0)
-    const cGeo  = new THREE.CylinderGeometry(0.023, 0.023, CATHODE_H, 7);
-    const cLead = new THREE.Mesh(cGeo, lMat.clone());
-    cLead.position.set(ax, CATHODE_H / 2, az);
-    group.add(cLead);
+    // Both vertical leads — same height, no polarity distinction
+    [[ax, az], [bx, bz]].forEach(([x, z]) => {
+      const l = new THREE.Mesh(
+        new THREE.CylinderGeometry(0.023, 0.023, LEAD_H, 7),
+        lMat.clone()
+      );
+      l.position.set(x, LEAD_H / 2, z);
+      group.add(l);
+    });
 
-    // Anode lead (longer, pin 1)
-    const aGeo  = new THREE.CylinderGeometry(0.023, 0.023, ANODE_H, 7);
-    const aLead = new THREE.Mesh(aGeo, lMat.clone());
-    aLead.position.set(bx, ANODE_H / 2, bz);
-    group.add(aLead);
+    // Horizontal metal stubs from each lead top to the collar edge
+    // (fills the gap so the dome doesn't float)
+    const isHoriz = Math.abs(az - bz) < 0.01;
+    if (isHoriz) {
+      const catEdgeX = midX + Math.sign(ax - midX) * COLLAR_R;
+      const anoEdgeX = midX + Math.sign(bx - midX) * COLLAR_R;
+      const cLen = Math.abs(catEdgeX - ax);
+      const aLen = Math.abs(anoEdgeX - bx);
+      if (cLen > 0.01) {
+        const s = new THREE.Mesh(new THREE.CylinderGeometry(0.018, 0.018, cLen, 7), lMat.clone());
+        s.rotation.z = Math.PI / 2;
+        s.position.set((ax + catEdgeX) / 2, LEAD_H, az);
+        group.add(s);
+      }
+      if (aLen > 0.01) {
+        const s = new THREE.Mesh(new THREE.CylinderGeometry(0.018, 0.018, aLen, 7), lMat.clone());
+        s.rotation.z = Math.PI / 2;
+        s.position.set((bx + anoEdgeX) / 2, LEAD_H, bz);
+        group.add(s);
+      }
+    } else {
+      const catEdgeZ = midZ + Math.sign(az - midZ) * COLLAR_R;
+      const anoEdgeZ = midZ + Math.sign(bz - midZ) * COLLAR_R;
+      const cLen = Math.abs(catEdgeZ - az);
+      const aLen = Math.abs(anoEdgeZ - bz);
+      if (cLen > 0.01) {
+        const s = new THREE.Mesh(new THREE.CylinderGeometry(0.018, 0.018, cLen, 7), lMat.clone());
+        s.rotation.x = Math.PI / 2;
+        s.position.set(ax, LEAD_H, (az + catEdgeZ) / 2);
+        group.add(s);
+      }
+      if (aLen > 0.01) {
+        const s = new THREE.Mesh(new THREE.CylinderGeometry(0.018, 0.018, aLen, 7), lMat.clone());
+        s.rotation.x = Math.PI / 2;
+        s.position.set(bx, LEAD_H, (bz + anoEdgeZ) / 2);
+        group.add(s);
+      }
+    }
 
-    const bodyY = (CATHODE_H + ANODE_H) / 2; // dome sits between the two lead heights
+    const bodyY = LEAD_H;
 
-    // Skirt/collar — flat on cathode side (real LED convention)
-    const collarGeo = new THREE.CylinderGeometry(0.185, 0.185, 0.11, 18);
-    const collar    = new THREE.Mesh(collarGeo, new THREE.MeshLambertMaterial({ color: 0x2a2a2a }));
+    // Collar
+    const collar = new THREE.Mesh(
+      new THREE.CylinderGeometry(COLLAR_R, COLLAR_R, 0.11, 18),
+      new THREE.MeshLambertMaterial({ color: 0x2a2a2a })
+    );
     collar.position.set(midX, bodyY - 0.04, midZ);
     group.add(collar);
 
-    // Flat cut on collar (cathode side indicator)
+    // Flat cut on collar (pin-A side indicator)
+    const catDir = new THREE.Vector3(ax - midX, 0, az - midZ).normalize();
     const cutBox = new THREE.Mesh(
       new THREE.BoxGeometry(0.38, 0.12, 0.08),
       new THREE.MeshLambertMaterial({ color: 0x1a1a1a })
     );
-    // Place cut on the side of the collar facing holeA (cathode)
-    const catDir = new THREE.Vector3(ax - midX, 0, az - midZ).normalize();
     cutBox.position.set(midX + catDir.x * 0.14, bodyY - 0.04, midZ + catDir.z * 0.14);
     group.add(cutBox);
 
     // Dome
-    const domeGeo = new THREE.SphereGeometry(0.185, 22, 11, 0, Math.PI * 2, 0, Math.PI * 0.55);
-    const dome    = new THREE.Mesh(domeGeo, new THREE.MeshLambertMaterial({
-      color, emissive: color, emissiveIntensity: 0.45, transparent: true, opacity: 0.88,
-    }));
+    const dome = new THREE.Mesh(
+      new THREE.SphereGeometry(COLLAR_R, 22, 11, 0, Math.PI * 2, 0, Math.PI * 0.55),
+      new THREE.MeshLambertMaterial({
+        color, emissive: color, emissiveIntensity: 0.45, transparent: true, opacity: 0.88,
+      })
+    );
     dome.position.set(midX, bodyY + 0.04, midZ);
     dome.castShadow = true;
     group.add(dome);
 
-    // "+" label above the anode lead for clarity
+    // Small +/− board-level markers so user can tell pin A from pin B
     const plusMat = new THREE.MeshLambertMaterial({ color: 0xff3333 });
-    const plusV   = box(0.04, 0.01, 0.14, plusMat);
-    const plusH   = box(0.14, 0.01, 0.04, plusMat);
-    [plusV, plusH].forEach(m => { m.position.set(bx, 0.03, bz); group.add(m); });
-
-    // "−" label above cathode lead
-    const minusMat = new THREE.MeshLambertMaterial({ color: 0x3355ff });
-    const minus    = box(0.12, 0.01, 0.04, minusMat);
+    [box(0.04, 0.01, 0.14, plusMat), box(0.14, 0.01, 0.04, plusMat.clone())]
+      .forEach(m => { m.position.set(bx, 0.03, bz); group.add(m); });
+    const minus = box(0.12, 0.01, 0.04, new THREE.MeshLambertMaterial({ color: 0x3355ff }));
     minus.position.set(ax, 0.03, az);
     group.add(minus);
 
     const pins = [
-      new THREE.Vector3(ax, 0, az),  // pin 0 = cathode (−)
-      new THREE.Vector3(bx, 0, bz),  // pin 1 = anode   (+)
+      new THREE.Vector3(ax, 0, az),
+      new THREE.Vector3(bx, 0, bz),
     ];
     return { group, pins };
   }
@@ -249,59 +285,84 @@
     snap.position.set(0, H + 0.11, 0);
     group.add(snap);
 
-    // ── POSITIVE terminal (left, smaller round post + big red ring) ──
+    // ── POSITIVE terminal (left) — entirely RED, unmistakeable ──
+    // Red post
     const posCap = cylinder(0.13, 0.30, 14,
-      new THREE.MeshLambertMaterial({ color: 0xdddddd }));
+      new THREE.MeshLambertMaterial({ color: 0xff3333, emissive: 0x880000, emissiveIntensity: 0.5 }));
     posCap.position.set(-0.32, H + 0.37, 0);
     group.add(posCap);
 
-    // Red disc — unmistakeable "+"
-    const posDisc = cylinder(0.17, 0.06, 16,
-      new THREE.MeshLambertMaterial({ color: 0xff2222, emissive: 0x550000, emissiveIntensity: 0.4 }));
-    posDisc.position.set(-0.32, H + 0.54, 0);
+    // Red top disc
+    const posDisc = cylinder(0.19, 0.07, 16,
+      new THREE.MeshLambertMaterial({ color: 0xff1111, emissive: 0xaa0000, emissiveIntensity: 0.6 }));
+    posDisc.position.set(-0.32, H + 0.55, 0);
     group.add(posDisc);
 
-    // Big "+" symbol on positive disc (raised)
+    // Large "+" symbol on positive disc
     const plusMat = new THREE.MeshLambertMaterial({ color: 0xffffff });
-    const plusV = box(0.04, 0.02, 0.2,  plusMat);
-    const plusH = box(0.2,  0.02, 0.04, plusMat);
-    plusV.position.set(-0.32, H + 0.58, 0);
-    plusH.position.set(-0.32, H + 0.58, 0);
+    const plusV = box(0.05, 0.025, 0.26, plusMat);
+    const plusH = box(0.26, 0.025, 0.05, plusMat);
+    plusV.position.set(-0.32, H + 0.60, 0);
+    plusH.position.set(-0.32, H + 0.60, 0);
     group.add(plusV, plusH);
 
-    // ── NEGATIVE terminal (right, larger ring) ──
+    // Glowing red ring around positive terminal base (halo)
+    const posHalo = new THREE.Mesh(
+      new THREE.TorusGeometry(0.26, 0.04, 8, 20),
+      new THREE.MeshLambertMaterial({ color: 0xff2222, emissive: 0xcc0000, emissiveIntensity: 0.9 })
+    );
+    posHalo.rotation.x = Math.PI / 2;
+    posHalo.position.set(-0.32, H + 0.23, 0);
+    group.add(posHalo);
+
+    // ── NEGATIVE terminal (right) — entirely BLUE, unmistakeable ──
+    // Blue platform base
+    const negBase = cylinder(0.28, 0.10, 18,
+      new THREE.MeshLambertMaterial({ color: 0x2244cc, emissive: 0x001166, emissiveIntensity: 0.4 }));
+    negBase.position.set(0.32, H + 0.10, 0);
+    group.add(negBase);
+
+    // Blue torus ring
     const negRing = new THREE.Mesh(
       new THREE.TorusGeometry(0.24, 0.09, 9, 18),
-      new THREE.MeshLambertMaterial({ color: 0x888888 })
+      new THREE.MeshLambertMaterial({ color: 0x3366ff, emissive: 0x001188, emissiveIntensity: 0.5 })
     );
     negRing.rotation.x = Math.PI / 2;
     negRing.position.set(0.32, H + 0.24, 0);
     group.add(negRing);
 
-    // Blue disc — unmistakeable "−"
-    const negDisc = cylinder(0.24, 0.04, 18,
-      new THREE.MeshLambertMaterial({ color: 0x2244cc, emissive: 0x001040, emissiveIntensity: 0.3 }));
-    negDisc.position.set(0.32, H + 0.08, 0);
-    group.add(negDisc);
-
-    // "−" symbol on negative disc
+    // Large "−" symbol on negative terminal
     const minusMat = new THREE.MeshLambertMaterial({ color: 0xffffff });
-    const minus = box(0.22, 0.02, 0.05, minusMat);
-    minus.position.set(0.32, H + 0.12, 0);
+    const minus = box(0.28, 0.025, 0.07, minusMat);
+    minus.position.set(0.32, H + 0.14, 0);
     group.add(minus);
 
-    // Floating "+" and "−" text plates above each terminal (large, flat)
-    function addTerminalLabel(text, x, y, z, color) {
-      const mat = new THREE.MeshLambertMaterial({ color });
-      const m   = box(text === '+' ? 0.22 : 0.18, 0.01, 0.06, mat);
-      m.position.set(x, y, z);
-      group.add(m);
-      if (text === '+') {
-        const v = box(0.06, 0.01, 0.22, mat);
-        v.position.set(x, y, z);
-        group.add(v);
-      }
-    }
+    // Glowing blue ring halo
+    const negHalo = new THREE.Mesh(
+      new THREE.TorusGeometry(0.36, 0.04, 8, 20),
+      new THREE.MeshLambertMaterial({ color: 0x2255ff, emissive: 0x0033cc, emissiveIntensity: 0.9 })
+    );
+    negHalo.rotation.x = Math.PI / 2;
+    negHalo.position.set(0.32, H + 0.23, 0);
+    group.add(negHalo);
+
+    // ── Side-face +/− labels (front & back Z faces, clearly visible) ──
+    // Put on both Z faces so the label is visible from any camera angle
+    [D / 2 + 0.013, -(D / 2 + 0.013)].forEach(fz => {
+      // "+" (red) — left half, same side as positive terminal
+      const pMat = new THREE.MeshLambertMaterial({ color: 0xff2222, emissive: 0xaa0000, emissiveIntensity: 0.7 });
+      const pV = new THREE.Mesh(new THREE.BoxGeometry(0.09, 0.46, 0.02), pMat);
+      const pH = new THREE.Mesh(new THREE.BoxGeometry(0.46, 0.09, 0.02), pMat);
+      pV.position.set(-0.36, H * 0.48, fz);
+      pH.position.set(-0.36, H * 0.48, fz);
+      group.add(pV, pH);
+
+      // "−" (blue) — right half, same side as negative terminal
+      const nMat = new THREE.MeshLambertMaterial({ color: 0x2255ff, emissive: 0x1133cc, emissiveIntensity: 0.7 });
+      const nH = new THREE.Mesh(new THREE.BoxGeometry(0.46, 0.09, 0.02), nMat);
+      nH.position.set(0.36, H * 0.48, fz);
+      group.add(nH);
+    });
 
     group.position.set(wx, 0, wz);
 
@@ -360,36 +421,49 @@
     }
 
     if (type === 'led') {
-      const CATHODE_H = 0.70, ANODE_H = 1.00;
+      const LEAD_H   = 0.88;
+      const COLLAR_R = 0.185;
       const lMat = ghostMat(0xcccccc, alpha);
 
-      const cL = cylinder(0.023, CATHODE_H, 7, lMat.clone());
-      cL.position.set(-half, CATHODE_H / 2, 0);
-      group.add(cL);
+      // Both leads same height
+      [[-half, 0], [half, 0]].forEach(([x, z]) => {
+        const l = cylinder(0.023, LEAD_H, 7, lMat.clone());
+        l.position.set(x, LEAD_H / 2, z);
+        group.add(l);
+      });
 
-      const aL = cylinder(0.023, ANODE_H, 7, lMat.clone());
-      aL.position.set(half, ANODE_H / 2, 0);
-      group.add(aL);
+      // Horizontal stubs from lead tops to collar edge
+      const stubLen = Math.max(0, half - COLLAR_R);
+      if (stubLen > 0.01) {
+        const sGeo = new THREE.CylinderGeometry(0.018, 0.018, stubLen, 7);
+        const cStub = new THREE.Mesh(sGeo, lMat.clone());
+        cStub.rotation.z = Math.PI / 2;
+        cStub.position.set(-(half + COLLAR_R) / 2, LEAD_H, 0);
+        group.add(cStub);
+        const aStub = new THREE.Mesh(sGeo.clone(), lMat.clone());
+        aStub.rotation.z = Math.PI / 2;
+        aStub.position.set((half + COLLAR_R) / 2, LEAD_H, 0);
+        group.add(aStub);
+      }
 
-      const bodyY = (CATHODE_H + ANODE_H) / 2;
-      const collar = cylinder(0.185, 0.11, 16, ghostMat(0x2a2a2a, alpha));
+      const bodyY = LEAD_H;
+      const collar = cylinder(COLLAR_R, 0.11, 16, ghostMat(0x2a2a2a, alpha));
       collar.position.y = bodyY - 0.04;
       group.add(collar);
 
       const dome = new THREE.Mesh(
-        new THREE.SphereGeometry(0.185, 18, 9, 0, Math.PI * 2, 0, Math.PI * 0.55),
+        new THREE.SphereGeometry(COLLAR_R, 18, 9, 0, Math.PI * 2, 0, Math.PI * 0.55),
         ghostMat(0xff2222, alpha * 0.85)
       );
       dome.position.y = bodyY + 0.04;
       group.add(dome);
 
-      // "+" marker on anode side
+      // +/− board-level markers
       const pm = ghostMat(0xff3333, 0.8);
       [box(0.04, 0.01, 0.14, pm), box(0.14, 0.01, 0.04, pm.clone())].forEach(m => {
         m.position.set(half, 0.04, 0);
         group.add(m);
       });
-      // "−" marker on cathode side
       const mm = box(0.12, 0.01, 0.04, ghostMat(0x3355ff, 0.8));
       mm.position.set(-half, 0.04, 0);
       group.add(mm);
@@ -397,12 +471,68 @@
 
     if (type === 'battery') {
       const W = 2.0, H = 2.6, D = 1.4;
-      const b = box(W, H, D, ghostMat(0x111111, alpha));
+      const ba = 0.80;  // battery ghost is much more opaque than other ghosts
+
+      // Body
+      const b = box(W, H, D, ghostMat(0x111111, ba));
       b.position.y = H / 2;
       group.add(b);
-      const lb = box(W, H * 0.55, D + 0.01, ghostMat(0x1a3a9a, alpha));
+
+      // Label band
+      const lb = box(W - 0.01, H * 0.55, D + 0.01, ghostMat(0x1a3a9a, ba));
       lb.position.y = H * 0.52;
       group.add(lb);
+
+      // "9V" stripe
+      const nv = box(0.6, 0.22, D + 0.02, ghostMat(0xffffff, ba * 0.7));
+      nv.position.y = H * 0.52;
+      group.add(nv);
+
+      // Snap connector platform
+      const snap = box(W * 0.65, 0.22, D * 0.55, ghostMat(0x333333, ba));
+      snap.position.set(0, H + 0.11, 0);
+      group.add(snap);
+
+      // Positive terminal — red post + red disc + "+" symbol
+      const posPost = cylinder(0.13, 0.30, 14, ghostMat(0xff3333, ba));
+      posPost.position.set(-0.32, H + 0.37, 0);
+      group.add(posPost);
+      const posDisc = cylinder(0.19, 0.07, 16, ghostMat(0xff1111, ba));
+      posDisc.position.set(-0.32, H + 0.55, 0);
+      group.add(posDisc);
+      const ppv = box(0.05, 0.025, 0.26, ghostMat(0xffffff, 0.95));
+      const pph = box(0.26, 0.025, 0.05, ghostMat(0xffffff, 0.95));
+      ppv.position.set(-0.32, H + 0.60, 0);
+      pph.position.set(-0.32, H + 0.60, 0);
+      group.add(ppv, pph);
+
+      // Negative terminal — blue ring + "−" symbol
+      const negBase = cylinder(0.28, 0.10, 18, ghostMat(0x2244cc, ba));
+      negBase.position.set(0.32, H + 0.10, 0);
+      group.add(negBase);
+      const negRing = new THREE.Mesh(
+        new THREE.TorusGeometry(0.24, 0.09, 9, 18),
+        ghostMat(0x3366ff, ba)
+      );
+      negRing.rotation.x = Math.PI / 2;
+      negRing.position.set(0.32, H + 0.24, 0);
+      group.add(negRing);
+      const pminus = box(0.28, 0.025, 0.07, ghostMat(0xffffff, 0.95));
+      pminus.position.set(0.32, H + 0.14, 0);
+      group.add(pminus);
+
+      // Side-face +/− labels (same as placed battery)
+      [D / 2 + 0.013, -(D / 2 + 0.013)].forEach(fz => {
+        const pMat = ghostMat(0xff2222, 0.95);
+        const pV = new THREE.Mesh(new THREE.BoxGeometry(0.09, 0.46, 0.02), pMat);
+        const pH = new THREE.Mesh(new THREE.BoxGeometry(0.46, 0.09, 0.02), pMat.clone());
+        pV.position.set(-0.36, H * 0.48, fz);
+        pH.position.set(-0.36, H * 0.48, fz);
+        group.add(pV, pH);
+        const nH = new THREE.Mesh(new THREE.BoxGeometry(0.46, 0.09, 0.02), ghostMat(0x2255ff, 0.95));
+        nH.position.set(0.36, H * 0.48, fz);
+        group.add(nH);
+      });
     }
 
     // Apply rotation: 1 = rotate 90° around Y so component spans vertically

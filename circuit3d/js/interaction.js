@@ -50,16 +50,16 @@
     function syncGhost() {
       const t = state.pickedType;
       const r = state.placementRotation;
-      if (state.mode !== 'place' || !t || t === 'battery') {
+      if (state.mode !== 'place' || !t) {
         destroyGhost();
         return;
       }
       if (ghostGroup && ghostType === t && ghostRot === r) return; // already built
 
       destroyGhost();
-      const bb    = state.breadboard;
-      const span  = t === 'led' ? App.LED_SPAN : App.RESISTOR_SPAN;
-      ghostGroup  = App.buildPreview(t, span, bb.HS, r);
+      const bb   = state.breadboard;
+      const span = t === 'led' ? App.LED_SPAN : (t === 'resistor' ? App.RESISTOR_SPAN : 0);
+      ghostGroup = App.buildPreview(t, span, bb.HS, r);
       ghostGroup.visible = false;
       scene.add(ghostGroup);
       ghostType = t;
@@ -122,9 +122,19 @@
         const type = state.pickedType;
 
         if (type === 'battery') {
-          hoverSphere.visible  = false;
+          hoverSphere.visible     = false;
           holeLabel.style.display = 'none';
-          if (ghostGroup) ghostGroup.visible = false;
+          // Position ghost at cursor, clamped outside the board
+          const pt  = new THREE.Vector3();
+          const hit = raycaster.ray.intersectPlane(boardPlane, pt);
+          if (hit && ghostGroup) {
+            const margin  = state.breadboard.BOARD_W / 2 + 2.5;
+            const clampX  = pt.x >= 0 ? Math.max(pt.x, margin) : Math.min(pt.x, -margin);
+            ghostGroup.position.set(clampX, 0, pt.z);
+            ghostGroup.visible = true;
+          } else if (ghostGroup) {
+            ghostGroup.visible = false;
+          }
           return;
         }
 
@@ -351,8 +361,8 @@
           }
           App.setHint('Click another hole or pin to complete the wire · ESC to cancel');
         } else {
-          // Complete wire
-          App.finishWire({ world: clickWorld, holeRef: clickHoleRef });
+          // Complete wire — pass pinMesh so simulate.js can resolve component pins
+          App.finishWire({ world: clickWorld, holeRef: clickHoleRef, pinMesh: clickPinMesh });
           wireStartPinMesh = null;
         }
       }
