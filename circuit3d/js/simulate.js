@@ -1,30 +1,39 @@
 // ─────────────────────────────────────────────────────────────
 //  simulate.js — Circuit simulation engine
 //
-//  How it works:
-//  1. Every component pin maps to a "node" (electrical connection point).
-//  2. Breadboard holes in the same column + same half (a-e or f-j) share
-//     a node — they are internally connected, just like a real breadboard.
-//     Power-rail holes share a node along their entire row.
-//  3. Wires merge the nodes they connect (union-find).
-//  4. For each battery we DFS through the node/component graph looking for
-//     a complete path from the + terminal back to the − terminal.
-//  5. If a path exists: I = (V_batt − ΣVf) / ΣR
-//     Any LED in that path with I > threshold lights up.
+//  NODE MODEL
+//  ──────────
+//  Each breadboard hole belongs to a "node" determined by its
+//  physical connectivity (columns in same half share a node):
+//
+//    bb_top_<col>  →  any hole in col <col>, rows a–e
+//    bb_bot_<col>  →  any hole in col <col>, rows f–j
+//    bb_rail_tp    →  all holes in the top + rail row
+//    bb_rail_tn    →  all holes in the top − rail row
+//    bb_rail_bn    →  all holes in the bottom − rail row
+//    bb_rail_bp    →  all holes in the bottom + rail row
+//
+//  Wires (drawn by the user) additionally merge any two nodes.
+//
+//  POLARITY
+//  ────────
+//  LEDs are diodes — current may only flow from anode (+) to cathode (−).
+//  If the circuit drives current the wrong way the LED stays off.
+//  Battery: pin 0 = positive (+) output, pin 1 = negative (−) return.
 //
 //  Exports: App.runSimulation(), App.stopSimulation()
 // ─────────────────────────────────────────────────────────────
 
 (function (App) {
 
-  // ── Component electrical properties ────────────────────────
+  // ── Electrical properties ───────────────────────────────────
   const PROPS = {
     battery:  { voltage: 9.0 },
-    resistor: { resistance: 220 },      // 220 Ω default
+    resistor: { resistance: 220 },    // 220 Ω default
     led:      { forwardVoltage: 2.0, thresholdCurrent: 0.001 },
   };
 
-  // ── Union-Find (path compression) ──────────────────────────
+  // ── Union-Find ──────────────────────────────────────────────
   class UnionFind {
     constructor() { this._p = {}; }
     make(id) { if (!(id in this._p)) this._p[id] = id; }
@@ -40,25 +49,21 @@
   }
 
   // ── Breadboard node identity ────────────────────────────────
-  // Holes in the same column and same body-half are wired together.
-  // Power rail holes share one node per rail.
   const TOP_BODY = new Set(['a','b','c','d','e']);
   const BOT_BODY = new Set(['f','g','h','i','j']);
 
   function bbNodeId(col, row) {
     if (TOP_BODY.has(row)) return `bb_top_${col}`;
     if (BOT_BODY.has(row)) return `bb_bot_${col}`;
-    // power rails span the whole board — one node each
-    return `bb_rail_${row}`;
+    return `bb_rail_${row}`; // tp | tn | bn | bp
   }
 
-  // ── Build the electrical node graph ────────────────────────
+  // ── Build graph ─────────────────────────────────────────────
   function buildGraph(components, wires) {
-    const uf = new UnionFind();
-
-    // 1. Assign initial node to every pin
+    const uf      = new UnionFind();
     const pinNode = []; // pinNode[ci][pi] = raw node string
 
+    // 1. Assign every component pin to a node
     components.forEach((comp, ci) => {
       pinNode[ci] = [];
       comp.pins.forEach((_, pi) => {
@@ -67,7 +72,6 @@
           const { col, row } = comp.holeRefs[pi];
           nid = bbNodeId(col, row);
         } else {
-          // Battery or floating component — own unique node per pin
           nid = `free_${ci}_${pi}`;
         }
         pinNode[ci][pi] = nid;
@@ -75,32 +79,33 @@
       });
     });
 
-    // 2. Merge nodes that wires connect
+    // 2. Wires merge nodes — wires now store startHole / endHole
     wires.forEach(wire => {
-      const { startComp, startPinIdx, endComp, endPinIdx } = wire;
-      if (!startComp || !endComp) return;
-
-      const si = components.indexOf(startComp);
-      const ei = components.indexOf(endComp);
-      if (si < 0 || ei < 0) return;
-
-      const na = pinNode[si]?.[startPinIdx];
-      const nb = pinNode[ei]?.[endPinIdx];
-      if (na !== undefined && nb !== undefined) uf.union(na, nb);
+      const { startHole, endHole } = wire;
+      // A wire can have holeRefs (placed on board) or be null if free
+      const na = startHole ? bbNodeId(startHole.col, startHole.row) : null;
+      const nb = endHole   ? bbNodeId(endHole.col,   endHole.row)   : null;
+      if (na && nb) uf.union(na, nb);
     });
 
-    // 3. Resolve each pin to its root node
-    const graph = components.map((comp, ci) => ({
+    // 3. Resolve each pin to its root
+    return components.map((comp, ci) => ({
       comp,
+      // nodes[pi] = root node of pin pi
       nodes: comp.pins.map((_, pi) => uf.find(pinNode[ci][pi])),
     }));
-
-    return graph;
   }
 
-  // ── Path finding (DFS with backtracking) ───────────────────
-  // Finds a sequence of components forming a closed path from
-  // startNode → endNode, excluding the source battery.
+  // ── Path finding ─────────────────────────────────────────────
+  //
+  //  DFS from startNode → endNode, respecting polarity:
+  //   - A resistor can be traversed in either direction.
+  //   - An LED can only be traversed from anode (pin 1) → cathode (pin 0).
+  //   - A battery is the source; it is excluded from the search.
+  //
+  //  Returns ordered list of { comp, enteredViaPinIdx, exitedViaPinIdx }
+  //  or null if no path exists.
+  //
   function findPath(graph, startNode, endNode, skipComp) {
     const visited = new Set([startNode]);
     const path    = [];
@@ -110,19 +115,30 @@
 
       for (const entry of graph) {
         if (entry.comp === skipComp) continue;
-        const ns = entry.nodes; // node list for this component
+        const ns = entry.nodes;
 
-        // A component "bridges" two nodes (simple 2-pin or multi-pin)
-        for (let a = 0; a < ns.length; a++) {
-          for (let b = 0; b < ns.length; b++) {
-            if (a === b) continue;
-            if (ns[a] === cur && !visited.has(ns[b])) {
-              visited.add(ns[b]);
-              path.push(entry);
-              if (dfs(ns[b])) return true;
-              path.pop();
-              visited.delete(ns[b]);
+        for (let inPin = 0; inPin < ns.length; inPin++) {
+          if (ns[inPin] !== cur) continue;
+
+          for (let outPin = 0; outPin < ns.length; outPin++) {
+            if (outPin === inPin) continue;
+
+            // ── Polarity check for LED ───────────────────
+            // Current enters at anode (pin 1) and exits at cathode (pin 0).
+            // So valid traversal: inPin=1, outPin=0.
+            if (entry.comp.type === 'led') {
+              if (inPin !== 1 || outPin !== 0) continue;
             }
+            // ─────────────────────────────────────────────
+
+            const next = ns[outPin];
+            if (visited.has(next)) continue;
+
+            visited.add(next);
+            path.push({ comp: entry.comp, inPin, outPin });
+            if (dfs(next)) return true;
+            path.pop();
+            visited.delete(next);
           }
         }
       }
@@ -132,57 +148,45 @@
     return dfs(startNode) ? [...path] : null;
   }
 
-  // ── Visual: LED on ─────────────────────────────────────────
-  const activeLights = []; // point lights added during simulation
+  // ── Visual: LED on/off ──────────────────────────────────────
+  const activeLights = [];
 
-  function lightUpLED(comp, current) {
-    // Crank up the dome's emissive intensity
+  function lightUpLED(comp) {
     comp.group.traverse(obj => {
-      if (!obj.isMesh) return;
-      if (obj.material.transparent) {              // the dome
-        obj.material = obj.material.clone();
-        obj.material.emissiveIntensity = 2.0;
-        obj.material.opacity = 0.95;
-      }
+      if (!obj.isMesh || !obj.material.transparent) return;
+      obj.material = obj.material.clone();
+      obj.material.emissiveIntensity = 2.2;
+      obj.material.opacity = 0.97;
     });
 
-    // Place a coloured point light above the LED
-    const ledColor = getDomeColor(comp) || 0xffffff;
-    const light = new THREE.PointLight(ledColor, 3.5, 6);
-
-    // Position the light at the midpoint between the two pins, above the board
-    const p0  = comp.pins[0];
-    const p1  = comp.pins[1];
-    light.position.set((p0.x + p1.x) / 2, 2.5, (p0.z + p1.z) / 2);
+    const ledColor = getDomeColor(comp) ?? 0xffffff;
+    const p0 = comp.pins[0], p1 = comp.pins[1];
+    const light = new THREE.PointLight(ledColor, 4.0, 7);
+    light.position.set((p0.x + p1.x) / 2, 3.0, (p0.z + p1.z) / 2);
     App.scene.add(light);
     activeLights.push(light);
     comp._simLight = light;
   }
 
+  function dimLED(comp) {
+    comp.group.traverse(obj => {
+      if (!obj.isMesh || !obj.material.transparent) return;
+      obj.material.emissiveIntensity = 0.45;
+      obj.material.opacity = 0.88;
+    });
+    if (comp._simLight) { App.scene.remove(comp._simLight); comp._simLight = null; }
+  }
+
   function getDomeColor(comp) {
     let col = null;
     comp.group.traverse(obj => {
-      if (obj.isMesh && obj.material.transparent && !col) {
+      if (obj.isMesh && obj.material.transparent && col === null)
         col = obj.material.color.getHex();
-      }
     });
     return col;
   }
 
-  function dimLED(comp) {
-    comp.group.traverse(obj => {
-      if (obj.isMesh && obj.material.transparent) {
-        obj.material.emissiveIntensity = 0.45;
-        obj.material.opacity = 0.88;
-      }
-    });
-    if (comp._simLight) {
-      App.scene.remove(comp._simLight);
-      comp._simLight = null;
-    }
-  }
-
-  // ── Result overlay helpers ──────────────────────────────────
+  // ── Results overlay ─────────────────────────────────────────
   function showResults(lines) {
     let box = document.getElementById('sim-results');
     if (!box) {
@@ -190,20 +194,20 @@
       box.id = 'sim-results';
       document.getElementById('canvas-wrap').appendChild(box);
     }
-    box.innerHTML = lines.map(l => `<div class="sim-line ${l.cls||''}">${l.text}</div>`).join('');
+    box.innerHTML = lines.map(l =>
+      `<div class="sim-line ${l.cls || ''}">${l.text}</div>`
+    ).join('');
     box.style.display = 'block';
   }
 
   function hideResults() {
-    const box = document.getElementById('sim-results');
-    if (box) box.style.display = 'none';
+    const b = document.getElementById('sim-results');
+    if (b) b.style.display = 'none';
   }
 
   // ── Public: runSimulation ───────────────────────────────────
   App.runSimulation = function () {
     const { components, wires } = App.state;
-
-    // Reset any previous sim state
     App.stopSimulation();
 
     if (!components.length) {
@@ -211,92 +215,86 @@
       return;
     }
 
-    const graph = buildGraph(components, wires);
-    const lines = [];
-    let anyOn   = false;
+    const graph   = buildGraph(components, wires);
+    const lines   = [];
+    const bats    = graph.filter(g => g.comp.type === 'battery');
 
-    // Find every battery and try to close its circuit
-    const batteries = graph.filter(g => g.comp.type === 'battery');
-
-    if (!batteries.length) {
-      showResults([{ text: 'No battery found.', cls: 'sim-warn' }]);
+    if (!bats.length) {
+      showResults([{ text: 'No battery in circuit.', cls: 'sim-warn' }]);
       return;
     }
 
-    batteries.forEach((bat, bi) => {
-      const posNode = bat.nodes[0]; // pin 0 = positive (+)
-      const negNode = bat.nodes[1]; // pin 1 = negative (−)
+    bats.forEach((bat, bi) => {
+      const posNode = bat.nodes[0];  // + terminal node
+      const negNode = bat.nodes[1];  // − terminal node
+      const V       = PROPS.battery.voltage;
 
-      lines.push({ text: `Battery ${bi + 1}: ${PROPS.battery.voltage}V`, cls: 'sim-info' });
+      lines.push({ text: `Battery ${bi + 1}: ${V}V`, cls: 'sim-info' });
 
       const path = findPath(graph, posNode, negNode, bat.comp);
 
       if (!path) {
-        lines.push({ text: '  Circuit open — no complete path found.', cls: 'sim-warn' });
+        lines.push({ text: '  Circuit open — no complete path.', cls: 'sim-warn' });
+
+        // Give more specific hints
+        const hasBatConn = graph.some(g =>
+          g.comp !== bat.comp && g.nodes.some(n => n === posNode || n === negNode));
+        if (!hasBatConn) {
+          lines.push({ text: '  ⚠ Battery terminals not connected to anything.', cls: 'sim-warn' });
+        }
         return;
       }
 
-      // Sum resistance and forward-voltage drops along the path
       let totalR  = 0;
       let totalVf = 0;
-
-      path.forEach(entry => {
-        const p = PROPS[entry.comp.type] || {};
-        totalR  += p.resistance      || 0;
-        totalVf += p.forwardVoltage  || 0;
-        lines.push({ text: `  → ${entry.comp.type}`, cls: 'sim-path' });
+      path.forEach(step => {
+        const p = PROPS[step.comp.type] || {};
+        totalR  += p.resistance     || 0;
+        totalVf += p.forwardVoltage || 0;
+        lines.push({ text: `  → ${step.comp.type}`, cls: 'sim-path' });
       });
 
-      const netV = PROPS.battery.voltage - totalVf;
-
+      const netV = V - totalVf;
       if (netV <= 0) {
         lines.push({ text: '  Voltage too low to drive circuit.', cls: 'sim-warn' });
         return;
       }
       if (totalR === 0) {
-        lines.push({ text: '  ⚠ Short circuit! No resistance in path.', cls: 'sim-err' });
+        lines.push({ text: '  ⚠ Short circuit — no resistance in path!', cls: 'sim-err' });
         return;
       }
 
-      const I_mA = (netV / totalR) * 1000;
+      const I    = netV / totalR;
+      const I_mA = I * 1000;
       lines.push({ text: `  Current: ${I_mA.toFixed(1)} mA`, cls: 'sim-info' });
 
-      // Activate components
-      path.forEach(entry => {
-        if (entry.comp.type === 'led') {
-          if ((netV / totalR) >= PROPS.led.thresholdCurrent) {
-            lightUpLED(entry.comp, netV / totalR);
-            lines.push({ text: `  💡 LED is ON  (${I_mA.toFixed(1)} mA)`, cls: 'sim-on' });
-            anyOn = true;
+      path.forEach(step => {
+        if (step.comp.type === 'led') {
+          if (I >= PROPS.led.thresholdCurrent) {
+            lightUpLED(step.comp);
+            lines.push({ text: `  💡 LED ON  (${I_mA.toFixed(1)} mA)`, cls: 'sim-on' });
           } else {
-            lines.push({ text: '  LED: insufficient current.', cls: 'sim-warn' });
+            lines.push({ text: '  LED: current too low.', cls: 'sim-warn' });
           }
         }
       });
     });
 
-    if (!lines.length) lines.push({ text: 'Nothing to simulate.', cls: 'sim-warn' });
     showResults(lines);
-
-    // Swap toolbar button
     document.getElementById('sim-run-btn').style.display  = 'none';
     document.getElementById('sim-stop-btn').style.display = 'inline-flex';
   };
 
   // ── Public: stopSimulation ──────────────────────────────────
   App.stopSimulation = function () {
-    // Remove point lights
     activeLights.forEach(l => App.scene.remove(l));
     activeLights.length = 0;
-
-    // Restore all LEDs to original emissive
-    App.state.components.forEach(comp => {
-      if (comp.type === 'led') dimLED(comp);
-    });
-
+    App.state.components.forEach(c => { if (c.type === 'led') dimLED(c); });
     hideResults();
-    document.getElementById('sim-run-btn').style.display  = 'inline-flex';
-    document.getElementById('sim-stop-btn').style.display = 'none';
+    const runBtn  = document.getElementById('sim-run-btn');
+    const stopBtn = document.getElementById('sim-stop-btn');
+    if (runBtn)  runBtn.style.display  = 'inline-flex';
+    if (stopBtn) stopBtn.style.display = 'none';
   };
 
 })(window.App = window.App || {});

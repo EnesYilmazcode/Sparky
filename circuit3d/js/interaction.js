@@ -1,9 +1,13 @@
 // ─────────────────────────────────────────────────────────────
-//  interaction.js — Mouse events, raycasting, placement,
-//                   selection, and wire drawing logic
+//  interaction.js — Mouse events, raycasting, ghost preview,
+//                   rotation, hole-based wire placement
 //
-//  Requires: App.scene, App.camera, App.controls, App.state
-//  Exports:  App.initInteraction()
+//  KEY BEHAVIOURS
+//  • Place mode: hover shows a transparent ghost; click places component.
+//    R key rotates the ghost 90°.
+//  • Wire mode:  click any breadboard HOLE or component pin sphere to start
+//    a wire; click again to complete it.  The wire plugs into both holes.
+//  • Select mode: click a component body or wire tube to select it.
 // ─────────────────────────────────────────────────────────────
 
 (function (App) {
@@ -13,52 +17,92 @@
     const canvas    = document.getElementById('canvas');
     const holeLabel = document.getElementById('hole-label');
 
-    // ── Raycasting helpers ──────────────────────────────────
-
+    // ── Raycasting ──────────────────────────────────────────
     const raycaster = new THREE.Raycaster();
     const mouseNDC  = new THREE.Vector2();
     const boardPlane = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0);
 
     function updateRay(e) {
-      const r = canvas.getBoundingClientRect();
+      const r   = canvas.getBoundingClientRect();
       mouseNDC.x =  ((e.clientX - r.left) / r.width)  * 2 - 1;
       mouseNDC.y = -((e.clientY - r.top)  / r.height) * 2 + 1;
       raycaster.setFromCamera(mouseNDC, camera);
     }
 
-    // Hit-test a list of meshes. Returns array of intersections.
-    function hitTest(meshList) {
-      return raycaster.intersectObjects(meshList, false);
+    function getAllComponentMeshes() {
+      const out = [];
+      state.components.forEach(c => c.group.traverse(o => { if (o.isMesh) out.push(o); }));
+      return out;
     }
 
-    // Get all meshes from placed components (for selection)
-    function getComponentMeshes() {
-      const meshes = [];
-      state.components.forEach(c => {
-        c.group.traverse(obj => { if (obj.isMesh) meshes.push(obj); });
-      });
-      return meshes;
+    function getAllPinMeshes() {
+      const out = [];
+      state.components.forEach(c => (c.pinMeshes || []).forEach(pm => out.push(pm)));
+      return out;
     }
 
-    // Get all pin indicator spheres (for wire mode)
-    function getPinMeshes() {
-      const meshes = [];
-      state.components.forEach(c => {
-        (c.pinMeshes || []).forEach(pm => meshes.push(pm));
-      });
-      return meshes;
+    // ── Ghost management ─────────────────────────────────────
+    // The ghost preview group, recreated when type or rotation changes.
+    let ghostGroup   = null;
+    let ghostType    = null;
+    let ghostRot     = null;  // 0 or 1
+
+    function syncGhost() {
+      const t = state.pickedType;
+      const r = state.placementRotation;
+      if (state.mode !== 'place' || !t || t === 'battery') {
+        destroyGhost();
+        return;
+      }
+      if (ghostGroup && ghostType === t && ghostRot === r) return; // already built
+
+      destroyGhost();
+      const bb    = state.breadboard;
+      const span  = t === 'led' ? App.LED_SPAN : App.RESISTOR_SPAN;
+      ghostGroup  = App.buildPreview(t, span, bb.HS, r);
+      ghostGroup.visible = false;
+      scene.add(ghostGroup);
+      ghostType = t;
+      ghostRot  = r;
+    }
+
+    function destroyGhost() {
+      if (ghostGroup) { scene.remove(ghostGroup); ghostGroup = null; }
+      ghostType = ghostRot = null;
+    }
+
+    function positionGhost(holeA, holeB) {
+      if (!ghostGroup || !holeA) { if (ghostGroup) ghostGroup.visible = false; return; }
+      if (!holeB) { ghostGroup.visible = false; return; }
+
+      const midX = (holeA.x + holeB.x) / 2;
+      const midZ = (holeA.z + holeB.z) / 2;
+      ghostGroup.position.set(midX, 0, midZ);
+      ghostGroup.visible = true;
     }
 
     // ── Drag detection ──────────────────────────────────────
-
     let mouseDownPos = null;
     let wasDragged   = false;
 
     canvas.addEventListener('mousedown', e => {
       mouseDownPos = { x: e.clientX, y: e.clientY };
-      wasDragged = false;
+      wasDragged   = false;
     });
+    canvas.addEventListener('mouseup', () => { mouseDownPos = null; });
 
+    // ── Hover indicator sphere (shows snapped hole) ─────────
+    const hoverSphere = new THREE.Mesh(
+      new THREE.SphereGeometry(0.11, 12, 12),
+      new THREE.MeshLambertMaterial({ color: 0x22cc55, emissive: 0x115522, emissiveIntensity: 0.9 })
+    );
+    hoverSphere.visible = false;
+    scene.add(hoverSphere);
+
+    // Highlighted wire-start pin (stored so we can reset it)
+    let wireStartPinMesh = null;
+
+    // ── mousemove ───────────────────────────────────────────
     canvas.addEventListener('mousemove', e => {
       if (mouseDownPos) {
         const dx = e.clientX - mouseDownPos.x;
@@ -68,74 +112,140 @@
       handleHover(e);
     });
 
-    canvas.addEventListener('mouseup', () => { mouseDownPos = null; });
-
-    // ── Hover ───────────────────────────────────────────────
-
-    // Glowing green sphere that shows the snapped hole target
-    const hoverSphere = new THREE.Mesh(
-      new THREE.SphereGeometry(0.11, 12, 12),
-      new THREE.MeshLambertMaterial({ color: 0x22cc55, emissive: 0x115522, emissiveIntensity: 0.8 })
-    );
-    hoverSphere.visible = false;
-    scene.add(hoverSphere);
-
-    let lastHoveredHole = null;
-
     function handleHover(e) {
       const mode = state.mode;
+      updateRay(e);
 
-      if (mode === 'place' && state.pickedType !== 'battery') {
-        // Show snap indicator on nearest hole
-        updateRay(e);
+      // ── PLACE mode ──────────────────────────────────────
+      if (mode === 'place') {
+        syncGhost();
+        const type = state.pickedType;
+
+        if (type === 'battery') {
+          hoverSphere.visible  = false;
+          holeLabel.style.display = 'none';
+          if (ghostGroup) ghostGroup.visible = false;
+          return;
+        }
+
+        // Raycast against board body
         const bbBody = scene.getObjectByName('bb-body');
         if (!bbBody) return;
+        const hits = raycaster.intersectObject(bbBody, false);
 
-        const hits = hitTest([bbBody]);
-        if (hits.length) {
-          const pt   = hits[0].point;
-          const hole = state.breadboard.getNearestHole(pt.x, pt.z, null);
-          if (hole) {
-            hoverSphere.position.set(hole.x, 0.12, hole.z);
-            hoverSphere.visible = true;
-            lastHoveredHole = hole;
-
-            holeLabel.style.display = 'block';
-            holeLabel.textContent   = `Col ${hole.col + 1}  Row ${hole.row.toUpperCase()}`;
-          } else {
-            hoverSphere.visible = false;
-            holeLabel.style.display = 'none';
-          }
-        } else {
+        if (!hits.length) {
           hoverSphere.visible = false;
           holeLabel.style.display = 'none';
+          if (ghostGroup) ghostGroup.visible = false;
+          return;
         }
 
-      } else if (mode === 'wire') {
-        // Highlight nearest pin sphere
-        updateRay(e);
-        const pinMeshes = getPinMeshes();
-        if (!pinMeshes.length) return;
+        const pt    = hits[0].point;
+        const holeA = state.breadboard.getNearestHole(pt.x, pt.z, null);
 
-        const hits = hitTest(pinMeshes);
-        pinMeshes.forEach(pm => {
-          pm.material.emissive.setHex(pm.userData.isWireStart ? 0x884400 : 0x2a2a00);
-          pm.material.emissiveIntensity = pm.userData.isWireStart ? 1.0 : 0.4;
-        });
-        if (hits.length) {
-          const pm = hits[0].object;
-          pm.material.emissive.setHex(0x00aa44);
-          pm.material.emissiveIntensity = 1.0;
+        if (!holeA) {
+          hoverSphere.visible = false;
+          holeLabel.style.display = 'none';
+          if (ghostGroup) ghostGroup.visible = false;
+          return;
         }
 
-      } else {
+        const span  = type === 'led' ? App.LED_SPAN : App.RESISTOR_SPAN;
+        const holeB = state.breadboard.getSpanHole(holeA, span, state.placementRotation);
+
+        // Update hover sphere on holeA
+        hoverSphere.position.set(holeA.x, 0.12, holeA.z);
+        hoverSphere.visible = true;
+
+        // Update ghost
+        syncGhost();
+        positionGhost(holeA, holeB);
+        if (ghostGroup) {
+          ghostGroup.rotation.y = state.placementRotation === 1 ? Math.PI / 2 : 0;
+        }
+
+        // Hole label
+        holeLabel.style.display = 'block';
+        holeLabel.textContent   = `Col ${holeA.col + 1}  Row ${holeA.row.toUpperCase()}` +
+          (holeB ? `  →  Col ${holeB.col + 1}  Row ${holeB.row.toUpperCase()}` : '  (no room)');
+
+        // Store for click
+        state._hoverHoleA = holeA;
+        state._hoverHoleB = holeB;
+        return;
+      }
+
+      // ── WIRE mode ───────────────────────────────────────
+      if (mode === 'wire') {
+        destroyGhost();
         hoverSphere.visible = false;
         holeLabel.style.display = 'none';
+
+        // Highlight nearest hole (breadboard InstancedMesh)
+        const { holesMesh, holeData } = state.breadboard;
+        const holeHits = raycaster.intersectObject(holesMesh, false);
+        const pinHits  = raycaster.intersectObjects(getAllPinMeshes(), false);
+
+        // Reset all pin emissives
+        getAllPinMeshes().forEach(pm => {
+          if (pm === wireStartPinMesh) return;
+          pm.material.emissive.setHex(0x3a2800);
+          pm.material.emissiveIntensity = 0.4;
+        });
+
+        // Highlight hovered hole or pin
+        if (pinHits.length) {
+          const pm = pinHits[0].object;
+          if (pm !== wireStartPinMesh) {
+            pm.material.emissive.setHex(0x00aa44);
+            pm.material.emissiveIntensity = 1.0;
+          }
+          hoverSphere.position.copy(pm.userData.world);
+          hoverSphere.position.y += 0.06;
+          hoverSphere.visible = true;
+        } else if (holeHits.length) {
+          const h = holeData[holeHits[0].instanceId];
+          if (h) {
+            hoverSphere.position.set(h.x, 0.12, h.z);
+            hoverSphere.visible = true;
+            holeLabel.style.display = 'block';
+            holeLabel.textContent   = `Col ${h.col + 1}  Row ${h.row.toUpperCase()}`;
+          }
+        }
+
+        // Update temp-wire preview
+        updateTempWire(e);
+        return;
       }
+
+      // ── SELECT mode ─────────────────────────────────────
+      destroyGhost();
+      hoverSphere.visible = false;
+      holeLabel.style.display = 'none';
     }
 
-    // ── Click ───────────────────────────────────────────────
+    // ── Temp wire preview line (while mid-draw) ─────────────
+    function updateTempWire(e) {
+      if (!state.wireStart) {
+        if (state.tempWire) { scene.remove(state.tempWire); state.tempWire = null; }
+        return;
+      }
+      if (state.tempWire) scene.remove(state.tempWire);
 
+      const target = new THREE.Vector3();
+      raycaster.ray.intersectPlane(boardPlane, target);
+      if (!target) return;
+
+      const pts = [state.wireStart.world, target];
+      const geo = new THREE.BufferGeometry().setFromPoints(pts);
+      const mat = new THREE.LineDashedMaterial({ color: 0x22cc55, dashSize: 0.3, gapSize: 0.15 });
+      const line = new THREE.Line(geo, mat);
+      line.computeLineDistances();
+      scene.add(line);
+      state.tempWire = line;
+    }
+
+    // ── click ────────────────────────────────────────────────
     canvas.addEventListener('click', e => {
       if (wasDragged) return;
       updateRay(e);
@@ -145,48 +255,57 @@
     function handleClick(e) {
       const mode = state.mode;
 
-      // ── PLACE mode ──────────────────────────────────────
+      // ── PLACE ──────────────────────────────────────────
       if (mode === 'place') {
+        const type = state.pickedType;
 
-        if (state.pickedType === 'battery') {
-          // Place battery at a hit point on the ground/board plane
+        if (type === 'battery') {
           const pt  = new THREE.Vector3();
           const hit = raycaster.ray.intersectPlane(boardPlane, pt);
           if (hit) App.placeBattery(pt.x, pt.z);
           return;
         }
 
-        if (!lastHoveredHole) return;
+        const hA = state._hoverHoleA;
+        const hB = state._hoverHoleB;
+        if (!hA || !hB) return;
 
-        const col = lastHoveredHole.col;
-        const row = lastHoveredHole.row;
-
-        if (state.pickedType === 'resistor') App.placeResistor(col, row);
-        if (state.pickedType === 'led')      App.placeLED(col, row);
+        if (type === 'resistor') App.placeResistor(hA, hB);
+        if (type === 'led')      App.placeLED(hA, hB);
         return;
       }
 
-      // ── SELECT mode ─────────────────────────────────────
+      // ── SELECT ─────────────────────────────────────────
       if (mode === 'select') {
-        const compMeshes = getComponentMeshes();
-        const wireMeshes = state.wires.map(w => w.mesh);
-        const all        = [...compMeshes, ...wireMeshes];
+        const compMeshes = getAllComponentMeshes();
+        const wireMeshes = state.wires.map(w => w.group).filter(Boolean)
+          .concat(state.wires.map(w => w.tube).filter(Boolean));
 
+        // also allow clicking wire tubes (stored as group children)
+        const allWireMeshes = [];
+        state.wires.forEach(w => {
+          if (w.group) w.group.traverse(o => { if (o.isMesh) allWireMeshes.push(o); });
+        });
+
+        const all  = [...compMeshes, ...allWireMeshes];
         if (!all.length) { App.deselect(); return; }
 
-        const hits = hitTest(all);
+        const hits = raycaster.intersectObjects(all, false);
         if (!hits.length) { App.deselect(); return; }
 
         const hitObj = hits[0].object;
 
-        // Check wires first
-        const hitWire = state.wires.find(w => w.mesh === hitObj);
-        if (hitWire) { App.selectItem(hitWire, 'wire'); return; }
+        // Is it a wire?
+        for (const w of state.wires) {
+          let found = false;
+          if (w.group) w.group.traverse(o => { if (o === hitObj) found = true; });
+          if (found) { App.selectItem(w, 'wire'); return; }
+        }
 
-        // Walk up to find the owning placed component
+        // Walk up to find owning component group
         for (const comp of state.components) {
           let found = false;
-          comp.group.traverse(obj => { if (obj === hitObj) found = true; });
+          comp.group.traverse(o => { if (o === hitObj) found = true; });
           if (found) { App.selectItem(comp, 'component'); return; }
         }
 
@@ -194,50 +313,65 @@
         return;
       }
 
-      // ── WIRE mode ───────────────────────────────────────
+      // ── WIRE ───────────────────────────────────────────
       if (mode === 'wire') {
-        const pinMeshes = getPinMeshes();
-        if (!pinMeshes.length) return;
+        // Resolve click target: prefer pin sphere, then hole
+        const pinHits  = raycaster.intersectObjects(getAllPinMeshes(), false);
+        const { holesMesh, holeData } = state.breadboard;
+        const holeHits = raycaster.intersectObject(holesMesh, false);
 
-        const hits = hitTest(pinMeshes);
-        if (!hits.length) return;
+        let clickHoleRef  = null;  // { col, row }
+        let clickWorld    = null;  // Vector3
+        let clickPinMesh  = null;
 
-        const pm   = hits[0].object;
-        const comp = pm.userData.ownerComp;
-        const pidx = pm.userData.pinIndex;
+        if (pinHits.length) {
+          const pm = pinHits[0].object;
+          // Map pin back to its breadboard hole ref via ownerComp.holeRefs
+          const comp    = pm.userData.ownerComp;
+          const pidx    = pm.userData.pinIndex;
+          const hRef    = comp?.holeRefs?.[pidx];
+          clickHoleRef  = hRef || null;
+          clickWorld    = pm.userData.world.clone();
+          clickPinMesh  = pm;
+        } else if (holeHits.length) {
+          const h = holeData[holeHits[0].instanceId];
+          if (h) { clickHoleRef = { col: h.col, row: h.row }; clickWorld = h.world.clone(); }
+        }
+
+        if (!clickWorld) return;
 
         if (!state.wireStart) {
-          // Start wire from this pin
-          state.wireStart = {
-            world:    pm.userData.world.clone(),
-            pinMesh:  pm,
-            comp,
-            pinIndex: pidx,
-          };
-          pm.userData.isWireStart = true;
-          pm.material.emissive.setHex(0x884400);
-          pm.material.emissiveIntensity = 1.0;
-          App.setHint('Now click another pin to complete the wire · ESC to cancel');
-
+          // Start wire
+          state.wireStart = { world: clickWorld, holeRef: clickHoleRef, pinMesh: clickPinMesh };
+          wireStartPinMesh = clickPinMesh;
+          if (clickPinMesh) {
+            clickPinMesh.userData.isWireStart = true;
+            clickPinMesh.material.emissive.setHex(0x884400);
+            clickPinMesh.material.emissiveIntensity = 1.1;
+          }
+          App.setHint('Click another hole or pin to complete the wire · ESC to cancel');
         } else {
-          // Prevent connecting a pin to itself or same component
-          if (comp === state.wireStart.comp && pidx === state.wireStart.pinIndex) return;
-
-          // Pass full pin descriptor so the simulator can trace connections
-          App.finishWire({
-            world:    pm.userData.world.clone(),
-            comp:     pm.userData.ownerComp,
-            pinIndex: pm.userData.pinIndex,
-          });
+          // Complete wire
+          App.finishWire({ world: clickWorld, holeRef: clickHoleRef });
+          wireStartPinMesh = null;
         }
       }
     }
 
-    // ── Keyboard ────────────────────────────────────────────
-
+    // ── Keyboard ─────────────────────────────────────────────
     document.addEventListener('keydown', e => {
       const tag = document.activeElement?.tagName;
       if (tag === 'INPUT' || tag === 'TEXTAREA') return;
+
+      if (e.key === 'r' || e.key === 'R') {
+        // Toggle rotation (0 ↔ 1)
+        state.placementRotation = state.placementRotation === 0 ? 1 : 0;
+        // Force ghost rebuild
+        ghostType = null;
+        syncGhost();
+        App.setHint(`Rotation: ${state.placementRotation === 0 ? 'Horizontal' : 'Vertical'} · R to rotate`, 1800);
+        return;
+      }
 
       switch (e.key) {
         case 's': case 'S': App.setMode('select'); break;
@@ -246,6 +380,8 @@
         case 'Escape':
           App.cancelWire();
           App.deselect();
+          destroyGhost();
+          wireStartPinMesh = null;
           break;
         case 'Delete':
         case 'Backspace':
@@ -254,6 +390,16 @@
           break;
       }
     });
+
+    // Clean up ghost when mode changes
+    const _origSetMode = App.setMode.bind(App);
+    App.setMode = function (m) {
+      _origSetMode(m);
+      if (m !== 'place') destroyGhost();
+      hoverSphere.visible = false;
+      holeLabel.style.display = 'none';
+      wireStartPinMesh = null;
+    };
   }
 
   App.initInteraction = initInteraction;

@@ -1,38 +1,31 @@
 // ─────────────────────────────────────────────────────────────
-//  app.js — Main application: state, UI, placement, wires,
-//           selection, and the render loop.
-//
-//  This file ties together scene.js, breadboard.js,
-//  components.js, interaction.js, and simulate.js.
+//  app.js — State, placement, wire drawing, selection, render loop
 // ─────────────────────────────────────────────────────────────
 
 (function (App) {
 
   // ── Application State ───────────────────────────────────────
   App.state = {
-    mode:        'select',   // 'select' | 'place' | 'wire'
-    pickedType:  null,       // component type chosen from sidebar
-    wireStart:   null,       // { world, pinMesh, comp, pinIndex }
-    tempWire:    null,       // preview LINE while drawing wire
-    wireColor:   0xef4444,   // current wire color (default red)
-    selected:    null,       // { item, kind: 'component'|'wire' }
-    components:  [],         // placed component records
-    wires:       [],         // placed wire records
-    breadboard:  null,
+    mode:             'select',
+    pickedType:       null,
+    placementRotation: 0,      // 0 = horizontal, 1 = vertical (toggled with R)
+    wireStart:        null,    // { world, holeRef, pinMesh }
+    tempWire:         null,    // dashed preview line
+    wireColor:        0xef4444,
+    selected:         null,    // { item, kind }
+    components:       [],
+    wires:            [],
+    breadboard:       null,
+    // Cached hover holes (set by interaction.js during hover)
+    _hoverHoleA: null,
+    _hoverHoleB: null,
   };
 
+  // Span constants (exposed so interaction.js can read them)
+  App.RESISTOR_SPAN = 4;   // columns (or rows) between leads — narrower
+  App.LED_SPAN      = 2;
+
   const state = App.state;
-
-  // ── Boot ─────────────────────────────────────────────────────
-
-  (function init() {
-    state.breadboard = App.createBreadboard();
-    App.scene.add(state.breadboard.group);
-
-    App.initInteraction();
-    initSidebar();
-    animate();
-  })();
 
   // ── Render Loop ─────────────────────────────────────────────
 
@@ -42,7 +35,7 @@
     App.renderer.render(App.scene, App.camera);
   }
 
-  // ── Sidebar UI ──────────────────────────────────────────────
+  // ── Sidebar ──────────────────────────────────────────────────
 
   function initSidebar() {
     document.querySelectorAll('.comp-item').forEach(btn => {
@@ -72,43 +65,37 @@
     });
   }
 
-  // ── Mode Management ─────────────────────────────────────────
+  // ── Mode ─────────────────────────────────────────────────────
 
   const MODE_HINTS = {
     select: 'Click a component or wire to select it · DEL to delete',
-    place:  'Click the breadboard to place the selected component · ESC to cancel',
-    wire:   'Click a gold pin to start a wire · click another pin to connect · ESC to cancel',
+    place:  'Hover over the board to preview · Click to place · R to rotate · ESC to cancel',
+    wire:   'Click any hole or gold pin to start a wire · click again to complete',
   };
 
-  App.setMode = function setMode(m) {
+  App.setMode = function (m) {
     if (m !== 'wire')   App.cancelWire();
     if (m !== 'select') App.deselect();
-
     state.mode = m;
 
-    document.querySelectorAll('.mode-btn[data-mode]').forEach(btn => {
-      btn.classList.toggle('active', btn.dataset.mode === m);
-    });
-
-    document.querySelectorAll('.comp-item').forEach(btn => {
-      const isActive =
-        (m === 'place' && btn.dataset.type === state.pickedType) ||
-        (m === 'wire'  && btn.dataset.type === 'wire');
-      btn.classList.toggle('active', isActive);
+    document.querySelectorAll('.mode-btn[data-mode]').forEach(b =>
+      b.classList.toggle('active', b.dataset.mode === m));
+    document.querySelectorAll('.comp-item').forEach(b => {
+      b.classList.toggle('active',
+        (m === 'place' && b.dataset.type === state.pickedType) ||
+        (m === 'wire'  && b.dataset.type === 'wire'));
     });
 
     document.getElementById('status-mode-badge').textContent = m.toUpperCase();
     document.getElementById('status-text').textContent       = MODE_HINTS[m] || '';
-
-    document.getElementById('wire-color-row').style.display =
-      m === 'wire' ? 'block' : 'none';
-
+    document.getElementById('wire-color-row').style.display  = m === 'wire' ? 'block' : 'none';
+    document.getElementById('rotate-badge').style.display    = m === 'place' ? 'block' : 'none';
     App.setHint(MODE_HINTS[m]);
   };
 
   function setMode(m) { App.setMode(m); }
 
-  // ── Hint Overlay ─────────────────────────────────────────────
+  // ── Hint ─────────────────────────────────────────────────────
 
   let hintTimer = null;
 
@@ -120,53 +107,31 @@
     if (durationMs) hintTimer = setTimeout(() => { box.className = 'hint-hidden'; }, durationMs);
   };
 
-  // ── Placement ───────────────────────────────────────────────
+  // ── Placement ────────────────────────────────────────────────
+  // Both placeResistor and placeLED now receive hole objects directly
+  // (already resolved by interaction.js hover logic).
 
-  const RESISTOR_SPAN = 5; // columns between resistor leads
-  const LED_SPAN      = 2; // columns between LED leads
-
-  App.placeResistor = function (col, row) {
-    const bb   = state.breadboard;
-    const colB = col + RESISTOR_SPAN;
-    if (colB >= bb.COLS) return;
-
-    const holeA = bb.getHole(col,  row);
-    const holeB = bb.getHole(colB, row);
-    if (!holeA || !holeB) return;
-
+  App.placeResistor = function (holeA, holeB) {
     const { group, pins } = App.buildResistor(holeA, holeB);
     App.scene.add(group);
-
     const record = {
-      type:     'resistor',
-      group, pins,
-      pinMeshes: [],
-      // Store hole references so the simulator can determine breadboard connectivity
-      holeRefs: [{ col, row }, { col: colB, row }],
+      type: 'resistor', group, pins, pinMeshes: [],
+      holeRefs: [{ col: holeA.col, row: holeA.row },
+                 { col: holeB.col, row: holeB.row }],
     };
     addPinMarkers(record);
     state.components.push(record);
     refreshCounts();
   };
 
-  App.placeLED = function (col, row) {
-    const bb   = state.breadboard;
-    const colB = col + LED_SPAN;
-    if (colB >= bb.COLS) return;
-
-    const holeA = bb.getHole(col,  row);
-    const holeB = bb.getHole(colB, row);
-    if (!holeA || !holeB) return;
-
+  App.placeLED = function (holeA, holeB) {
     const { group, pins } = App.buildLED(holeA, holeB);
     App.scene.add(group);
-
     const record = {
-      type:     'led',
-      group, pins,
-      pinMeshes: [],
+      type: 'led', group, pins, pinMeshes: [],
       // pin 0 = cathode (−), pin 1 = anode (+)
-      holeRefs: [{ col, row }, { col: colB, row }],
+      holeRefs: [{ col: holeA.col, row: holeA.row },   // cathode
+                 { col: holeB.col, row: holeB.row }],   // anode
     };
     addPinMarkers(record);
     state.components.push(record);
@@ -174,28 +139,20 @@
   };
 
   App.placeBattery = function (wx, wz) {
-    // Keep battery outside the breadboard area
-    const placedX = wx > 0
-      ? Math.max(wx, state.breadboard.BOARD_W / 2 + 2.5)
-      : Math.min(wx, -(state.breadboard.BOARD_W / 2 + 2.5));
-
+    const margin = state.breadboard.BOARD_W / 2 + 2.5;
+    const placedX = wx >= 0 ? Math.max(wx, margin) : Math.min(wx, -margin);
     const { group, pins } = App.buildBattery(placedX, wz);
     App.scene.add(group);
-
     const record = {
-      type:     'battery',
-      group, pins,
-      pinMeshes: [],
-      holeRefs:  null, // battery is not on the breadboard
+      type: 'battery', group, pins, pinMeshes: [],
+      holeRefs: null, // not on breadboard
     };
     addPinMarkers(record);
     state.components.push(record);
     refreshCounts();
   };
 
-  // ── Pin Markers ─────────────────────────────────────────────
-  // Small gold spheres shown at each component's electrical pin.
-  // Clickable in wire mode to start/end a wire.
+  // ── Pin Markers ──────────────────────────────────────────────
 
   const PIN_GEO = new THREE.SphereGeometry(0.10, 11, 11);
   const PIN_MAT = () => new THREE.MeshLambertMaterial({
@@ -206,9 +163,9 @@
     record.pins.forEach((worldPos, idx) => {
       const pm = new THREE.Mesh(PIN_GEO, PIN_MAT());
       pm.position.copy(worldPos);
-      pm.userData.ownerComp = record;
-      pm.userData.pinIndex  = idx;
-      pm.userData.world     = worldPos.clone();
+      pm.userData.ownerComp   = record;
+      pm.userData.pinIndex    = idx;
+      pm.userData.world       = worldPos.clone();
       pm.userData.isWireStart = false;
       App.scene.add(pm);
       record.pinMeshes.push(pm);
@@ -216,35 +173,32 @@
   }
 
   // ── Wire Drawing ─────────────────────────────────────────────
+  // endPin: { world: Vector3, holeRef: { col, row } | null }
 
-  // Called from interaction.js with the end-pin descriptor:
-  //   { world, comp, pinIndex }
   App.finishWire = function (endPin) {
     if (!state.wireStart) return;
 
-    const startWorld = state.wireStart.world;
-    const endWorld   = endPin.world;
+    const startWorld  = state.wireStart.world;
+    const endWorld    = endPin.world;
+    const startHole   = state.wireStart.holeRef;
+    const endHole     = endPin.holeRef;
 
-    const wireMesh = buildWireMesh(startWorld, endWorld, state.wireColor);
-    App.scene.add(wireMesh);
+    // Build the wire visual (coloured arc with leg stubs into holes)
+    const wireGroup = buildWireGroup(startWorld, endWorld, state.wireColor);
+    App.scene.add(wireGroup);
 
-    // Reset the start pin indicator
+    // Reset start-pin highlight
     const sp = state.wireStart.pinMesh;
     if (sp) { sp.userData.isWireStart = false; sp.material.emissiveIntensity = 0.4; }
 
-    // Store component references so the simulator can trace connections
     state.wires.push({
-      mesh:        wireMesh,
-      startWorld,  endWorld,
-      startComp:   state.wireStart.comp,
-      startPinIdx: state.wireStart.pinIndex,
-      endComp:     endPin.comp,
-      endPinIdx:   endPin.pinIndex,
+      group:      wireGroup,
+      startWorld, endWorld,
+      startHole,  endHole,   // ← used by simulate.js for connectivity
     });
 
     state.wireStart = null;
     if (state.tempWire) { App.scene.remove(state.tempWire); state.tempWire = null; }
-
     App.setHint(MODE_HINTS['wire']);
     refreshCounts();
   };
@@ -258,18 +212,38 @@
     if (state.tempWire) { App.scene.remove(state.tempWire); state.tempWire = null; }
   };
 
-  // Arc-shaped tube between two world positions
-  function buildWireMesh(start, end, hexColor) {
-    const mid  = new THREE.Vector3().addVectors(start, end).multiplyScalar(0.5);
-    const dist = start.distanceTo(end);
-    mid.y = Math.max(start.y, end.y) + dist * 0.18 + 0.5;
+  // Wire visual: colored arc + two leg stubs going into holes
+  function buildWireGroup(start, end, hexColor) {
+    const g   = new THREE.Group();
+    const mat = new THREE.MeshLambertMaterial({ color: hexColor });
+    const LEG_H = 0.28;
 
-    const curve = new THREE.CatmullRomCurve3([start, mid, end]);
-    const geo   = new THREE.TubeGeometry(curve, 28, 0.045, 7, false);
-    const mat   = new THREE.MeshLambertMaterial({ color: hexColor });
-    const mesh  = new THREE.Mesh(geo, mat);
-    mesh.castShadow = true;
-    return mesh;
+    // Leg stubs (slightly into the board)
+    const legGeo = new THREE.CylinderGeometry(0.04, 0.04, LEG_H, 7);
+    [start, end].forEach(p => {
+      const leg = new THREE.Mesh(legGeo, mat.clone());
+      leg.position.set(p.x, -LEG_H / 2 + 0.06, p.z);
+      g.add(leg);
+    });
+
+    // Arc body
+    const dist = start.distanceTo(end);
+    const mid  = new THREE.Vector3(
+      (start.x + end.x) / 2,
+      dist * 0.22 + 0.38,
+      (start.z + end.z) / 2
+    );
+    const curve   = new THREE.CatmullRomCurve3([
+      new THREE.Vector3(start.x, 0.06, start.z),
+      mid,
+      new THREE.Vector3(end.x,   0.06, end.z),
+    ]);
+    const tubeGeo = new THREE.TubeGeometry(curve, 26, 0.043, 7, false);
+    const tube    = new THREE.Mesh(tubeGeo, mat.clone());
+    tube.castShadow = true;
+    g.add(tube);
+
+    return g;
   }
 
   // ── Selection ────────────────────────────────────────────────
@@ -280,21 +254,22 @@
     App.deselect();
     state.selected = { item, kind };
 
-    const root = kind === 'component' ? item.group : item.mesh;
+    const root = kind === 'component' ? item.group : item.group;
+    if (!root) return;
     root.traverse(obj => {
       if (!obj.isMesh) return;
       origEmissive.set(obj, { hex: obj.material.emissive.getHex(), int: obj.material.emissiveIntensity });
       obj.material = obj.material.clone();
       obj.material.emissive.setHex(0x1a5a99);
-      obj.material.emissiveIntensity = 0.6;
+      obj.material.emissiveIntensity = 0.65;
     });
   };
 
   App.deselect = function () {
     if (!state.selected) return;
     const { item, kind } = state.selected;
-    const root = kind === 'component' ? item.group : item.mesh;
-    root.traverse(obj => {
+    const root = item.group;
+    if (root) root.traverse(obj => {
       if (!obj.isMesh || !origEmissive.has(obj)) return;
       const { hex, int } = origEmissive.get(obj);
       obj.material.emissive.setHex(hex);
@@ -316,7 +291,7 @@
       App.scene.remove(item.group);
       state.components = state.components.filter(c => c !== item);
     } else if (kind === 'wire') {
-      App.scene.remove(item.mesh);
+      App.scene.remove(item.group);
       state.wires = state.wires.filter(w => w !== item);
     }
     refreshCounts();
@@ -332,20 +307,28 @@
       (c.pinMeshes || []).forEach(pm => App.scene.remove(pm));
       App.scene.remove(c.group);
     });
-    state.wires.forEach(w => App.scene.remove(w.mesh));
+    state.wires.forEach(w => App.scene.remove(w.group));
     state.components = [];
     state.wires      = [];
     refreshCounts();
   };
 
-  // ── UI helpers ───────────────────────────────────────────────
+  // ── Helpers ───────────────────────────────────────────────────
 
   function refreshCounts() {
-    document.getElementById('comp-count').textContent = state.components.length;
-    document.getElementById('wire-count').textContent = state.wires.length;
+    const cc = document.getElementById('comp-count');
+    const wc = document.getElementById('wire-count');
+    if (cc) cc.textContent = state.components.length;
+    if (wc) wc.textContent = state.wires.length;
   }
 
-  // ── Init ─────────────────────────────────────────────────────
+  // ── Boot ─────────────────────────────────────────────────────
+  // Must run AFTER all App.* methods are defined above.
+  state.breadboard = App.createBreadboard();
+  App.scene.add(state.breadboard.group);
+  App.initInteraction();
+  initSidebar();
   setMode('select');
+  animate();
 
 })(window.App = window.App || {});

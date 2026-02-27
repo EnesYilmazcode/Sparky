@@ -486,6 +486,46 @@ canvas {
 }
 .btn-stop:hover { background: #b91c1c; }
 
+/* ── ROTATE BADGE & RESET CAM ───────────────── */
+
+#rotate-badge {
+  position: absolute;
+  bottom: 14px;
+  left: 50%;
+  transform: translateX(-50%);
+  background: rgba(255,255,255,0.9);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 4px 10px;
+  font-size: 11px;
+  color: var(--text-muted);
+  pointer-events: none;
+  display: none;
+}
+
+#reset-cam-btn {
+  position: absolute;
+  bottom: 14px;
+  right: 14px;
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  padding: 5px 10px;
+  background: rgba(255,255,255,0.92);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  font-family: inherit;
+  font-size: 11px;
+  color: var(--text-muted);
+  cursor: pointer;
+  transition: background 0.1s, color 0.1s;
+}
+#reset-cam-btn:hover {
+  background: #fff;
+  color: var(--text-primary);
+  border-color: var(--border-dark);
+}
+
 /* ── SIMULATION RESULTS OVERLAY ─────────────── */
 
 #sim-results {

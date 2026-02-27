@@ -43,15 +43,6 @@
     </div>
 
     <div class="topbar-actions">
-      <span class="stat-badge">
-        <span id="comp-count">0</span> components
-      </span>
-      <span class="stat-badge">
-        <span id="wire-count">0</span> wires
-      </span>
-
-      <div class="topbar-divider"></div>
-
       <button class="btn-simulate" id="sim-run-btn" onclick="App.runSimulation()">
         <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor">
           <polygon points="5,3 19,12 5,21"/>
@@ -136,10 +127,11 @@
 
       <div class="sidebar-help">
         <p><kbd>S</kbd> Select &nbsp;<kbd>P</kbd> Place &nbsp;<kbd>W</kbd> Wire</p>
-        <p><kbd>Del</kbd> Delete selected</p>
+        <p><kbd>R</kbd> Rotate &nbsp;<kbd>Del</kbd> Delete</p>
         <p><kbd>Esc</kbd> Cancel / deselect</p>
-        <p>Scroll to zoom · Drag to orbit</p>
-        <p>Right-drag to pan</p>
+        <p><strong>Left-drag</strong> to orbit</p>
+        <p><strong>Right-drag</strong> to pan camera</p>
+        <p><strong>Scroll</strong> to zoom</p>
       </div>
     </aside>
 
@@ -154,6 +146,20 @@
 
       <!-- Hover label for nearest hole -->
       <div id="hole-label"></div>
+
+      <!-- Rotate indicator (shown in place mode) -->
+      <div id="rotate-badge">
+        <kbd>R</kbd> rotate
+      </div>
+
+      <!-- Reset camera -->
+      <button id="reset-cam-btn" title="Reset camera view" onclick="if(App.controls){App.controls.target.set(0,0,0); App.camera.position.set(0,22,30); App.controls.update();}">
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+          <path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/>
+          <path d="M3 3v5h5"/>
+        </svg>
+        Reset View
+      </button>
     </div>
 
   </div>
