@@ -1,0 +1,182 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Circuit Designer 3D</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="css/style.css" />
+</head>
+<body>
+
+<div id="app">
+
+  <!-- TOP BAR -->
+  <header id="topbar">
+    <div class="topbar-brand">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+        <path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/>
+      </svg>
+      Circuit3D
+    </div>
+
+    <div class="topbar-modes">
+      <button class="mode-btn active" data-mode="select" title="Select & move (S)">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <path d="M5 3l14 9-7 1-4 7z"/>
+        </svg>
+        Select
+      </button>
+      <button class="mode-btn" data-mode="place" title="Place components (P)">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="16"/><line x1="8" y1="12" x2="16" y2="12"/>
+        </svg>
+        Place
+      </button>
+      <button class="mode-btn" data-mode="wire" title="Draw wires (W)">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <path d="M4 12h4m4 0h4m4 0h0M12 4v4m0 4v4"/>
+        </svg>
+        Wire
+      </button>
+    </div>
+
+    <div class="topbar-actions">
+      <span class="stat-badge">
+        <span id="comp-count">0</span> components
+      </span>
+      <span class="stat-badge">
+        <span id="wire-count">0</span> wires
+      </span>
+
+      <div class="topbar-divider"></div>
+
+      <button class="btn-simulate" id="sim-run-btn" onclick="App.runSimulation()">
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor">
+          <polygon points="5,3 19,12 5,21"/>
+        </svg>
+        Run Simulation
+      </button>
+      <button class="btn-stop" id="sim-stop-btn" onclick="App.stopSimulation()" style="display:none">
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor">
+          <rect x="4" y="4" width="16" height="16"/>
+        </svg>
+        Stop
+      </button>
+
+      <div class="topbar-divider"></div>
+      <button class="btn-danger" onclick="App.clearAll()">Clear board</button>
+    </div>
+  </header>
+
+  <!-- BODY -->
+  <div id="body">
+
+    <!-- SIDEBAR -->
+    <aside id="sidebar">
+      <div class="sidebar-section-label">Components</div>
+
+      <button class="comp-item" data-type="resistor">
+        <span class="comp-item-icon resistor-icon">
+          <span class="resistor-bar"></span>
+        </span>
+        <div class="comp-item-text">
+          <span class="comp-item-name">Resistor</span>
+          <span class="comp-item-sub">2 leads · axial</span>
+        </div>
+      </button>
+
+      <button class="comp-item" data-type="led">
+        <span class="comp-item-icon led-icon">
+          <span class="led-dome"></span>
+        </span>
+        <div class="comp-item-text">
+          <span class="comp-item-name">LED</span>
+          <span class="comp-item-sub">2 leads · 5mm</span>
+        </div>
+      </button>
+
+      <button class="comp-item" data-type="battery">
+        <span class="comp-item-icon battery-icon">
+          <span class="battery-body"></span>
+          <span class="battery-term">+−</span>
+        </span>
+        <div class="comp-item-text">
+          <span class="comp-item-name">Battery</span>
+          <span class="comp-item-sub">9V · snap connector</span>
+        </div>
+      </button>
+
+      <div class="sidebar-section-label" style="margin-top:12px;">Tools</div>
+
+      <button class="comp-item" data-type="wire" id="wire-tool-btn">
+        <span class="comp-item-icon wire-icon">
+          <span class="wire-line"></span>
+        </span>
+        <div class="comp-item-text">
+          <span class="comp-item-name">Wire</span>
+          <span class="comp-item-sub">connect pins</span>
+        </div>
+      </button>
+
+      <div class="sidebar-divider"></div>
+
+      <div id="wire-color-row" style="display:none;">
+        <div class="sidebar-section-label">Wire Color</div>
+        <div class="color-swatches">
+          <button class="swatch active" data-color="0xef4444" style="background:#ef4444" title="Red"></button>
+          <button class="swatch" data-color="0xfbbf24" style="background:#fbbf24" title="Yellow"></button>
+          <button class="swatch" data-color="0x22c55e" style="background:#22c55e" title="Green"></button>
+          <button class="swatch" data-color="0x3b82f6" style="background:#3b82f6" title="Blue"></button>
+          <button class="swatch" data-color="0x000000" style="background:#333" title="Black"></button>
+          <button class="swatch" data-color="0xffffff" style="background:#e8e8e8;border:1px solid #ccc" title="White"></button>
+        </div>
+      </div>
+
+      <div class="sidebar-help">
+        <p><kbd>S</kbd> Select &nbsp;<kbd>P</kbd> Place &nbsp;<kbd>W</kbd> Wire</p>
+        <p><kbd>Del</kbd> Delete selected</p>
+        <p><kbd>Esc</kbd> Cancel / deselect</p>
+        <p>Scroll to zoom · Drag to orbit</p>
+        <p>Right-drag to pan</p>
+      </div>
+    </aside>
+
+    <!-- 3D CANVAS -->
+    <div id="canvas-wrap">
+      <canvas id="canvas"></canvas>
+
+      <!-- Floating hint that appears contextually -->
+      <div id="hint-box" class="hint-hidden">
+        <span id="hint-text"></span>
+      </div>
+
+      <!-- Hover label for nearest hole -->
+      <div id="hole-label"></div>
+    </div>
+
+  </div>
+
+  <!-- STATUS BAR -->
+  <footer id="statusbar">
+    <span id="status-mode-badge" class="status-badge">SELECT</span>
+    <span id="status-text">Click a component to select it · DEL to delete</span>
+  </footer>
+
+</div>
+
+<!-- Three.js -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script src="https://unpkg.com/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+
+<!-- App modules (load in dependency order) -->
+<script src="js/scene.js"></script>
+<script src="js/breadboard.js"></script>
+<script src="js/components.js"></script>
+<script src="js/interaction.js"></script>
+<script src="js/simulate.js"></script>
+<script src="js/app.js"></script>
+
+</body>
+</html>
