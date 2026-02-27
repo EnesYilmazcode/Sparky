@@ -24,6 +24,8 @@
   // Span constants (exposed so interaction.js can read them)
   App.RESISTOR_SPAN = 4;   // columns (or rows) between leads — narrower
   App.LED_SPAN      = 2;
+  App.BUZZER_SPAN   = 2;
+  App.BUTTON_SPAN   = 3;
 
   const state = App.state;
 
@@ -132,6 +134,32 @@
       // pin 0 = cathode (−), pin 1 = anode (+)
       holeRefs: [{ col: holeA.col, row: holeA.row },   // cathode
                  { col: holeB.col, row: holeB.row }],   // anode
+    };
+    addPinMarkers(record);
+    state.components.push(record);
+    refreshCounts();
+  };
+
+  App.placeBuzzer = function (holeA, holeB) {
+    const { group, pins } = App.buildBuzzer(holeA, holeB);
+    App.scene.add(group);
+    const record = {
+      type: 'buzzer', group, pins, pinMeshes: [],
+      holeRefs: [{ col: holeA.col, row: holeA.row },
+                 { col: holeB.col, row: holeB.row }],
+    };
+    addPinMarkers(record);
+    state.components.push(record);
+    refreshCounts();
+  };
+
+  App.placeButton = function (holeA, holeB) {
+    const { group, pins } = App.buildButton(holeA, holeB);
+    App.scene.add(group);
+    const record = {
+      type: 'button', group, pins, pinMeshes: [],
+      holeRefs: [{ col: holeA.col, row: holeA.row },
+                 { col: holeB.col, row: holeB.row }],
     };
     addPinMarkers(record);
     state.components.push(record);
@@ -310,6 +338,154 @@
       state.wires = state.wires.filter(w => w !== item);
     }
     refreshCounts();
+  };
+
+  // ── Save / Load ──────────────────────────────────────────────
+
+  App.saveCircuit = function () {
+    // Build a raw serializable state (cols/rows, not world coords)
+    const data = {
+      version: 1,
+      components: state.components.map((c, i) => ({
+        type:     c.type,
+        id:       c.type + '_' + i,
+        holeRefs: c.holeRefs,          // null for battery
+        position: c.group
+          ? { x: +c.group.position.x.toFixed(3), z: +c.group.position.z.toFixed(3) }
+          : null,
+      })),
+      wires: state.wires.map(w => ({
+        startHole:   w.startHole,
+        endHole:     w.endHole,
+        startCompIdx: w.startComp ? state.components.indexOf(w.startComp) : -1,
+        startPinIdx:  w.startPinIdx,
+        endCompIdx:   w.endComp   ? state.components.indexOf(w.endComp)   : -1,
+        endPinIdx:    w.endPinIdx,
+        color:        w.group?.children?.[0]?.material?.color?.getHex?.() ?? state.wireColor,
+      })),
+    };
+
+    const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+    const url  = URL.createObjectURL(blob);
+    const a    = document.createElement('a');
+    a.href     = url;
+    a.download = 'circuit.sparky';
+    a.click();
+    URL.revokeObjectURL(url);
+    App.setHint('Circuit saved as circuit.sparky', 2500);
+  };
+
+  App.loadCircuit = function () {
+    const inp = document.createElement('input');
+    inp.type   = 'file';
+    inp.accept = '.sparky,.json';
+    inp.onchange = async () => {
+      const file = inp.files[0];
+      if (!file) return;
+      const text = await file.text();
+      let data;
+      try { data = JSON.parse(text); }
+      catch { App.setHint('⚠️ Invalid file', 2500); return; }
+
+      App.clearAll();
+      const bb   = state.breadboard;
+
+      // Rebuild components
+      const rebuilt = [];
+      for (const c of (data.components || [])) {
+        if (c.type === 'resistor' && c.holeRefs?.length === 2) {
+          const hA = bb.getHole(c.holeRefs[0].col, c.holeRefs[0].row);
+          const hB = bb.getHole(c.holeRefs[1].col, c.holeRefs[1].row);
+          if (hA && hB) App.placeResistor(hA, hB);
+        } else if (c.type === 'led' && c.holeRefs?.length === 2) {
+          const hA = bb.getHole(c.holeRefs[0].col, c.holeRefs[0].row);
+          const hB = bb.getHole(c.holeRefs[1].col, c.holeRefs[1].row);
+          if (hA && hB) App.placeLED(hA, hB);
+        } else if (c.type === 'buzzer' && c.holeRefs?.length === 2) {
+          const hA = bb.getHole(c.holeRefs[0].col, c.holeRefs[0].row);
+          const hB = bb.getHole(c.holeRefs[1].col, c.holeRefs[1].row);
+          if (hA && hB) App.placeBuzzer(hA, hB);
+        } else if (c.type === 'button' && c.holeRefs?.length === 2) {
+          const hA = bb.getHole(c.holeRefs[0].col, c.holeRefs[0].row);
+          const hB = bb.getHole(c.holeRefs[1].col, c.holeRefs[1].row);
+          if (hA && hB) App.placeButton(hA, hB);
+        } else if (c.type === 'battery' && c.position) {
+          App.placeBattery(c.position.x, c.position.z);
+        }
+        rebuilt.push(state.components[state.components.length - 1]);
+      }
+
+      // Rebuild wires
+      const savedColor = state.wireColor;
+      for (const w of (data.wires || [])) {
+        state.wireColor = w.color ?? 0xef4444;
+
+        let startWorld = null, startHole = null, startPinMesh = null;
+        let endWorld   = null, endHole   = null, endPinMesh   = null;
+
+        if (w.startHole) {
+          const h = bb.getHole(w.startHole.col, w.startHole.row);
+          if (h) { startWorld = h.world.clone(); startHole = { col: h.col, row: h.row }; }
+        } else if (w.startCompIdx >= 0 && rebuilt[w.startCompIdx]) {
+          const comp = rebuilt[w.startCompIdx];
+          const pm   = comp.pinMeshes[w.startPinIdx];
+          if (pm) { startWorld = pm.userData.world.clone(); startPinMesh = pm; }
+        }
+
+        if (w.endHole) {
+          const h = bb.getHole(w.endHole.col, w.endHole.row);
+          if (h) { endWorld = h.world.clone(); endHole = { col: h.col, row: h.row }; }
+        } else if (w.endCompIdx >= 0 && rebuilt[w.endCompIdx]) {
+          const comp = rebuilt[w.endCompIdx];
+          const pm   = comp.pinMeshes[w.endPinIdx];
+          if (pm) { endWorld = pm.userData.world.clone(); endPinMesh = pm; }
+        }
+
+        if (startWorld && endWorld) {
+          state.wireStart = { world: startWorld, holeRef: startHole, pinMesh: startPinMesh };
+          App.finishWire({ world: endWorld, holeRef: endHole, pinMesh: endPinMesh });
+        }
+      }
+      state.wireColor = savedColor;
+      App.setHint(`Loaded ${data.components?.length ?? 0} components, ${data.wires?.length ?? 0} wires`, 3000);
+    };
+    inp.click();
+  };
+
+  // ── Export State (for AI / save-load) ────────────────────────
+
+  App.exportState = function () {
+    function holeStr(ref) {
+      if (!ref) return null;
+      return ref.row + (ref.col + 1);   // e.g. "e14"
+    }
+
+    const components = state.components.map((c, i) => {
+      const obj = { type: c.type.toUpperCase(), id: c.type + '_' + i };
+      if (c.holeRefs) {
+        obj.holes = c.holeRefs.map(holeStr);
+      } else if (c.group) {
+        obj.position = {
+          x: +c.group.position.x.toFixed(2),
+          z: +c.group.position.z.toFixed(2),
+        };
+      }
+      if (c.type === 'led')      obj.color = 'red';
+      if (c.type === 'resistor') obj.value = '330Ω';
+      return obj;
+    });
+
+    const wires = state.wires.map(w => {
+      const from = w.startHole
+        ? holeStr(w.startHole)
+        : (w.startComp ? w.startComp.type + '_pin' + w.startPinIdx : null);
+      const to = w.endHole
+        ? holeStr(w.endHole)
+        : (w.endComp ? w.endComp.type + '_pin' + w.endPinIdx : null);
+      return { from, to };
+    });
+
+    return { components, wires };
   };
 
   // ── Clear All ─────────────────────────────────────────────────

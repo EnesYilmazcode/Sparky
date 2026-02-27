@@ -374,6 +374,125 @@
   }
 
   // ─────────────────────────────────────────────────────────────
+  //  BUZZER
+  //
+  //  holeA / holeB: 2-hole footprint, same row.
+  //  Cylinder body, dark gray, with "+" label on one side.
+  // ─────────────────────────────────────────────────────────────
+  function buildBuzzer(holeA, holeB) {
+    const group = new THREE.Group();
+    const ax = holeA.x, az = holeA.z;
+    const bx = holeB.x, bz = holeB.z;
+    const midX = (ax + bx) / 2;
+    const midZ = (az + bz) / 2;
+    const LEAD_H = 0.70;
+
+    // Vertical leads
+    [[ax, az], [bx, bz]].forEach(([x, z]) => {
+      const l = new THREE.Mesh(
+        new THREE.CylinderGeometry(0.022, 0.022, LEAD_H, 7),
+        LEAD_MAT()
+      );
+      l.position.set(x, LEAD_H / 2, z);
+      group.add(l);
+    });
+
+    // Main cylinder body
+    const body = cylinder(0.28, 0.45, 18,
+      new THREE.MeshLambertMaterial({ color: 0x222222 }));
+    body.position.set(midX, LEAD_H + 0.225, midZ);
+    body.castShadow = true;
+    group.add(body);
+
+    // Dark top disc (membrane)
+    const top = cylinder(0.27, 0.06, 18,
+      new THREE.MeshLambertMaterial({ color: 0x111111 }));
+    top.position.set(midX, LEAD_H + 0.48, midZ);
+    group.add(top);
+
+    // "+" marker on positive lead side
+    const pMat = new THREE.MeshLambertMaterial({ color: 0xff4444 });
+    const pV = box(0.04, 0.01, 0.16, pMat);
+    const pH = box(0.16, 0.01, 0.04, pMat.clone());
+    pV.position.set(bx, 0.03, bz);
+    pH.position.set(bx, 0.03, bz);
+    group.add(pV, pH);
+
+    // "−" on the other lead
+    const mH = box(0.14, 0.01, 0.04,
+      new THREE.MeshLambertMaterial({ color: 0x4466ff }));
+    mH.position.set(ax, 0.03, az);
+    group.add(mH);
+
+    const pins = [
+      new THREE.Vector3(ax, 0, az),
+      new THREE.Vector3(bx, 0, bz),
+    ];
+    return { group, pins };
+  }
+
+  // ─────────────────────────────────────────────────────────────
+  //  PUSH BUTTON
+  //
+  //  holeA / holeB: 2 holes (one per side of the button).
+  //  Square body with a round off-white cap on top.
+  // ─────────────────────────────────────────────────────────────
+  function buildButton(holeA, holeB) {
+    const group = new THREE.Group();
+    const ax = holeA.x, az = holeA.z;
+    const bx = holeB.x, bz = holeB.z;
+    const midX = (ax + bx) / 2;
+    const midZ = (az + bz) / 2;
+    const LEAD_H = 0.55;
+
+    // Vertical leads (shorter — button sits lower)
+    [[ax, az], [bx, bz]].forEach(([x, z]) => {
+      const l = new THREE.Mesh(
+        new THREE.CylinderGeometry(0.022, 0.022, LEAD_H, 7),
+        LEAD_MAT()
+      );
+      l.position.set(x, LEAD_H / 2, z);
+      group.add(l);
+    });
+
+    // Square body (light green PCB color)
+    const body = box(0.52, 0.28, 0.52,
+      new THREE.MeshLambertMaterial({ color: 0x3a7a3a }));
+    body.position.set(midX, LEAD_H + 0.14, midZ);
+    body.castShadow = true;
+    group.add(body);
+
+    // Small silver pin stubs on body sides
+    [ax, bx].forEach((x, i) => {
+      const stub = box(Math.abs(bx - ax) * 0.25, 0.06, 0.06, LEAD_MAT());
+      const dir = i === 0 ? -1 : 1;
+      stub.position.set(midX + dir * 0.32, LEAD_H + 0.05, midZ);
+      group.add(stub);
+    });
+
+    // Round cap on top (off-white / light gray)
+    const cap = cylinder(0.18, 0.12, 18,
+      new THREE.MeshLambertMaterial({ color: 0xe8e8e8 }));
+    cap.position.set(midX, LEAD_H + 0.34, midZ);
+    group.add(cap);
+
+    // Tiny ring around cap base
+    const ring = new THREE.Mesh(
+      new THREE.TorusGeometry(0.19, 0.025, 6, 16),
+      new THREE.MeshLambertMaterial({ color: 0xaaaaaa })
+    );
+    ring.rotation.x = Math.PI / 2;
+    ring.position.set(midX, LEAD_H + 0.28, midZ);
+    group.add(ring);
+
+    const pins = [
+      new THREE.Vector3(ax, 0, az),
+      new THREE.Vector3(bx, 0, bz),
+    ];
+    return { group, pins };
+  }
+
+  // ─────────────────────────────────────────────────────────────
   //  GHOST PREVIEW
   //
   //  Builds a transparent local-space preview of a component.
@@ -469,6 +588,38 @@
       group.add(mm);
     }
 
+    if (type === 'buzzer') {
+      const LEAD_H = 0.70;
+      const lMat = ghostMat(0xcccccc, alpha);
+      [-half, half].forEach(offset => {
+        const l = cylinder(0.022, LEAD_H, 7, lMat.clone());
+        l.position.set(offset, LEAD_H / 2, 0);
+        group.add(l);
+      });
+      const body = cylinder(0.28, 0.45, 18, ghostMat(0x222222, alpha));
+      body.position.set(0, LEAD_H + 0.225, 0);
+      group.add(body);
+      const top = cylinder(0.27, 0.06, 18, ghostMat(0x111111, alpha));
+      top.position.set(0, LEAD_H + 0.48, 0);
+      group.add(top);
+    }
+
+    if (type === 'button') {
+      const LEAD_H = 0.55;
+      const lMat = ghostMat(0xcccccc, alpha);
+      [-half, half].forEach(offset => {
+        const l = cylinder(0.022, LEAD_H, 7, lMat.clone());
+        l.position.set(offset, LEAD_H / 2, 0);
+        group.add(l);
+      });
+      const body = box(0.52, 0.28, 0.52, ghostMat(0x3a7a3a, alpha));
+      body.position.set(0, LEAD_H + 0.14, 0);
+      group.add(body);
+      const cap = cylinder(0.18, 0.12, 18, ghostMat(0xe8e8e8, alpha));
+      cap.position.set(0, LEAD_H + 0.34, 0);
+      group.add(cap);
+    }
+
     if (type === 'battery') {
       const W = 2.0, H = 2.6, D = 1.4;
       const ba = 0.80;  // battery ghost is much more opaque than other ghosts
@@ -545,6 +696,8 @@
   App.buildResistor = buildResistor;
   App.buildLED      = buildLED;
   App.buildBattery  = buildBattery;
+  App.buildBuzzer   = buildBuzzer;
+  App.buildButton   = buildButton;
   App.buildPreview  = buildPreview;
 
 })(window.App = window.App || {});

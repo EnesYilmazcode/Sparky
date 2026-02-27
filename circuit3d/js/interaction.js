@@ -58,7 +58,8 @@
 
       destroyGhost();
       const bb   = state.breadboard;
-      const span = t === 'led' ? App.LED_SPAN : (t === 'resistor' ? App.RESISTOR_SPAN : 0);
+      const SPANS = { led: App.LED_SPAN, resistor: App.RESISTOR_SPAN, buzzer: App.BUZZER_SPAN, button: App.BUTTON_SPAN };
+      const span = SPANS[t] || 0;
       ghostGroup = App.buildPreview(t, span, bb.HS, r);
       ghostGroup.visible = false;
       scene.add(ghostGroup);
@@ -160,7 +161,8 @@
           return;
         }
 
-        const span  = type === 'led' ? App.LED_SPAN : App.RESISTOR_SPAN;
+        const SPANS = { led: App.LED_SPAN, resistor: App.RESISTOR_SPAN, buzzer: App.BUZZER_SPAN, button: App.BUTTON_SPAN };
+        const span  = SPANS[type] || App.RESISTOR_SPAN;
         const holeB = state.breadboard.getSpanHole(holeA, span, state.placementRotation);
 
         // Update hover sphere on holeA
@@ -282,6 +284,8 @@
 
         if (type === 'resistor') App.placeResistor(hA, hB);
         if (type === 'led')      App.placeLED(hA, hB);
+        if (type === 'buzzer')   App.placeBuzzer(hA, hB);
+        if (type === 'button')   App.placeButton(hA, hB);
         return;
       }
 

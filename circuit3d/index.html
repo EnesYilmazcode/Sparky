@@ -7,6 +7,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap" rel="stylesheet" />
   <link rel="stylesheet" href="css/style.css" />
+  <link rel="stylesheet" href="css/chat.css" />
 </head>
 <body>
 
@@ -57,6 +58,21 @@
       </button>
 
       <div class="topbar-divider"></div>
+      <button class="btn-secondary" onclick="App.saveCircuit()" title="Save circuit to file">
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/>
+          <polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/>
+        </svg>
+        Save
+      </button>
+      <button class="btn-secondary" onclick="App.loadCircuit()" title="Load circuit from file">
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+          <polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/>
+        </svg>
+        Load
+      </button>
+      <div class="topbar-divider"></div>
       <button class="btn-danger" onclick="App.clearAll()">Clear board</button>
     </div>
   </header>
@@ -96,6 +112,22 @@
         <div class="comp-item-text">
           <span class="comp-item-name">Battery</span>
           <span class="comp-item-sub">9V · snap connector</span>
+        </div>
+      </button>
+
+      <button class="comp-item" data-type="buzzer">
+        <span class="comp-item-icon" style="background:#1a1a1a;border-radius:50%;width:28px;height:28px;display:flex;align-items:center;justify-content:center;font-size:14px;">🔔</span>
+        <div class="comp-item-text">
+          <span class="comp-item-name">Buzzer</span>
+          <span class="comp-item-sub">2 leads · active</span>
+        </div>
+      </button>
+
+      <button class="comp-item" data-type="button">
+        <span class="comp-item-icon" style="background:#3a7a3a;border-radius:4px;width:28px;height:28px;display:flex;align-items:center;justify-content:center;font-size:14px;">⬜</span>
+        <div class="comp-item-text">
+          <span class="comp-item-name">Push Button</span>
+          <span class="comp-item-sub">2 leads · momentary</span>
         </div>
       </button>
 
@@ -172,6 +204,33 @@
 
 </div>
 
+<!-- ── Sparky AI Chat Panel ──────────────────────────────── -->
+<div id="sparky-panel">
+  <div id="sparky-header" onclick="sparkyToggle()">
+    <div class="sparky-logo">AI</div>
+    <span class="sparky-title">Sparky AI</span>
+    <span class="sparky-badge">watsonx</span>
+    <span id="sparky-toggle-icon">▲</span>
+  </div>
+
+  <div id="sparky-messages">
+    <div class="chat-msg system">Ask Sparky to review your circuit or help you build one!</div>
+  </div>
+
+  <div id="sparky-quick">
+    <button class="sparky-quick-btn" onclick="sparkyQuick('Analyze my circuit and tell me if it will work.')">🔍 Analyze</button>
+    <button class="sparky-quick-btn" onclick="sparkyQuick('What should I do next?')">➡️ Next step</button>
+    <button class="sparky-quick-btn" onclick="sparkyQuick('What errors do you see?')">⚠️ Find errors</button>
+  </div>
+
+  <div id="sparky-input-row">
+    <textarea id="sparky-input" rows="1" placeholder="Ask Sparky anything…"></textarea>
+    <button id="sparky-send" onclick="sparkyAsk()">↑</button>
+  </div>
+
+  <div id="sparky-ibm-badge">Powered by <span>IBM watsonx</span></div>
+</div>
+
 <!-- Three.js -->
 <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
 <script src="https://unpkg.com/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
@@ -183,6 +242,85 @@
 <script src="js/interaction.js"></script>
 <script src="js/simulate.js"></script>
 <script src="js/app.js"></script>
+
+
+<script>
+// ── Sparky AI chat logic ────────────────────────────────────────
+const SPARKY_API = 'http://localhost:5000/api/ask';
+
+function sparkyToggle() {
+  document.getElementById('sparky-panel').classList.toggle('collapsed');
+}
+
+function sparkyAddMsg(text, role) {
+  const box = document.getElementById('sparky-messages');
+  const el = document.createElement('div');
+  el.className = 'chat-msg ' + role;
+  el.textContent = text;
+  box.appendChild(el);
+  box.scrollTop = box.scrollHeight;
+  return el;
+}
+
+function sparkyTyping() {
+  const box = document.getElementById('sparky-messages');
+  const el = document.createElement('div');
+  el.className = 'chat-msg typing';
+  el.innerHTML = '<div class="typing-dots"><span></span><span></span><span></span></div>';
+  box.appendChild(el);
+  box.scrollTop = box.scrollHeight;
+  return el;
+}
+
+async function sparkyAsk(overrideMsg) {
+  const input = document.getElementById('sparky-input');
+  const msg = overrideMsg || input.value.trim();
+  if (!msg) return;
+
+  // Expand if collapsed
+  document.getElementById('sparky-panel').classList.remove('collapsed');
+
+  sparkyAddMsg(msg, 'user');
+  input.value = '';
+
+  const btn = document.getElementById('sparky-send');
+  btn.disabled = true;
+  const typingEl = sparkyTyping();
+
+  try {
+    const boardState = (typeof App !== 'undefined' && App.exportState)
+      ? App.exportState()
+      : {};
+
+    const resp = await fetch(SPARKY_API, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ state: boardState, message: msg }),
+    });
+
+    const data = await resp.json();
+    typingEl.remove();
+    sparkyAddMsg(data.reply || '(no reply)', 'ai');
+  } catch (err) {
+    typingEl.remove();
+    sparkyAddMsg('⚠️ Cannot reach Sparky backend. Is the Flask server running? (python backend/app.py)', 'system');
+  }
+
+  btn.disabled = false;
+}
+
+function sparkyQuick(msg) { sparkyAsk(msg); }
+
+// Send on Enter (Shift+Enter = newline)
+document.addEventListener('DOMContentLoaded', () => {
+  const inp = document.getElementById('sparky-input');
+  if (inp) {
+    inp.addEventListener('keydown', e => {
+      if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sparkyAsk(); }
+    });
+  }
+});
+</script>
 
 </body>
 </html>
