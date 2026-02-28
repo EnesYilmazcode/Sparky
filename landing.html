@@ -1,0 +1,501 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Sparky — 3D Circuit Designer</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet" />
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg:        #ffffff;
+      --bg-card:   #fafafa;
+      --bg-hover:  #f4f4f5;
+      --border:    #e4e4e7;
+      --border-lo: #ececee;
+      --text:      #111111;
+      --text-sub:  #666666;
+      --text-dim:  #aaaaaa;
+      --accent:    #2563eb;
+      --accent-hi: #1d4ed8;
+      --accent-lo: #3b82f6;
+      --white:     #111111;
+    }
+
+    html { scroll-behavior: smooth; }
+    body {
+      font-family: 'Inter', sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      line-height: 1.6;
+      -webkit-font-smoothing: antialiased;
+    }
+
+    /* ── Navbar ─────────────────────────────────────────────── */
+    nav {
+      position: fixed;
+      top: 0; left: 0; right: 0;
+      z-index: 100;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0 2rem;
+      height: 56px;
+      border-bottom: 1px solid var(--border);
+      background: rgba(255,255,255,0.92);
+      backdrop-filter: blur(12px);
+      -webkit-backdrop-filter: blur(12px);
+    }
+
+    .nav-wordmark {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+      font-size: 1rem;
+      font-weight: 600;
+      color: var(--white);
+      text-decoration: none;
+      letter-spacing: -0.01em;
+    }
+    .nav-wordmark .bolt {
+      font-size: 1.1rem;
+      color: var(--accent-hi);
+    }
+
+    .nav-links {
+      display: flex;
+      align-items: center;
+      gap: 0.25rem;
+    }
+    .nav-link {
+      font-size: 0.875rem;
+      font-weight: 450;
+      color: var(--text-sub);
+      text-decoration: none;
+      padding: 0.4rem 0.75rem;
+      border-radius: 6px;
+      transition: color 0.15s, background 0.15s;
+    }
+    .nav-link:hover { color: var(--text); background: var(--bg-hover); }
+
+    .nav-btn {
+      font-size: 0.8125rem;
+      font-weight: 500;
+      color: var(--white);
+      text-decoration: none;
+      padding: 0.4rem 1rem;
+      border-radius: 6px;
+      border: 1px solid var(--accent);
+      background: var(--accent);
+      transition: background 0.15s, border-color 0.15s;
+      margin-left: 0.5rem;
+    }
+    .nav-btn:hover { background: var(--accent-hi); border-color: var(--accent-hi); }
+
+    /* ── Hero ───────────────────────────────────────────────── */
+    .hero {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      text-align: center;
+      padding: 10rem 2rem 7rem;
+      max-width: 860px;
+      margin: 0 auto;
+    }
+
+    .hero-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.4rem;
+      font-size: 0.75rem;
+      font-weight: 500;
+      color: var(--text-sub);
+      border: 1px solid var(--border);
+      border-radius: 100px;
+      padding: 0.3rem 0.85rem;
+      margin-bottom: 2rem;
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
+    }
+    .hero-badge .dot {
+      width: 6px; height: 6px;
+      border-radius: 50%;
+      background: var(--accent-hi);
+    }
+
+    .hero h1 {
+      font-size: clamp(2.5rem, 6vw, 4.25rem);
+      font-weight: 700;
+      letter-spacing: -0.04em;
+      line-height: 1.05;
+      color: var(--white);
+      margin-bottom: 1.5rem;
+    }
+    .hero h1 em {
+      font-style: normal;
+      color: var(--accent-hi);
+    }
+
+    .hero p {
+      font-size: 1.125rem;
+      color: var(--text-sub);
+      max-width: 520px;
+      line-height: 1.7;
+      margin-bottom: 2.5rem;
+    }
+
+    .hero-actions {
+      display: flex;
+      gap: 0.75rem;
+      flex-wrap: wrap;
+      justify-content: center;
+    }
+
+    .btn-primary {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.45rem;
+      font-size: 0.9375rem;
+      font-weight: 500;
+      color: var(--white);
+      text-decoration: none;
+      padding: 0.65rem 1.5rem;
+      border-radius: 8px;
+      background: var(--accent);
+      border: 1px solid var(--accent);
+      transition: background 0.15s, transform 0.1s;
+    }
+    .btn-primary:hover { background: var(--accent-hi); border-color: var(--accent-hi); transform: translateY(-1px); }
+    .btn-primary:active { transform: translateY(0); }
+
+    .btn-secondary {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.45rem;
+      font-size: 0.9375rem;
+      font-weight: 500;
+      color: var(--text);
+      text-decoration: none;
+      padding: 0.65rem 1.5rem;
+      border-radius: 8px;
+      background: transparent;
+      border: 1px solid var(--border);
+      transition: border-color 0.15s, background 0.15s, transform 0.1s;
+    }
+    .btn-secondary:hover { border-color: #c4c4c8; background: var(--bg-hover); transform: translateY(-1px); }
+
+    /* ── Preview ────────────────────────────────────────────── */
+    .preview-wrap {
+      width: 100%;
+      max-width: 1100px;
+      margin: 0 auto 6rem;
+      padding: 0 2rem;
+    }
+    .preview-frame {
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      overflow: hidden;
+      background: var(--bg-card);
+      box-shadow: 0 0 0 1px var(--border), 0 24px 56px rgba(0,0,0,0.07);
+      aspect-ratio: 16/9;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      position: relative;
+    }
+    .preview-inner {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 1rem;
+      color: var(--text-dim);
+    }
+    .preview-icon {
+      font-size: 3.5rem;
+      opacity: 0.4;
+    }
+    .preview-label {
+      font-size: 0.875rem;
+      color: var(--text-dim);
+    }
+    .preview-grid {
+      position: absolute;
+      inset: 0;
+      opacity: 1;
+      background-image:
+        linear-gradient(rgba(0,0,0,0.05) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(0,0,0,0.05) 1px, transparent 1px);
+      background-size: 40px 40px;
+    }
+    .preview-launch {
+      position: absolute;
+      bottom: 1.5rem;
+      right: 1.5rem;
+    }
+
+    /* ── Features ───────────────────────────────────────────── */
+    .features {
+      max-width: 1100px;
+      margin: 0 auto 6rem;
+      padding: 0 2rem;
+    }
+    .features-header {
+      text-align: center;
+      margin-bottom: 3rem;
+    }
+    .features-header .label {
+      font-size: 0.75rem;
+      font-weight: 600;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      color: var(--accent-hi);
+      margin-bottom: 0.75rem;
+    }
+    .features-header h2 {
+      font-size: clamp(1.75rem, 3vw, 2.5rem);
+      font-weight: 700;
+      letter-spacing: -0.03em;
+      color: var(--white);
+    }
+
+    .features-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+      gap: 1px;
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      overflow: hidden;
+    }
+    .feat-card {
+      background: var(--bg-card);
+      padding: 1.75rem;
+      transition: background 0.15s;
+    }
+    .feat-card:hover { background: var(--bg-hover); }
+    .feat-icon {
+      font-size: 1.5rem;
+      margin-bottom: 1rem;
+      display: block;
+    }
+    .feat-card h3 {
+      font-size: 0.9375rem;
+      font-weight: 600;
+      color: var(--white);
+      letter-spacing: -0.01em;
+      margin-bottom: 0.5rem;
+    }
+    .feat-card p {
+      font-size: 0.875rem;
+      color: var(--text-sub);
+      line-height: 1.6;
+    }
+
+    /* ── Divider ────────────────────────────────────────────── */
+    .divider {
+      width: 100%;
+      max-width: 1100px;
+      margin: 0 auto 5rem;
+      padding: 0 2rem;
+      border: none;
+      border-top: 1px solid var(--border);
+    }
+
+    /* ── CTA strip ──────────────────────────────────────────── */
+    .cta-strip {
+      max-width: 1100px;
+      margin: 0 auto 6rem;
+      padding: 3rem 2rem;
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 2rem;
+      flex-wrap: wrap;
+      background: var(--bg-card);
+      position: relative;
+      overflow: hidden;
+    }
+    .cta-strip::before {
+      content: '';
+      position: absolute;
+      top: 0; left: 0;
+      width: 300px; height: 100%;
+      background: radial-gradient(ellipse at left center, rgba(37,99,235,0.08) 0%, transparent 70%);
+      pointer-events: none;
+    }
+    .cta-strip-text h2 {
+      font-size: 1.5rem;
+      font-weight: 700;
+      letter-spacing: -0.02em;
+      color: var(--white);
+      margin-bottom: 0.4rem;
+    }
+    .cta-strip-text p {
+      font-size: 0.9rem;
+      color: var(--text-sub);
+    }
+    .cta-strip-actions {
+      display: flex;
+      gap: 0.75rem;
+      flex-shrink: 0;
+    }
+
+    /* ── Footer ─────────────────────────────────────────────── */
+    footer {
+      border-top: 1px solid var(--border);
+      padding: 2rem;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 1rem;
+      flex-wrap: wrap;
+    }
+    .footer-left {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+      font-size: 0.875rem;
+      color: var(--text-dim);
+    }
+    .footer-left .bolt { color: var(--accent-hi); }
+    .footer-right {
+      font-size: 0.8125rem;
+      color: var(--text-dim);
+    }
+
+    /* ── Animations ─────────────────────────────────────────── */
+    @keyframes fadeUp {
+      from { opacity: 0; transform: translateY(16px); }
+      to   { opacity: 1; transform: translateY(0);    }
+    }
+    .hero-badge    { animation: fadeUp 0.5s ease both 0.05s; }
+    .hero h1       { animation: fadeUp 0.5s ease both 0.15s; }
+    .hero p        { animation: fadeUp 0.5s ease both 0.25s; }
+    .hero-actions  { animation: fadeUp 0.5s ease both 0.35s; }
+    .preview-wrap  { animation: fadeUp 0.6s ease both 0.45s; }
+
+    /* ── Responsive ─────────────────────────────────────────── */
+    @media (max-width: 600px) {
+      nav { padding: 0 1rem; }
+      .nav-link { display: none; }
+      .hero { padding: 8rem 1.25rem 4rem; }
+      .cta-strip { padding: 2rem 1.5rem; }
+    }
+  </style>
+</head>
+<body>
+
+  <!-- Navbar -->
+  <nav>
+    <a href="#" class="nav-wordmark">
+      <span class="bolt">⚡</span>Sparky
+    </a>
+    <div class="nav-links">
+      <a href="dashboard.html" class="nav-link">Dashboard</a>
+      <a href="circuit3d/index.html" class="nav-btn">Launch App →</a>
+    </div>
+  </nav>
+
+  <!-- Hero -->
+  <section class="hero">
+    <div class="hero-badge">
+      <span class="dot"></span>
+      Now with AI circuit guidance
+    </div>
+    <h1>Build circuits.<br /><em>Get AI guidance.</em></h1>
+    <p>
+      Sparky is a 3D breadboard circuit designer that teaches you electronics
+      as you build. Place components, draw wires, run the simulation — and ask
+      the AI tutor anything.
+    </p>
+    <div class="hero-actions">
+      <a href="circuit3d/index.html" class="btn-primary">⚡ Launch Designer</a>
+      <a href="dashboard.html" class="btn-secondary">View Dashboard →</a>
+    </div>
+  </section>
+
+  <!-- Preview frame -->
+  <div class="preview-wrap">
+    <div class="preview-frame">
+      <div class="preview-grid"></div>
+      <div class="preview-inner">
+        <div class="preview-icon">🔌</div>
+        <span class="preview-label">Interactive 3D breadboard — click to open</span>
+      </div>
+      <div class="preview-launch">
+        <a href="circuit3d/index.html" class="btn-primary" style="font-size:0.8125rem; padding:0.4rem 1rem;">Open Designer →</a>
+      </div>
+    </div>
+  </div>
+
+  <!-- Features -->
+  <section class="features">
+    <div class="features-header">
+      <p class="label">What's included</p>
+      <h2>Everything you need to learn circuits</h2>
+    </div>
+    <div class="features-grid">
+      <div class="feat-card">
+        <span class="feat-icon">🧱</span>
+        <h3>3D Breadboard Visualization</h3>
+        <p>A fully interactive 830-point breadboard rendered in 3D. See exactly how components connect before powering on.</p>
+      </div>
+      <div class="feat-card">
+        <span class="feat-icon">🤖</span>
+        <h3>AI Circuit Tutor</h3>
+        <p>Ask the built-in AI tutor anything. It reads your board state and can build or fix circuits on your behalf.</p>
+      </div>
+      <div class="feat-card">
+        <span class="feat-icon">⚡</span>
+        <h3>Live Simulation</h3>
+        <p>Run your circuit instantly. LEDs light up, currents are calculated, and short circuits are caught automatically.</p>
+      </div>
+      <div class="feat-card">
+        <span class="feat-icon">🔗</span>
+        <h3>Wire Drawing</h3>
+        <p>Click any two holes to draw a wire. Wires snap to breadboard holes and rails with precise color coding.</p>
+      </div>
+      <div class="feat-card">
+        <span class="feat-icon">💾</span>
+        <h3>Save &amp; Load</h3>
+        <p>Export your circuit as a <code style="font-size:0.8em;color:var(--accent-hi)">.sparky</code> file and reload it anytime. Share designs with anyone.</p>
+      </div>
+      <div class="feat-card">
+        <span class="feat-icon">🌐</span>
+        <h3>No Install Required</h3>
+        <p>Runs entirely in your browser with Three.js. No plugins, no downloads — just open and start building.</p>
+      </div>
+    </div>
+  </section>
+
+  <hr class="divider" />
+
+  <!-- CTA strip -->
+  <div class="features" style="padding-bottom: 0;">
+    <div class="cta-strip">
+      <div class="cta-strip-text">
+        <h2>Ready to build your first circuit?</h2>
+        <p>The 3D designer is free, open, and runs instantly in your browser.</p>
+      </div>
+      <div class="cta-strip-actions">
+        <a href="circuit3d/index.html" class="btn-primary">⚡ Launch Designer</a>
+        <a href="dashboard.html" class="btn-secondary">My Circuits</a>
+      </div>
+    </div>
+  </div>
+
+  <!-- Footer -->
+  <footer>
+    <div class="footer-left">
+      <span class="bolt">⚡</span>
+      <span><strong>Sparky</strong> — 3D Circuit Designer</span>
+    </div>
+    <div class="footer-right">Built for IBM Skills Build Hackathon</div>
+  </footer>
+
+</body>
+</html>

@@ -61,7 +61,7 @@
   // ── Ground / Workbench ─────────────────────────────────────
   const ground = new THREE.Mesh(
     new THREE.PlaneGeometry(200, 200),
-    new THREE.MeshLambertMaterial({ color: 0xc8c5be })
+    new THREE.MeshLambertMaterial({ color: 0x9c9790 })
   );
   ground.rotation.x = -Math.PI / 2;
   ground.position.y = -0.21;

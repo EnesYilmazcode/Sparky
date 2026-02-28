@@ -434,6 +434,71 @@
     App.setHint('Circuit saved as circuit.sparky', 2500);
   };
 
+  // ── Internal: load a parsed circuit data object onto the board ─
+  App.loadCircuitData = function (data) {
+    App.clearAll();
+    const bb = state.breadboard;
+
+    // Rebuild components
+    const rebuilt = [];
+    for (const c of (data.components || [])) {
+      if (c.type === 'resistor' && c.holeRefs?.length === 2) {
+        const hA = bb.getHole(c.holeRefs[0].col, c.holeRefs[0].row);
+        const hB = bb.getHole(c.holeRefs[1].col, c.holeRefs[1].row);
+        if (hA && hB) App.placeResistor(hA, hB);
+      } else if (c.type === 'led' && c.holeRefs?.length === 2) {
+        const hA = bb.getHole(c.holeRefs[0].col, c.holeRefs[0].row);
+        const hB = bb.getHole(c.holeRefs[1].col, c.holeRefs[1].row);
+        if (hA && hB) App.placeLED(hA, hB);
+      } else if (c.type === 'buzzer' && c.holeRefs?.length === 2) {
+        const hA = bb.getHole(c.holeRefs[0].col, c.holeRefs[0].row);
+        const hB = bb.getHole(c.holeRefs[1].col, c.holeRefs[1].row);
+        if (hA && hB) App.placeBuzzer(hA, hB);
+      } else if (c.type === 'button' && c.holeRefs?.length === 2) {
+        const hA = bb.getHole(c.holeRefs[0].col, c.holeRefs[0].row);
+        const hB = bb.getHole(c.holeRefs[1].col, c.holeRefs[1].row);
+        if (hA && hB) App.placeButton(hA, hB);
+      } else if (c.type === 'battery' && c.position) {
+        App.placeBattery(c.position.x, c.position.z);
+      }
+      rebuilt.push(state.components[state.components.length - 1]);
+    }
+
+    // Rebuild wires
+    const savedColor = state.wireColor;
+    for (const w of (data.wires || [])) {
+      state.wireColor = w.color ?? 0xef4444;
+
+      let startWorld = null, startHole = null, startPinMesh = null;
+      let endWorld   = null, endHole   = null, endPinMesh   = null;
+
+      if (w.startHole) {
+        const h = bb.getHole(w.startHole.col, w.startHole.row);
+        if (h) { startWorld = h.world.clone(); startHole = { col: h.col, row: h.row }; }
+      } else if (w.startCompIdx >= 0 && rebuilt[w.startCompIdx]) {
+        const comp = rebuilt[w.startCompIdx];
+        const pm   = comp.pinMeshes[w.startPinIdx];
+        if (pm) { startWorld = pm.userData.world.clone(); startPinMesh = pm; }
+      }
+
+      if (w.endHole) {
+        const h = bb.getHole(w.endHole.col, w.endHole.row);
+        if (h) { endWorld = h.world.clone(); endHole = { col: h.col, row: h.row }; }
+      } else if (w.endCompIdx >= 0 && rebuilt[w.endCompIdx]) {
+        const comp = rebuilt[w.endCompIdx];
+        const pm   = comp.pinMeshes[w.endPinIdx];
+        if (pm) { endWorld = pm.userData.world.clone(); endPinMesh = pm; }
+      }
+
+      if (startWorld && endWorld) {
+        state.wireStart = { world: startWorld, holeRef: startHole, pinMesh: startPinMesh };
+        App.finishWire({ world: endWorld, holeRef: endHole, pinMesh: endPinMesh });
+      }
+    }
+    state.wireColor = savedColor;
+    App.setHint(`Loaded ${data.components?.length ?? 0} components, ${data.wires?.length ?? 0} wires`, 3000);
+  };
+
   App.loadCircuit = function () {
     const inp = document.createElement('input');
     inp.type   = 'file';
@@ -445,68 +510,7 @@
       let data;
       try { data = JSON.parse(text); }
       catch { App.setHint('⚠️ Invalid file', 2500); return; }
-
-      App.clearAll();
-      const bb   = state.breadboard;
-
-      // Rebuild components
-      const rebuilt = [];
-      for (const c of (data.components || [])) {
-        if (c.type === 'resistor' && c.holeRefs?.length === 2) {
-          const hA = bb.getHole(c.holeRefs[0].col, c.holeRefs[0].row);
-          const hB = bb.getHole(c.holeRefs[1].col, c.holeRefs[1].row);
-          if (hA && hB) App.placeResistor(hA, hB);
-        } else if (c.type === 'led' && c.holeRefs?.length === 2) {
-          const hA = bb.getHole(c.holeRefs[0].col, c.holeRefs[0].row);
-          const hB = bb.getHole(c.holeRefs[1].col, c.holeRefs[1].row);
-          if (hA && hB) App.placeLED(hA, hB);
-        } else if (c.type === 'buzzer' && c.holeRefs?.length === 2) {
-          const hA = bb.getHole(c.holeRefs[0].col, c.holeRefs[0].row);
-          const hB = bb.getHole(c.holeRefs[1].col, c.holeRefs[1].row);
-          if (hA && hB) App.placeBuzzer(hA, hB);
-        } else if (c.type === 'button' && c.holeRefs?.length === 2) {
-          const hA = bb.getHole(c.holeRefs[0].col, c.holeRefs[0].row);
-          const hB = bb.getHole(c.holeRefs[1].col, c.holeRefs[1].row);
-          if (hA && hB) App.placeButton(hA, hB);
-        } else if (c.type === 'battery' && c.position) {
-          App.placeBattery(c.position.x, c.position.z);
-        }
-        rebuilt.push(state.components[state.components.length - 1]);
-      }
-
-      // Rebuild wires
-      const savedColor = state.wireColor;
-      for (const w of (data.wires || [])) {
-        state.wireColor = w.color ?? 0xef4444;
-
-        let startWorld = null, startHole = null, startPinMesh = null;
-        let endWorld   = null, endHole   = null, endPinMesh   = null;
-
-        if (w.startHole) {
-          const h = bb.getHole(w.startHole.col, w.startHole.row);
-          if (h) { startWorld = h.world.clone(); startHole = { col: h.col, row: h.row }; }
-        } else if (w.startCompIdx >= 0 && rebuilt[w.startCompIdx]) {
-          const comp = rebuilt[w.startCompIdx];
-          const pm   = comp.pinMeshes[w.startPinIdx];
-          if (pm) { startWorld = pm.userData.world.clone(); startPinMesh = pm; }
-        }
-
-        if (w.endHole) {
-          const h = bb.getHole(w.endHole.col, w.endHole.row);
-          if (h) { endWorld = h.world.clone(); endHole = { col: h.col, row: h.row }; }
-        } else if (w.endCompIdx >= 0 && rebuilt[w.endCompIdx]) {
-          const comp = rebuilt[w.endCompIdx];
-          const pm   = comp.pinMeshes[w.endPinIdx];
-          if (pm) { endWorld = pm.userData.world.clone(); endPinMesh = pm; }
-        }
-
-        if (startWorld && endWorld) {
-          state.wireStart = { world: startWorld, holeRef: startHole, pinMesh: startPinMesh };
-          App.finishWire({ world: endWorld, holeRef: endHole, pinMesh: endPinMesh });
-        }
-      }
-      state.wireColor = savedColor;
-      App.setHint(`Loaded ${data.components?.length ?? 0} components, ${data.wires?.length ?? 0} wires`, 3000);
+      App.loadCircuitData(data);
     };
     inp.click();
   };
@@ -662,5 +666,12 @@
   initSidebar();
   setMode('select');
   animate();
+
+  // Auto-load circuit passed from dashboard via sessionStorage
+  const _pending = sessionStorage.getItem('sparky_load_circuit');
+  if (_pending) {
+    sessionStorage.removeItem('sparky_load_circuit');
+    try { App.loadCircuitData(JSON.parse(_pending)); } catch (e) { console.warn('Auto-load failed', e); }
+  }
 
 })(window.App = window.App || {});

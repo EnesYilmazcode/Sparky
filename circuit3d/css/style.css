@@ -189,9 +189,12 @@ html, body {
 }
 
 .comp-item.active {
-  background: var(--selected-bg);
-  border-color: var(--selected-border);
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #fff;
 }
+.comp-item.active .comp-item-name { color: #fff; }
+.comp-item.active .comp-item-sub  { color: rgba(255,255,255,0.72); }
 
 /* Component icon cells */
 .comp-item-icon {

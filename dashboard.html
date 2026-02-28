@@ -1,0 +1,901 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Sparky — Dashboard</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet" />
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg:        #ffffff;
+      --bg-card:   #fafafa;
+      --bg-hover:  #f4f4f5;
+      --sidebar:   #f7f7f8;
+      --border:    #e4e4e7;
+      --border-lo: #ececee;
+      --text:      #111111;
+      --text-sub:  #666666;
+      --text-dim:  #aaaaaa;
+      --accent:    #2563eb;
+      --accent-hi: #1d4ed8;
+      --white:     #111111;
+      --danger:    #dc2626;
+      --sidebar-w: 220px;
+    }
+
+    body {
+      font-family: 'Inter', sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      line-height: 1.5;
+      -webkit-font-smoothing: antialiased;
+      display: flex;
+      min-height: 100vh;
+    }
+
+    /* ── Sidebar ─────────────────────────────────────────────── */
+    .sidebar {
+      position: fixed;
+      top: 0; left: 0; bottom: 0;
+      width: var(--sidebar-w);
+      background: var(--sidebar);
+      border-right: 1px solid var(--border);
+      display: flex;
+      flex-direction: column;
+      z-index: 50;
+    }
+
+    .sidebar-top {
+      padding: 1.25rem 1rem 0.75rem;
+      border-bottom: 1px solid var(--border-lo);
+    }
+    .sidebar-logo {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+      font-size: 0.9375rem;
+      font-weight: 600;
+      color: var(--text);
+      text-decoration: none;
+      padding: 0.35rem 0.5rem;
+      border-radius: 6px;
+      margin-bottom: 0.25rem;
+    }
+    .sidebar-logo .bolt { color: var(--accent-hi); }
+
+    .sidebar-nav {
+      flex: 1;
+      padding: 0.75rem 0.75rem;
+      display: flex;
+      flex-direction: column;
+      gap: 2px;
+    }
+    .sidebar-item {
+      display: flex;
+      align-items: center;
+      gap: 0.65rem;
+      font-size: 0.9rem;
+      font-weight: 500;
+      color: var(--text-sub);
+      text-decoration: none;
+      padding: 0.55rem 0.75rem;
+      border-radius: 6px;
+      cursor: pointer;
+      border: none;
+      background: none;
+      width: 100%;
+      text-align: left;
+      transition: background 0.1s, color 0.1s;
+    }
+    .sidebar-item:hover { background: var(--bg-hover); color: var(--text); }
+    .sidebar-item.active { background: var(--bg-hover); color: var(--text); font-weight: 600; }
+    .sidebar-icon { font-size: 1rem; width: 1.25rem; text-align: center; flex-shrink: 0; }
+
+    /* ── Main ───────────────────────────────────────────────── */
+    .main {
+      margin-left: var(--sidebar-w);
+      flex: 1;
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+    }
+
+    .topbar {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0 2rem;
+      height: 56px;
+      border-bottom: 1px solid var(--border);
+      flex-shrink: 0;
+    }
+    .topbar-title {
+      font-size: 0.9375rem;
+      font-weight: 600;
+      color: var(--white);
+    }
+    .topbar-actions {
+      display: flex;
+      gap: 0.5rem;
+    }
+
+    .content {
+      flex: 1;
+      padding: 2rem;
+      max-width: 1200px;
+    }
+
+    /* ── Buttons ────────────────────────────────────────────── */
+    .btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.4rem;
+      font-family: 'Inter', sans-serif;
+      font-size: 0.8125rem;
+      font-weight: 500;
+      cursor: pointer;
+      border-radius: 6px;
+      border: 1px solid transparent;
+      padding: 0.4rem 0.9rem;
+      text-decoration: none;
+      transition: background 0.12s, border-color 0.12s, transform 0.1s;
+    }
+    .btn:active { transform: scale(0.98); }
+    .btn-primary { background: var(--accent); border-color: var(--accent); color: #ffffff; }
+    .btn-primary:hover { background: var(--accent-hi); border-color: var(--accent-hi); }
+    .btn-ghost { background: transparent; border-color: var(--border); color: var(--text-sub); }
+    .btn-ghost:hover { border-color: #c4c4c8; color: var(--text); background: var(--bg-hover); }
+    .btn-danger { background: transparent; border-color: transparent; color: var(--danger); }
+    .btn-danger:hover { background: rgba(220,38,38,0.08); }
+
+    /* ── Section headings ───────────────────────────────────── */
+    .section-head {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 1.25rem;
+    }
+    .section-head h2 {
+      font-size: 0.9375rem;
+      font-weight: 600;
+      color: var(--white);
+      letter-spacing: -0.01em;
+    }
+
+    /* ── Circuit grid ───────────────────────────────────────── */
+    .circuit-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+      gap: 1rem;
+      margin-bottom: 2.5rem;
+    }
+
+    .circuit-card {
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 1.25rem;
+      display: flex;
+      flex-direction: column;
+      gap: 0.75rem;
+      cursor: pointer;
+      transition: background 0.12s, border-color 0.12s;
+      position: relative;
+    }
+    .circuit-card:hover { background: var(--bg-hover); border-color: #ccc; }
+
+    /* New circuit card — compact button style */
+    .new-card {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 0.5rem;
+      background: transparent;
+      border: 1px dashed var(--border);
+      border-radius: 10px;
+      padding: 1rem 1.25rem;
+      cursor: pointer;
+      transition: background 0.12s, border-color 0.12s;
+      align-self: start;
+      grid-column: 1;
+    }
+    .new-card:hover { background: var(--bg-hover); border-color: #bbb; }
+    .new-card-icon {
+      font-size: 1.1rem;
+      color: var(--text-dim);
+      line-height: 1;
+    }
+    .new-card-label {
+      font-size: 0.875rem;
+      font-weight: 500;
+      color: var(--text-sub);
+    }
+
+    /* Normal circuit card */
+    .card-thumb {
+      width: 100%;
+      aspect-ratio: 16/10;
+      border-radius: 6px;
+      border: 1px solid var(--border);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 1.5rem;
+      overflow: hidden;
+      background: var(--bg);
+      flex-shrink: 0;
+    }
+    .card-thumb-grid {
+      width: 100%; height: 100%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      position: relative;
+    }
+    .card-thumb-grid::before {
+      content: '';
+      position: absolute;
+      inset: 0;
+      background-image:
+        linear-gradient(rgba(0,0,0,0.04) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(0,0,0,0.04) 1px, transparent 1px);
+      background-size: 16px 16px;
+    }
+    .card-thumb-emoji { position: relative; z-index: 1; font-size: 1.75rem; }
+
+    .card-name {
+      font-size: 0.875rem;
+      font-weight: 600;
+      color: var(--white);
+      letter-spacing: -0.01em;
+      flex: 1;
+    }
+    .card-meta {
+      font-size: 0.75rem;
+      color: var(--text-dim);
+    }
+
+    /* Card bottom row */
+    .card-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+
+    /* Three-dot menu */
+    .card-menu-wrap {
+      position: relative;
+    }
+    .card-menu-btn {
+      background: none;
+      border: none;
+      cursor: pointer;
+      color: var(--text-dim);
+      font-size: 1.1rem;
+      padding: 0.15rem 0.3rem;
+      border-radius: 4px;
+      line-height: 1;
+      transition: background 0.1s, color 0.1s;
+    }
+    .card-menu-btn:hover { background: var(--bg-hover); color: var(--text-sub); }
+    .card-menu-btn:focus { outline: none; }
+    .card-dropdown {
+      position: absolute;
+      right: 0;
+      top: calc(100% + 4px);
+      background: #ffffff;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 0.35rem;
+      min-width: 130px;
+      box-shadow: 0 8px 24px rgba(0,0,0,0.10);
+      z-index: 200;
+      display: none;
+    }
+    .card-dropdown.open { display: block; }
+    .dropdown-item {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+      font-size: 0.8125rem;
+      font-weight: 500;
+      padding: 0.4rem 0.6rem;
+      border-radius: 5px;
+      cursor: pointer;
+      border: none;
+      background: none;
+      width: 100%;
+      text-align: left;
+      color: var(--text-sub);
+      transition: background 0.1s, color 0.1s;
+      font-family: 'Inter', sans-serif;
+    }
+    .dropdown-item:hover { background: var(--bg-hover); color: var(--text); }
+    .dropdown-item.danger { color: var(--danger); }
+    .dropdown-item.danger:hover { background: rgba(220,38,38,0.08); color: var(--danger); }
+
+    /* ── Empty state ────────────────────────────────────────── */
+    .empty-state {
+      padding: 5rem 2rem;
+      text-align: center;
+      color: var(--text-dim);
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 0.5rem;
+    }
+    .empty-state-icon { font-size: 2.5rem; opacity: 0.35; }
+    .empty-state-text { font-size: 0.875rem; line-height: 1.6; }
+
+    /* ── Sparks community cards ─────────────────────────────── */
+    .spark-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+      gap: 1rem;
+    }
+    .spark-card {
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 1.25rem;
+      display: flex;
+      flex-direction: column;
+      gap: 0.75rem;
+      transition: background 0.12s, border-color 0.12s;
+    }
+    .spark-card:hover { background: var(--bg-hover); border-color: #ccc; }
+    .spark-thumb {
+      width: 100%;
+      aspect-ratio: 16/9;
+      border-radius: 6px;
+      border: 1px solid var(--border);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 2rem;
+      position: relative;
+      overflow: hidden;
+    }
+    .spark-thumb::before {
+      content: '';
+      position: absolute;
+      inset: 0;
+      background-image:
+        linear-gradient(rgba(255,255,255,0.025) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(255,255,255,0.025) 1px, transparent 1px);
+      background-size: 14px 14px;
+    }
+    .spark-thumb-emoji { position: relative; z-index: 1; }
+    .spark-card-title {
+      font-size: 0.9rem;
+      font-weight: 600;
+      color: var(--white);
+      letter-spacing: -0.01em;
+    }
+    .spark-card-author {
+      font-size: 0.75rem;
+      color: var(--text-dim);
+      margin-top: -0.4rem;
+    }
+    .spark-card-desc {
+      font-size: 0.8125rem;
+      color: var(--text-sub);
+      line-height: 1.55;
+      flex: 1;
+    }
+    .spark-card-footer {
+      display: flex;
+      align-items: center;
+      justify-content: flex-end;
+    }
+
+    /* ── Hidden file input ──────────────────────────────────── */
+    #import-input { display: none; }
+
+    /* ── Tabs (hidden, controlled by JS) ───────────────────── */
+    .tab-panel { display: none; }
+    .tab-panel.active { display: block; }
+
+    /* ── Toast ──────────────────────────────────────────────── */
+    .toast {
+      position: fixed;
+      bottom: 1.5rem;
+      left: 50%;
+      transform: translateX(-50%) translateY(8px);
+      background: #111111;
+      border: 1px solid #333;
+      border-radius: 8px;
+      padding: 0.6rem 1.1rem;
+      font-size: 0.8125rem;
+      color: #f5f5f5;
+      box-shadow: 0 8px 24px rgba(0,0,0,0.15);
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity 0.2s, transform 0.2s;
+      z-index: 999;
+      white-space: nowrap;
+    }
+    .toast.show {
+      opacity: 1;
+      transform: translateX(-50%) translateY(0);
+    }
+  </style>
+</head>
+<body>
+
+  <!-- Sidebar -->
+  <aside class="sidebar">
+    <div class="sidebar-top">
+      <a href="landing.html" class="sidebar-logo">
+        <span class="bolt">⚡</span>Sparky
+      </a>
+    </div>
+    <nav class="sidebar-nav">
+      <button class="sidebar-item active" id="nav-my" onclick="switchTab('my')">
+        <span class="sidebar-icon">🗂</span>My Circuits
+      </button>
+      <button class="sidebar-item" id="nav-sparks" onclick="switchTab('sparks')">
+        <span class="sidebar-icon">✨</span>Sparks
+      </button>
+    </nav>
+  </aside>
+
+  <!-- Main -->
+  <div class="main">
+    <header class="topbar">
+      <span class="topbar-title" id="topbar-title">My Circuits</span>
+      <div class="topbar-actions" id="topbar-actions">
+        <button class="btn btn-ghost" onclick="triggerImport()">↑ Import .sparky</button>
+        <button class="btn btn-primary" onclick="newCircuit()">+ New Circuit</button>
+      </div>
+    </header>
+
+    <div class="content">
+      <!-- MY CIRCUITS TAB -->
+      <div class="tab-panel active" id="tab-my">
+        <div class="section-head">
+          <h2 id="circuits-count">Your circuits</h2>
+        </div>
+        <div class="circuit-grid" id="circuits-grid">
+          <!-- Populated by JS -->
+        </div>
+      </div>
+
+      <!-- SPARKS TAB -->
+      <div class="tab-panel" id="tab-sparks">
+        <div class="section-head">
+          <h2>Community Sparks</h2>
+        </div>
+        <div class="spark-grid" id="sparks-grid">
+          <!-- Populated by JS -->
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Hidden import input -->
+  <input type="file" id="import-input" accept=".sparky,.json" multiple />
+
+  <!-- Toast -->
+  <div class="toast" id="toast"></div>
+
+  <script>
+    // ── Storage key ────────────────────────────────────────────
+    const STORAGE_KEY = 'sparky_circuits';
+
+    // ── Sparks (community examples) ────────────────────────────
+    const COMMUNITY_SPARKS = [
+      {
+        id: 'spark_blink',
+        title: 'Classic Blink LED',
+        author: '@circuit_rookie',
+        desc: 'The "hello world" of electronics. A single red LED wired in series with a 220Ω resistor, demonstrating basic circuit fundamentals.',
+        emoji: '💡',
+        color: '#1a0a0a',
+        circuit: {
+          components: [
+            { type: 'battery', holeRefs: [] },
+            { type: 'resistor', holeRefs: [{ col: 3, row: 'a' }, { col: 7, row: 'a' }] },
+            { type: 'led', color: 0xff2222, holeRefs: [{ col: 9, row: 'a' }, { col: 7, row: 'a' }] },
+          ],
+          wires: [
+            { from: 'battery_0_pin0', to: 'tp_3', color: 'red' },
+            { from: 'battery_0_pin1', to: 'tn_9', color: 'black' },
+            { from: 'tp_3', to: 'a3', color: 'red' },
+            { from: 'a9', to: 'tn_9', color: 'black' },
+          ]
+        }
+      },
+      {
+        id: 'spark_rgb',
+        title: 'RGB Traffic Light',
+        author: '@ledlover99',
+        desc: 'Three LEDs (red, yellow, green) wired in parallel — each with its own current-limiting resistor. Great for understanding parallel circuits.',
+        emoji: '🚦',
+        color: '#0a0f0a',
+        circuit: {
+          components: [
+            { type: 'battery', holeRefs: [] },
+            { type: 'resistor', holeRefs: [{ col: 3, row: 'a' }, { col: 7, row: 'a' }] },
+            { type: 'led', color: 0xff2222, holeRefs: [{ col: 9, row: 'a' }, { col: 7, row: 'a' }] },
+            { type: 'resistor', holeRefs: [{ col: 11, row: 'a' }, { col: 15, row: 'a' }] },
+            { type: 'led', color: 0xffcc00, holeRefs: [{ col: 17, row: 'a' }, { col: 15, row: 'a' }] },
+            { type: 'resistor', holeRefs: [{ col: 19, row: 'a' }, { col: 23, row: 'a' }] },
+            { type: 'led', color: 0x22ff44, holeRefs: [{ col: 25, row: 'a' }, { col: 23, row: 'a' }] },
+          ],
+          wires: [
+            { from: 'battery_0_pin0', to: 'tp_3', color: 'red' },
+            { from: 'battery_0_pin1', to: 'tn_9', color: 'black' },
+            { from: 'tp_3', to: 'a3', color: 'red' },
+            { from: 'a9', to: 'tn_9', color: 'black' },
+            { from: 'tp_11', to: 'a11', color: 'red' },
+            { from: 'a17', to: 'tn_17', color: 'black' },
+            { from: 'tp_19', to: 'a19', color: 'red' },
+            { from: 'a25', to: 'tn_25', color: 'black' },
+          ]
+        }
+      },
+      {
+        id: 'spark_button',
+        title: 'Push-Button Lamp',
+        author: '@makerspace_mike',
+        desc: 'A tactile push button controls an LED. Press the cap during simulation to complete the circuit and watch the lamp light up.',
+        emoji: '🔘',
+        color: '#0a0a14',
+        circuit: {
+          components: [
+            { type: 'battery', holeRefs: [] },
+            { type: 'resistor', holeRefs: [{ col: 3, row: 'a' }, { col: 7, row: 'a' }] },
+            { type: 'led', color: 0x4499ff, holeRefs: [{ col: 9, row: 'a' }, { col: 7, row: 'a' }] },
+            { type: 'button', holeRefs: [{ col: 12, row: 'a' }, { col: 15, row: 'a' }] },
+          ],
+          wires: [
+            { from: 'battery_0_pin0', to: 'tp_3', color: 'red' },
+            { from: 'battery_0_pin1', to: 'tn_16', color: 'black' },
+            { from: 'tp_3', to: 'a3', color: 'red' },
+            { from: 'a9', to: 'a12', color: 'yellow' },
+            { from: 'a15', to: 'tn_15', color: 'black' },
+          ]
+        }
+      },
+      {
+        id: 'spark_buzzer',
+        title: 'Door Bell Buzzer',
+        author: '@electronicsforall',
+        desc: 'A piezo buzzer paired with a push button — press to buzz. Demonstrates how to switch an audio component with a momentary switch.',
+        emoji: '🔔',
+        color: '#100a00',
+        circuit: {
+          components: [
+            { type: 'battery', holeRefs: [] },
+            { type: 'buzzer', holeRefs: [{ col: 5, row: 'a' }, { col: 7, row: 'a' }] },
+            { type: 'button', holeRefs: [{ col: 10, row: 'a' }, { col: 13, row: 'a' }] },
+          ],
+          wires: [
+            { from: 'battery_0_pin0', to: 'tp_5', color: 'red' },
+            { from: 'battery_0_pin1', to: 'tn_13', color: 'black' },
+            { from: 'tp_5', to: 'a5', color: 'red' },
+            { from: 'a7', to: 'a10', color: 'yellow' },
+            { from: 'a13', to: 'tn_13', color: 'black' },
+          ]
+        }
+      },
+      {
+        id: 'spark_series',
+        title: 'Series Resistors',
+        author: '@ohm_my_god',
+        desc: 'Two resistors wired in series before a single LED. A great way to visualize how resistance adds up and affects brightness.',
+        emoji: '⚡',
+        color: '#0a0a0a',
+        circuit: {
+          components: [
+            { type: 'battery', holeRefs: [] },
+            { type: 'resistor', holeRefs: [{ col: 3, row: 'a' }, { col: 7, row: 'a' }] },
+            { type: 'resistor', holeRefs: [{ col: 7, row: 'e' }, { col: 11, row: 'e' }] },
+            { type: 'led', color: 0xff8800, holeRefs: [{ col: 13, row: 'a' }, { col: 11, row: 'a' }] },
+          ],
+          wires: [
+            { from: 'battery_0_pin0', to: 'tp_3', color: 'red' },
+            { from: 'battery_0_pin1', to: 'tn_13', color: 'black' },
+            { from: 'tp_3', to: 'a3', color: 'red' },
+            { from: 'e7', to: 'a7', color: 'white' },
+            { from: 'e11', to: 'a11', color: 'white' },
+            { from: 'a13', to: 'tn_13', color: 'black' },
+          ]
+        }
+      },
+      {
+        id: 'spark_sos',
+        title: 'SOS Signal LEDs',
+        author: '@morse_maker',
+        desc: 'Five LEDs arranged to spell visual patterns. Explore how many parallel branches one battery can drive before dimming occurs.',
+        emoji: '🆘',
+        color: '#0f0010',
+        circuit: {
+          components: [
+            { type: 'battery', holeRefs: [] },
+            { type: 'resistor', holeRefs: [{ col: 3, row: 'a' }, { col: 7, row: 'a' }] },
+            { type: 'led', color: 0xff00ff, holeRefs: [{ col: 9, row: 'a' }, { col: 7, row: 'a' }] },
+            { type: 'resistor', holeRefs: [{ col: 11, row: 'a' }, { col: 15, row: 'a' }] },
+            { type: 'led', color: 0xff00ff, holeRefs: [{ col: 17, row: 'a' }, { col: 15, row: 'a' }] },
+            { type: 'resistor', holeRefs: [{ col: 19, row: 'a' }, { col: 23, row: 'a' }] },
+            { type: 'led', color: 0xff00ff, holeRefs: [{ col: 25, row: 'a' }, { col: 23, row: 'a' }] },
+          ],
+          wires: [
+            { from: 'battery_0_pin0', to: 'tp_3', color: 'red' },
+            { from: 'battery_0_pin1', to: 'tn_9', color: 'black' },
+            { from: 'tp_3', to: 'a3', color: 'red' },
+            { from: 'a9', to: 'tn_9', color: 'black' },
+            { from: 'tp_11', to: 'a11', color: 'red' },
+            { from: 'a17', to: 'tn_17', color: 'black' },
+            { from: 'tp_19', to: 'a19', color: 'red' },
+            { from: 'a25', to: 'tn_25', color: 'black' },
+          ]
+        }
+      }
+    ];
+
+    // ── Tab switching ──────────────────────────────────────────
+    function switchTab(tab) {
+      document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
+      document.querySelectorAll('.sidebar-item').forEach(b => b.classList.remove('active'));
+      document.getElementById('tab-' + tab).classList.add('active');
+      document.getElementById('nav-' + tab).classList.add('active');
+
+      const title = tab === 'my' ? 'My Circuits' : 'Sparks';
+      document.getElementById('topbar-title').textContent = title;
+      document.getElementById('topbar-actions').style.display = tab === 'my' ? 'flex' : 'none';
+
+      if (tab === 'sparks') renderSparks();
+    }
+
+    // ── localStorage helpers ────────────────────────────────────
+    function loadCircuits() {
+      try { return JSON.parse(localStorage.getItem(STORAGE_KEY) || '[]'); }
+      catch { return []; }
+    }
+    function saveCircuits(arr) {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(arr));
+    }
+
+    // ── Render MY CIRCUITS ─────────────────────────────────────
+    function renderMyCircuits() {
+      const circuits = loadCircuits();
+      const grid  = document.getElementById('circuits-grid');
+      const count = document.getElementById('circuits-count');
+      // Empty state lives outside the grid
+      let emptyEl = document.getElementById('circuits-empty');
+
+      count.textContent = circuits.length === 0
+        ? 'Your circuits'
+        : `Your circuits (${circuits.length})`;
+
+      grid.innerHTML = '';
+
+      // New circuit card — compact button
+      const newCard = document.createElement('button');
+      newCard.className = 'new-card';
+      newCard.onclick = newCircuit;
+      newCard.innerHTML = `
+        <span class="new-card-icon">＋</span>
+        <span class="new-card-label">New Circuit</span>
+      `;
+      grid.appendChild(newCard);
+
+      if (circuits.length === 0) {
+        // Show empty state centered below the grid
+        if (!emptyEl) {
+          emptyEl = document.createElement('div');
+          emptyEl.id = 'circuits-empty';
+          emptyEl.className = 'empty-state';
+          emptyEl.innerHTML = `
+            <div class="empty-state-icon">📂</div>
+            <div class="empty-state-text">No saved circuits yet.<br>Create one or import a <code>.sparky</code> file.</div>
+          `;
+          grid.parentNode.insertBefore(emptyEl, grid.nextSibling);
+        }
+        emptyEl.style.display = 'flex';
+        return;
+      }
+
+      // Hide empty state if circuits exist
+      if (emptyEl) emptyEl.style.display = 'none';
+
+      circuits.forEach((c, idx) => {
+        grid.appendChild(makeCircuitCard(c, idx));
+      });
+    }
+
+    function makeCircuitCard(c, idx) {
+      const card = document.createElement('div');
+      card.className = 'circuit-card';
+
+      const compCount = c.circuit?.components?.length ?? 0;
+      const wireCount = c.circuit?.wires?.length ?? 0;
+      const saved = c.savedAt ? new Date(c.savedAt).toLocaleDateString() : 'Unknown';
+
+      card.innerHTML = `
+        <div class="card-thumb">
+          <div class="card-thumb-grid">
+            <span class="card-thumb-emoji">🔌</span>
+          </div>
+        </div>
+        <div>
+          <div class="card-name">${escHtml(c.name)}</div>
+          <div class="card-meta">${compCount} component${compCount !== 1 ? 's' : ''} · ${wireCount} wire${wireCount !== 1 ? 's' : ''}</div>
+        </div>
+        <div class="card-row">
+          <span class="card-meta">${saved}</span>
+          <div class="card-menu-wrap">
+            <button class="card-menu-btn" title="Options" onclick="toggleMenu(event, 'menu-${idx}')">···</button>
+            <div class="card-dropdown" id="menu-${idx}">
+              <button class="dropdown-item" onclick="openCircuit(${idx})">↗ Open in Editor</button>
+              <button class="dropdown-item" onclick="downloadCircuit(${idx})">↓ Download</button>
+              <button class="dropdown-item danger" onclick="deleteCircuit(${idx})">✕ Delete</button>
+            </div>
+          </div>
+        </div>
+      `;
+
+      // Click on the main area (not the menu) opens in editor
+      card.addEventListener('click', e => {
+        if (e.target.closest('.card-menu-wrap')) return;
+        openCircuit(idx);
+      });
+
+      return card;
+    }
+
+    function openCircuit(idx) {
+      const circuits = loadCircuits();
+      const c = circuits[idx];
+      if (!c) return;
+      sessionStorage.setItem('sparky_load_circuit', JSON.stringify(c.circuit));
+      window.location.href = 'circuit3d/index.html';
+    }
+
+    function downloadCircuit(idx) {
+      const circuits = loadCircuits();
+      const c = circuits[idx];
+      if (!c) return;
+      const blob = new Blob([JSON.stringify(c.circuit, null, 2)], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `${c.name.replace(/\s+/g, '_')}.sparky`;
+      a.click();
+      URL.revokeObjectURL(url);
+      showToast(`Downloaded "${c.name}"`);
+    }
+
+    function deleteCircuit(idx) {
+      const circuits = loadCircuits();
+      const name = circuits[idx]?.name ?? 'circuit';
+      circuits.splice(idx, 1);
+      saveCircuits(circuits);
+      renderMyCircuits();
+      showToast(`Deleted "${name}"`);
+    }
+
+    function newCircuit() {
+      window.location.href = 'circuit3d/index.html';
+    }
+
+    // ── Toggle card dropdown ───────────────────────────────────
+    function toggleMenu(e, id) {
+      e.stopPropagation();
+      const menu = document.getElementById(id);
+      const isOpen = menu.classList.contains('open');
+      // Close all
+      document.querySelectorAll('.card-dropdown').forEach(m => m.classList.remove('open'));
+      if (!isOpen) menu.classList.add('open');
+    }
+
+    // Close menus on outside click
+    document.addEventListener('click', () => {
+      document.querySelectorAll('.card-dropdown').forEach(m => m.classList.remove('open'));
+    });
+
+    // ── Import .sparky ─────────────────────────────────────────
+    function triggerImport() {
+      document.getElementById('import-input').click();
+    }
+
+    document.getElementById('import-input').addEventListener('change', function () {
+      const files = Array.from(this.files);
+      if (!files.length) return;
+      let imported = 0;
+
+      const readers = files.map(file => new Promise(resolve => {
+        const reader = new FileReader();
+        reader.onload = e => {
+          try {
+            const data = JSON.parse(e.target.result);
+            const circuits = loadCircuits();
+            const name = file.name.replace(/\.(sparky|json)$/i, '').replace(/_/g, ' ');
+            circuits.push({
+              id: 'local_' + Date.now() + '_' + Math.random().toString(36).slice(2),
+              name,
+              savedAt: Date.now(),
+              circuit: data
+            });
+            saveCircuits(circuits);
+            imported++;
+          } catch {}
+          resolve();
+        };
+        reader.readAsText(file);
+      }));
+
+      Promise.all(readers).then(() => {
+        this.value = '';
+        renderMyCircuits();
+        showToast(imported === 1 ? 'Circuit imported!' : `${imported} circuits imported!`);
+      });
+    });
+
+    // ── Render SPARKS ──────────────────────────────────────────
+    function renderSparks() {
+      const grid = document.getElementById('sparks-grid');
+      if (grid.children.length > 0) return; // already rendered
+
+      COMMUNITY_SPARKS.forEach(spark => {
+        const card = document.createElement('div');
+        card.className = 'spark-card';
+        card.innerHTML = `
+          <div class="spark-thumb" style="background:${spark.color}">
+            <span class="spark-thumb-emoji">${spark.emoji}</span>
+          </div>
+          <div class="spark-card-title">${escHtml(spark.title)}</div>
+          <div class="spark-card-author">${escHtml(spark.author)}</div>
+          <div class="spark-card-desc">${escHtml(spark.desc)}</div>
+          <div class="spark-card-footer">
+            <button class="btn btn-ghost" style="font-size:0.75rem;" onclick="forkSpark('${spark.id}')">Fork →</button>
+          </div>
+        `;
+        grid.appendChild(card);
+      });
+    }
+
+    function forkSpark(id) {
+      const spark = COMMUNITY_SPARKS.find(s => s.id === id);
+      if (!spark) return;
+      const blob = new Blob([JSON.stringify(spark.circuit, null, 2)], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `${spark.title.replace(/\s+/g, '_')}.sparky`;
+      a.click();
+      URL.revokeObjectURL(url);
+      showToast(`Forked "${spark.title}"!`);
+    }
+
+    // ── Toast ──────────────────────────────────────────────────
+    let _toastTimer;
+    function showToast(msg) {
+      const t = document.getElementById('toast');
+      t.textContent = msg;
+      t.classList.add('show');
+      clearTimeout(_toastTimer);
+      _toastTimer = setTimeout(() => t.classList.remove('show'), 2400);
+    }
+
+    // ── Escape HTML ────────────────────────────────────────────
+    function escHtml(s) {
+      return String(s)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;');
+    }
+
+    // ── Init ───────────────────────────────────────────────────
+    renderMyCircuits();
+  </script>
+</body>
+</html>
