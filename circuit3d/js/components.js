@@ -374,7 +374,9 @@
     const bx = holeB.x, bz = holeB.z;
     const midX = (ax + bx) / 2;
     const midZ = (az + bz) / 2;
-    const LEAD_H = 0.70;
+    const LEAD_H  = 0.70;
+    const BODY_R  = 0.28;
+    const isHoriz = Math.abs(az - bz) < 0.01;
 
     // Vertical leads
     [[ax, az], [bx, bz]].forEach(([x, z]) => {
@@ -385,6 +387,44 @@
       l.position.set(x, LEAD_H / 2, z);
       group.add(l);
     });
+
+    // Horizontal stubs connecting lead tops to body edge
+    const lMat = LEAD_MAT();
+    if (isHoriz) {
+      const aEdgeX = midX + Math.sign(ax - midX) * BODY_R;
+      const bEdgeX = midX + Math.sign(bx - midX) * BODY_R;
+      const aLen = Math.abs(aEdgeX - ax);
+      const bLen = Math.abs(bEdgeX - bx);
+      if (aLen > 0.01) {
+        const s = new THREE.Mesh(new THREE.CylinderGeometry(0.022, 0.022, aLen, 7), lMat.clone());
+        s.rotation.z = Math.PI / 2;
+        s.position.set((ax + aEdgeX) / 2, LEAD_H, az);
+        group.add(s);
+      }
+      if (bLen > 0.01) {
+        const s = new THREE.Mesh(new THREE.CylinderGeometry(0.022, 0.022, bLen, 7), lMat.clone());
+        s.rotation.z = Math.PI / 2;
+        s.position.set((bx + bEdgeX) / 2, LEAD_H, bz);
+        group.add(s);
+      }
+    } else {
+      const aEdgeZ = midZ + Math.sign(az - midZ) * BODY_R;
+      const bEdgeZ = midZ + Math.sign(bz - midZ) * BODY_R;
+      const aLen = Math.abs(aEdgeZ - az);
+      const bLen = Math.abs(bEdgeZ - bz);
+      if (aLen > 0.01) {
+        const s = new THREE.Mesh(new THREE.CylinderGeometry(0.022, 0.022, aLen, 7), lMat.clone());
+        s.rotation.x = Math.PI / 2;
+        s.position.set(ax, LEAD_H, (az + aEdgeZ) / 2);
+        group.add(s);
+      }
+      if (bLen > 0.01) {
+        const s = new THREE.Mesh(new THREE.CylinderGeometry(0.022, 0.022, bLen, 7), lMat.clone());
+        s.rotation.x = Math.PI / 2;
+        s.position.set(bx, LEAD_H, (bz + bEdgeZ) / 2);
+        group.add(s);
+      }
+    }
 
     // Main cylinder body
     const body = cylinder(0.28, 0.45, 18,
@@ -598,12 +638,28 @@
 
     if (type === 'buzzer') {
       const LEAD_H = 0.70;
+      const BODY_R = 0.28;
       const lMat = ghostMat(0xcccccc, alpha);
       [-half, half].forEach(offset => {
         const l = cylinder(0.022, LEAD_H, 7, lMat.clone());
         l.position.set(offset, LEAD_H / 2, 0);
         group.add(l);
       });
+
+      // Horizontal stubs from lead tops to body edge
+      const stubLen = Math.max(0, half - BODY_R);
+      if (stubLen > 0.01) {
+        const sGeo = new THREE.CylinderGeometry(0.022, 0.022, stubLen, 7);
+        const sA = new THREE.Mesh(sGeo, lMat.clone());
+        sA.rotation.z = Math.PI / 2;
+        sA.position.set(-(half + BODY_R) / 2, LEAD_H, 0);
+        group.add(sA);
+        const sB = new THREE.Mesh(sGeo.clone(), lMat.clone());
+        sB.rotation.z = Math.PI / 2;
+        sB.position.set((half + BODY_R) / 2, LEAD_H, 0);
+        group.add(sB);
+      }
+
       const body = cylinder(0.28, 0.45, 18, ghostMat(0x222222, alpha));
       body.position.set(0, LEAD_H + 0.225, 0);
       group.add(body);

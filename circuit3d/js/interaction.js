@@ -85,20 +85,30 @@
     // ── Drag detection ──────────────────────────────────────
     let mouseDownPos = null;
     let wasDragged   = false;
+    const DRAG_THRESH = 8;  // px — must exceed this to be treated as orbit, not click
 
     canvas.addEventListener('mousedown', e => {
       mouseDownPos = { x: e.clientX, y: e.clientY };
       wasDragged   = false;
     });
-    canvas.addEventListener('mouseup', () => { mouseDownPos = null; });
+    // Note: we intentionally do NOT clear mouseDownPos on mouseup so the
+    // click handler can do a final distance check before acting.
 
-    // ── Hover indicator sphere (shows snapped hole) ─────────
+    // ── Hover indicator spheres (show both pin snap positions) ─
     const hoverSphere = new THREE.Mesh(
       new THREE.SphereGeometry(0.11, 12, 12),
       new THREE.MeshLambertMaterial({ color: 0x22cc55, emissive: 0x115522, emissiveIntensity: 0.9 })
     );
     hoverSphere.visible = false;
     scene.add(hoverSphere);
+
+    // Second sphere for the second pin (holeB)
+    const hoverSphereB = new THREE.Mesh(
+      new THREE.SphereGeometry(0.11, 12, 12),
+      new THREE.MeshLambertMaterial({ color: 0x22cc55, emissive: 0x115522, emissiveIntensity: 0.9 })
+    );
+    hoverSphereB.visible = false;
+    scene.add(hoverSphereB);
 
     // Highlighted wire-start pin (stored so we can reset it)
     let wireStartPinMesh = null;
@@ -108,7 +118,7 @@
       if (mouseDownPos) {
         const dx = e.clientX - mouseDownPos.x;
         const dy = e.clientY - mouseDownPos.y;
-        if (Math.abs(dx) > 4 || Math.abs(dy) > 4) wasDragged = true;
+        if (dx * dx + dy * dy > DRAG_THRESH * DRAG_THRESH) wasDragged = true;
       }
       handleHover(e);
     });
@@ -123,7 +133,8 @@
         const type = state.pickedType;
 
         if (type === 'battery') {
-          hoverSphere.visible     = false;
+          hoverSphere.visible  = false;
+          hoverSphereB.visible = false;
           holeLabel.style.display = 'none';
           // Position ghost at cursor, clamped outside the board
           const pt  = new THREE.Vector3();
@@ -145,7 +156,8 @@
         const hits = raycaster.intersectObject(bbBody, false);
 
         if (!hits.length) {
-          hoverSphere.visible = false;
+          hoverSphere.visible  = false;
+          hoverSphereB.visible = false;
           holeLabel.style.display = 'none';
           if (ghostGroup) ghostGroup.visible = false;
           return;
@@ -155,7 +167,8 @@
         const holeA = state.breadboard.getNearestHole(pt.x, pt.z, null);
 
         if (!holeA) {
-          hoverSphere.visible = false;
+          hoverSphere.visible  = false;
+          hoverSphereB.visible = false;
           holeLabel.style.display = 'none';
           if (ghostGroup) ghostGroup.visible = false;
           return;
@@ -165,9 +178,15 @@
         const span  = SPANS[type] || App.RESISTOR_SPAN;
         const holeB = state.breadboard.getSpanHole(holeA, span, state.placementRotation);
 
-        // Update hover sphere on holeA
+        // Update hover spheres on holeA and holeB
         hoverSphere.position.set(holeA.x, 0.12, holeA.z);
         hoverSphere.visible = true;
+        if (holeB) {
+          hoverSphereB.position.set(holeB.x, 0.12, holeB.z);
+          hoverSphereB.visible = true;
+        } else {
+          hoverSphereB.visible = false;
+        }
 
         // Update ghost
         syncGhost();
@@ -190,7 +209,8 @@
       // ── WIRE mode ───────────────────────────────────────
       if (mode === 'wire') {
         destroyGhost();
-        hoverSphere.visible = false;
+        hoverSphere.visible  = false;
+        hoverSphereB.visible = false;
         holeLabel.style.display = 'none';
 
         // Highlight nearest hole (breadboard InstancedMesh)
@@ -232,7 +252,8 @@
 
       // ── SELECT mode ─────────────────────────────────────
       destroyGhost();
-      hoverSphere.visible = false;
+      hoverSphere.visible  = false;
+      hoverSphereB.visible = false;
       holeLabel.style.display = 'none';
     }
 
@@ -259,6 +280,13 @@
 
     // ── click ────────────────────────────────────────────────
     canvas.addEventListener('click', e => {
+      // Final distance check — catches orbit gestures mousemove may have missed
+      if (mouseDownPos) {
+        const dx = e.clientX - mouseDownPos.x;
+        const dy = e.clientY - mouseDownPos.y;
+        if (dx * dx + dy * dy > DRAG_THRESH * DRAG_THRESH) wasDragged = true;
+      }
+      mouseDownPos = null;
       if (wasDragged) return;
       updateRay(e);
       handleClick(e);
@@ -407,7 +435,8 @@
     App.setMode = function (m) {
       _origSetMode(m);
       if (m !== 'place') destroyGhost();
-      hoverSphere.visible = false;
+      hoverSphere.visible  = false;
+      hoverSphereB.visible = false;
       holeLabel.style.display = 'none';
       wireStartPinMesh = null;
     };
