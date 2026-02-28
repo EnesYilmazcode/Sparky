@@ -452,6 +452,88 @@
     inp.click();
   };
 
+  // ── Markdown Export (human-readable for AI) ──────────────────
+
+  App.exportMarkdown = function () {
+    function holeStr(ref) {
+      if (!ref) return null;
+      return ref.row + (ref.col + 1);  // e.g. "e14"
+    }
+
+    const comps = state.components;
+    const wires = state.wires;
+
+    // ── Summary line ──
+    const isEmpty = !comps.length && !wires.length;
+    let md = isEmpty
+      ? '**Board status: EMPTY — no components or wires placed yet.**\n\n'
+      : `**Board status: ${comps.length} component(s), ${wires.length} wire(s).**\n\n`;
+
+    // ── Component table ──
+    md += '## Components\n';
+    if (!comps.length) {
+      md += '_None._\n';
+    } else {
+      md += '| id | type | pin_A | pin_B |\n';
+      md += '|----|------|-------|-------|\n';
+      comps.forEach((c, i) => {
+        const id = `${c.type}_${i}`;
+        let pA = '—', pB = '—';
+        if (c.holeRefs) {
+          pA = holeStr(c.holeRefs[0]);
+          pB = holeStr(c.holeRefs[1]);
+          if (c.type === 'led') { pA += ' (cathode −)'; pB += ' (anode +)'; }
+        } else {
+          // Off-board battery — show the wire reference names the AI must use
+          pA = `off-board + → wire ref: ${id}_pin0`;
+          pB = `off-board − → wire ref: ${id}_pin1`;
+        }
+        md += `| ${id} | ${c.type} | ${pA} | ${pB} |\n`;
+      });
+    }
+
+    // ── Battery wiring cheat-sheet ──
+    const batteries = comps.filter(c => c.type === 'battery');
+    if (batteries.length) {
+      md += '\n## Battery wiring (how to connect in add_wire actions)\n';
+      batteries.forEach((b, i) => {
+        const id = `battery_${comps.indexOf(b)}`;
+        md += `- **${id}**: positive terminal → use \`"from": "${id}_pin0"\`  |  negative terminal → use \`"from": "${id}_pin1"\`\n`;
+      });
+    }
+
+    // ── Wire table ──
+    md += '\n## Wires\n';
+    if (!wires.length) {
+      md += '_None._\n';
+    } else {
+      md += '| from | to | color |\n';
+      md += '|------|----|-----------|\n';
+      wires.forEach(w => {
+        const from = w.startHole
+          ? holeStr(w.startHole)
+          : (w.startComp ? `${w.startComp.type}_${comps.indexOf(w.startComp)}_pin${w.startPinIdx}` : '?');
+        const to = w.endHole
+          ? holeStr(w.endHole)
+          : (w.endComp ? `${w.endComp.type}_${comps.indexOf(w.endComp)}_pin${w.endPinIdx}` : '?');
+        const colorHex = '#' + (w.group?.children?.[0]?.material?.color?.getHex?.() ?? 0xef4444).toString(16).padStart(6, '0');
+        md += `| ${from} | ${to} | ${colorHex} |\n`;
+      });
+    }
+
+    // ── Topology ──
+    md += `
+## Breadboard topology (always true)
+- Columns 1–29. Holes a1–e1 share one node; f1–j1 share another node (center channel divides them).
+- Same rule for every column: a-e connected together, f-j connected together.
+- To connect top half (a-e) to bottom half (f-j) of the SAME column, you MUST add a wire.
+- tp = positive top rail (+9V), tn = negative top rail (GND).
+- bp = positive bottom rail (+9V), bn = negative bottom rail (GND).
+- Rails are NOT connected to body rows — you must wire from rail to a body hole explicitly.
+`;
+    return md;
+  };
+
   // ── Export State (for AI / save-load) ────────────────────────
 
   App.exportState = function () {

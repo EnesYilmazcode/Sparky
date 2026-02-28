@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Circuit Designer 3D</title>
+  <title>Sparky</title>
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap" rel="stylesheet" />
   <link rel="stylesheet" href="css/style.css" />
@@ -16,34 +16,13 @@
   <!-- TOP BAR -->
   <header id="topbar">
     <div class="topbar-brand">
-      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+      <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
         <path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/>
       </svg>
-      Circuit3D
+      Sparky
     </div>
 
-    <div class="topbar-modes">
-      <button class="mode-btn active" data-mode="select" title="Select & move (S)">
-        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-          <path d="M5 3l14 9-7 1-4 7z"/>
-        </svg>
-        Select
-      </button>
-      <button class="mode-btn" data-mode="place" title="Place components (P)">
-        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-          <circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="16"/><line x1="8" y1="12" x2="16" y2="12"/>
-        </svg>
-        Place
-      </button>
-      <button class="mode-btn" data-mode="wire" title="Draw wires (W)">
-        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-          <path d="M4 12h4m4 0h4m4 0h0M12 4v4m0 4v4"/>
-        </svg>
-        Wire
-      </button>
-    </div>
-
-    <div class="topbar-actions">
+    <div class="topbar-center">
       <button class="btn-simulate" id="sim-run-btn" onclick="App.runSimulation()">
         <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor">
           <polygon points="5,3 19,12 5,21"/>
@@ -56,16 +35,17 @@
         </svg>
         Stop
       </button>
+    </div>
 
-      <div class="topbar-divider"></div>
-      <button class="btn-secondary" onclick="App.saveCircuit()" title="Save circuit to file">
+    <div class="topbar-actions">
+      <button class="btn-secondary" onclick="App.saveCircuit()" title="Save (.sparky)">
         <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
           <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/>
           <polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/>
         </svg>
         Save
       </button>
-      <button class="btn-secondary" onclick="App.loadCircuit()" title="Load circuit from file">
+      <button class="btn-secondary" onclick="App.loadCircuit()" title="Load .sparky file">
         <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
           <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
           <polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/>
@@ -73,7 +53,7 @@
         Load
       </button>
       <div class="topbar-divider"></div>
-      <button class="btn-danger" onclick="App.clearAll()">Clear board</button>
+      <button class="btn-danger" onclick="App.clearAll()">Clear</button>
     </div>
   </header>
 
@@ -218,9 +198,10 @@
   </div>
 
   <div id="sparky-quick">
-    <button class="sparky-quick-btn" onclick="sparkyQuick('Analyze my circuit and tell me if it will work.')">🔍 Analyze</button>
-    <button class="sparky-quick-btn" onclick="sparkyQuick('What should I do next?')">➡️ Next step</button>
-    <button class="sparky-quick-btn" onclick="sparkyQuick('What errors do you see?')">⚠️ Find errors</button>
+    <button class="sparky-quick-btn" onclick="sparkyQuick('Analyze my circuit and tell me if it will work.', false)">🔍 Analyze</button>
+    <button class="sparky-quick-btn" onclick="sparkyQuick('What should I do next?', false)">➡️ Next step</button>
+    <button class="sparky-quick-btn" onclick="sparkyQuick('Build a complete working LED circuit for me from scratch. Place all the components and wires needed.', true)" style="border-color:#22c55e;color:#22c55e">⚡ Build LED</button>
+    <button class="sparky-quick-btn" onclick="sparkyQuick('Find and fix all the errors in my circuit.', true)" style="border-color:#f59e0b;color:#f59e0b">🔧 Fix errors</button>
   </div>
 
   <div id="sparky-input-row">
@@ -245,7 +226,7 @@
 
 
 <script>
-// ── Sparky AI chat logic ────────────────────────────────────────
+// ── Sparky AI chat ──────────────────────────────────────────────
 const SPARKY_API = 'http://localhost:5000/api/ask';
 
 function sparkyToggle() {
@@ -254,17 +235,17 @@ function sparkyToggle() {
 
 function sparkyAddMsg(text, role) {
   const box = document.getElementById('sparky-messages');
-  const el = document.createElement('div');
-  el.className = 'chat-msg ' + role;
+  const el  = document.createElement('div');
+  el.className   = 'chat-msg ' + role;
   el.textContent = text;
   box.appendChild(el);
-  box.scrollTop = box.scrollHeight;
+  box.scrollTop  = box.scrollHeight;
   return el;
 }
 
 function sparkyTyping() {
   const box = document.getElementById('sparky-messages');
-  const el = document.createElement('div');
+  const el  = document.createElement('div');
   el.className = 'chat-msg typing';
   el.innerHTML = '<div class="typing-dots"><span></span><span></span><span></span></div>';
   box.appendChild(el);
@@ -272,14 +253,104 @@ function sparkyTyping() {
   return el;
 }
 
-async function sparkyAsk(overrideMsg) {
+// ── Parse "e14" → [col, row]  or  "tp_14" → [col, row] ─────────
+function parseHole(str) {
+  if (!str) return [null, null];
+  const railM = str.match(/^(tp|tn|bp|bn)_(\d+)$/i);
+  if (railM) return [parseInt(railM[2]) - 1, railM[1].toLowerCase()];
+  const m = str.match(/^([a-j])(\d+)$/i);
+  if (m)    return [parseInt(m[2]) - 1, m[1].toLowerCase()];
+  return [null, null];
+}
+
+// ── Execute tool actions the AI returned ────────────────────────
+function sparkyExecActions(actions) {
+  if (!actions || !actions.length) return 0;
+  const bb = App.state.breadboard;
+  let done = 0;
+
+  actions.forEach(a => {
+    try {
+      if (a.tool === 'place_resistor') {
+        const hA = bb.getHole(...parseHole(a.holeA));
+        const hB = bb.getHole(...parseHole(a.holeB));
+        if (hA && hB) { App.placeResistor(hA, hB); done++; }
+
+      } else if (a.tool === 'place_led') {
+        const hA = bb.getHole(...parseHole(a.holeA));
+        const hB = bb.getHole(...parseHole(a.holeB));
+        if (hA && hB) { App.placeLED(hA, hB); done++; }
+
+      } else if (a.tool === 'place_buzzer') {
+        const hA = bb.getHole(...parseHole(a.holeA));
+        const hB = bb.getHole(...parseHole(a.holeB));
+        if (hA && hB) { App.placeBuzzer(hA, hB); done++; }
+
+      } else if (a.tool === 'place_button') {
+        const hA = bb.getHole(...parseHole(a.holeA));
+        const hB = bb.getHole(...parseHole(a.holeB));
+        if (hA && hB) { App.placeButton(hA, hB); done++; }
+
+      } else if (a.tool === 'place_battery') {
+        App.placeBattery(13, 0); done++;
+
+      } else if (a.tool === 'add_wire') {
+        execWire(a.from, a.to, a.color); done++;
+
+      } else if (a.tool === 'delete_all') {
+        App.clearAll(); done++;
+      }
+    } catch (e) { console.warn('Action failed:', a, e.message); }
+  });
+  return done;
+}
+
+function execWire(fromStr, toStr, colorName) {
+  const bb = App.state.breadboard;
+  const COLOR_MAP = { red: 0xef4444, yellow: 0xfbbf24, green: 0x22c55e,
+                      blue: 0x3b82f6, black: 0x111111, white: 0xffffff };
+
+  const colorHex = colorName ? (COLOR_MAP[colorName.toLowerCase()] || 0xef4444) : App.state.wireColor;
+
+  function resolve(str) {
+    // Component pin: "led_0_pin1", "battery_0_pin0"
+    const pinM = str.match(/^(\w+)_(\d+)_pin(\d+)$/i);
+    if (pinM) {
+      const typeStr = pinM[1], idx = parseInt(pinM[2]), pinIdx = parseInt(pinM[3]);
+      const comps = App.state.components.filter(c => c.type === typeStr);
+      const comp  = comps[idx];
+      if (comp) {
+        const pm = comp.pinMeshes[pinIdx];
+        if (pm) return { world: pm.userData.world.clone(), holeRef: null, pinMesh: pm };
+      }
+      return null;
+    }
+    // Breadboard hole
+    const [col, row] = parseHole(str);
+    if (col === null) return null;
+    const h = bb.getHole(col, row);
+    if (!h) return null;
+    return { world: h.world.clone(), holeRef: { col: h.col, row: h.row }, pinMesh: null };
+  }
+
+  const start = resolve(fromStr);
+  const end   = resolve(toStr);
+  if (!start || !end) return;
+
+  const saved = App.state.wireColor;
+  App.state.wireColor = colorHex;
+  App.state.wireStart = start;
+  App.finishWire(end);
+  App.state.wireColor = saved;
+}
+
+// ── Main ask ────────────────────────────────────────────────────
+async function sparkyAsk(overrideMsg, toolsEnabled) {
   const input = document.getElementById('sparky-input');
-  const msg = overrideMsg || input.value.trim();
+  const msg   = (overrideMsg !== undefined) ? overrideMsg : input.value.trim();
   if (!msg) return;
 
-  // Expand if collapsed
   document.getElementById('sparky-panel').classList.remove('collapsed');
-
   sparkyAddMsg(msg, 'user');
   input.value = '';
 
@@ -288,37 +359,39 @@ async function sparkyAsk(overrideMsg) {
   const typingEl = sparkyTyping();
 
   try {
-    const boardState = (typeof App !== 'undefined' && App.exportState)
-      ? App.exportState()
-      : {};
+    const markdown = (typeof App !== 'undefined' && App.exportMarkdown)
+      ? App.exportMarkdown() : '_Board not ready._';
 
     const resp = await fetch(SPARKY_API, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ state: boardState, message: msg }),
+      body: JSON.stringify({ markdown, message: msg, tools_enabled: !!toolsEnabled }),
     });
 
     const data = await resp.json();
     typingEl.remove();
     sparkyAddMsg(data.reply || '(no reply)', 'ai');
+
+    if (data.actions && data.actions.length) {
+      const n = sparkyExecActions(data.actions);
+      if (n > 0) sparkyAddMsg(`⚡ Applied ${n} change${n !== 1 ? 's' : ''} to the board.`, 'system');
+    }
+
   } catch (err) {
     typingEl.remove();
-    sparkyAddMsg('⚠️ Cannot reach Sparky backend. Is the Flask server running? (python backend/app.py)', 'system');
+    sparkyAddMsg('⚠️ Cannot reach Sparky backend. Run: node backend/server.js', 'system');
   }
 
   btn.disabled = false;
 }
 
-function sparkyQuick(msg) { sparkyAsk(msg); }
+function sparkyQuick(msg, tools) { sparkyAsk(msg, tools); }
 
-// Send on Enter (Shift+Enter = newline)
 document.addEventListener('DOMContentLoaded', () => {
   const inp = document.getElementById('sparky-input');
-  if (inp) {
-    inp.addEventListener('keydown', e => {
-      if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sparkyAsk(); }
-    });
-  }
+  if (inp) inp.addEventListener('keydown', e => {
+    if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sparkyAsk(); }
+  });
 });
 </script>
 

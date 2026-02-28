@@ -392,10 +392,7 @@
         case 'p': case 'P': App.setMode('place');  break;
         case 'w': case 'W': App.setMode('wire');   break;
         case 'Escape':
-          App.cancelWire();
-          App.deselect();
-          destroyGhost();
-          wireStartPinMesh = null;
+          App.setMode('select');
           break;
         case 'Delete':
         case 'Backspace':

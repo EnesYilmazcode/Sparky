@@ -48,9 +48,9 @@ html, body {
 /* ── TOP BAR ────────────────────────────────── */
 
 #topbar {
-  display: flex;
+  display: grid;
+  grid-template-columns: 1fr auto 1fr;
   align-items: center;
-  gap: 12px;
   height: var(--topbar-h);
   padding: 0 16px;
   background: var(--bg-topbar);
@@ -64,59 +64,25 @@ html, body {
   display: flex;
   align-items: center;
   gap: 7px;
-  font-weight: 600;
-  font-size: 14px;
+  font-weight: 700;
+  font-size: 15px;
   color: var(--text-primary);
-  letter-spacing: -0.2px;
-  margin-right: 4px;
+  letter-spacing: -0.3px;
 }
 
-.topbar-brand svg {
-  color: var(--accent);
-}
+.topbar-brand svg { color: var(--accent); }
 
-.topbar-modes {
-  display: flex;
-  gap: 2px;
-  background: #f4f3f0;
-  padding: 3px;
-  border-radius: 8px;
-  border: 1px solid var(--border);
-}
-
-.mode-btn {
+.topbar-center {
   display: flex;
   align-items: center;
-  gap: 5px;
-  padding: 4px 11px;
-  background: transparent;
-  border: none;
-  border-radius: 5px;
-  font-family: inherit;
-  font-size: 12px;
-  font-weight: 500;
-  color: var(--text-muted);
-  cursor: pointer;
-  transition: background 0.12s, color 0.12s;
-  white-space: nowrap;
-}
-
-.mode-btn:hover {
-  background: #e8e6e2;
-  color: var(--text-primary);
-}
-
-.mode-btn.active {
-  background: #ffffff;
-  color: var(--accent);
-  box-shadow: 0 1px 3px rgba(0,0,0,0.12);
+  gap: 8px;
 }
 
 .topbar-actions {
   display: flex;
   align-items: center;
   gap: 10px;
-  margin-left: auto;
+  justify-content: flex-end;
 }
 
 .stat-badge {
