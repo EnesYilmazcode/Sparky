@@ -1,232 +1,341 @@
-/* ── Sparky AI Chat Panel ─────────────────────────────────── */
+/* ─────────────────────────────────────────────────────────────
+   Sparky AI Panel — right sidebar, light mode
+   Matches the existing Circuit3D UI system (--bg-sidebar, --border, etc.)
+───────────────────────────────────────────────────────────── */
+
+/* ── Panel shell ─────────────────────────────────────────── */
 
 #sparky-panel {
-  position: fixed;
-  bottom: 48px;          /* above status bar */
-  right: 16px;
-  width: 340px;
-  max-height: 480px;
+  width: 280px;
+  min-width: 280px;
   display: flex;
   flex-direction: column;
-  background: #1a1d23;
-  border: 1px solid #2e3340;
-  border-radius: 12px;
-  box-shadow: 0 8px 32px rgba(0,0,0,0.55);
-  font-family: 'Inter', sans-serif;
-  font-size: 13px;
-  color: #e8eaf0;
+  background: var(--bg-sidebar);
+  border-left: 1px solid var(--border);
+  flex-shrink: 0;
   overflow: hidden;
-  z-index: 9000;
-  transition: max-height 0.25s ease, opacity 0.2s;
+  transition: width 0.22s cubic-bezier(0.4, 0, 0.2, 1),
+              min-width 0.22s cubic-bezier(0.4, 0, 0.2, 1);
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  font-size: 13px;
+  color: var(--text-primary);
 }
 
 #sparky-panel.collapsed {
-  max-height: 44px;
+  width: 40px;
+  min-width: 40px;
 }
 
-/* ── Header ────────────────────────────────────────────────── */
+/* ── Header ──────────────────────────────────────────────── */
+
 #sparky-header {
   display: flex;
   align-items: center;
-  gap: 8px;
-  padding: 10px 12px;
-  background: #12151b;
-  border-bottom: 1px solid #2e3340;
+  gap: 7px;
+  padding: 9px 10px;
+  background: var(--bg-sidebar);
+  border-bottom: 1px solid var(--border);
+  cursor: pointer;
+  user-select: none;
+  flex-shrink: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  transition: background 0.1s;
+}
+
+#sparky-header:hover {
+  background: #f5f4f1;
+}
+
+.sparky-logo {
+  width: 22px;
+  height: 22px;
+  background: var(--accent);
+  border-radius: 5px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  color: #fff;
+}
+
+.sparky-title {
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--text-primary);
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  transition: opacity 0.15s;
+}
+
+.sparky-badge {
+  font-size: 9px;
+  background: rgba(0, 117, 255, 0.08);
+  color: var(--accent);
+  border: 1px solid rgba(0, 117, 255, 0.22);
+  border-radius: 3px;
+  padding: 1px 5px;
+  font-weight: 600;
+  letter-spacing: 0.3px;
+  flex-shrink: 0;
+  transition: opacity 0.15s;
+}
+
+#sparky-toggle-icon {
+  color: var(--text-muted);
+  font-size: 11px;
+  line-height: 1;
+  transition: transform 0.22s, color 0.1s;
+  flex-shrink: 0;
+}
+
+#sparky-header:hover #sparky-toggle-icon {
+  color: var(--text-primary);
+}
+
+/* Collapsed state: hide text, keep logo centred */
+#sparky-panel.collapsed #sparky-header {
+  justify-content: center;
+  padding: 9px 9px;
+  gap: 0;
+}
+
+#sparky-panel.collapsed .sparky-title,
+#sparky-panel.collapsed .sparky-badge,
+#sparky-panel.collapsed #sparky-toggle-icon {
+  display: none;
+}
+
+/* Hide body content when collapsed */
+#sparky-panel.collapsed #sparky-messages,
+#sparky-panel.collapsed #sparky-section-divider,
+#sparky-panel.collapsed #sparky-quick,
+#sparky-panel.collapsed #sparky-input-row,
+#sparky-panel.collapsed #sparky-ibm-badge {
+  display: none;
+}
+
+/* Expand chevron shown below the logo when collapsed */
+#sparky-expand-hint {
+  display: none;
+  flex-direction: column;
+  align-items: center;
+  padding: 8px 0 4px;
+  color: var(--text-sub);
+  font-size: 10px;
+  gap: 4px;
   cursor: pointer;
   user-select: none;
   flex-shrink: 0;
 }
 
-#sparky-header .sparky-logo {
-  width: 20px;
-  height: 20px;
-  background: linear-gradient(135deg, #0f62fe, #4589ff);
-  border-radius: 6px;
+#sparky-expand-hint:hover { color: var(--accent); }
+
+#sparky-panel.collapsed #sparky-expand-hint {
   display: flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 11px;
-  font-weight: 700;
-  color: #fff;
+}
+
+/* ── Section heading inside panel ────────────────────────── */
+
+.ai-section-label {
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.6px;
+  text-transform: uppercase;
+  color: var(--text-sub);
+  padding: 8px 10px 4px;
   flex-shrink: 0;
 }
 
-#sparky-header .sparky-title {
-  font-weight: 600;
-  font-size: 13px;
-  flex: 1;
-  color: #c8d0e0;
-}
+/* ── Messages ─────────────────────────────────────────────── */
 
-#sparky-header .sparky-badge {
-  font-size: 10px;
-  background: #0f62fe22;
-  color: #4589ff;
-  border: 1px solid #0f62fe44;
-  border-radius: 4px;
-  padding: 1px 6px;
-  font-weight: 500;
-}
-
-#sparky-toggle-icon {
-  color: #667;
-  font-size: 16px;
-  line-height: 1;
-  transition: transform 0.2s;
-}
-
-#sparky-panel.collapsed #sparky-toggle-icon {
-  transform: rotate(180deg);
-}
-
-/* ── Messages ───────────────────────────────────────────────── */
 #sparky-messages {
   flex: 1;
   overflow-y: auto;
-  padding: 10px 12px;
+  padding: 10px;
   display: flex;
   flex-direction: column;
-  gap: 8px;
-  min-height: 100px;
+  gap: 7px;
+  min-height: 60px;
 }
 
-#sparky-messages::-webkit-scrollbar { width: 4px; }
-#sparky-messages::-webkit-scrollbar-track { background: transparent; }
-#sparky-messages::-webkit-scrollbar-thumb { background: #333; border-radius: 2px; }
+#sparky-messages::-webkit-scrollbar         { width: 4px; }
+#sparky-messages::-webkit-scrollbar-track   { background: transparent; }
+#sparky-messages::-webkit-scrollbar-thumb   { background: var(--border-dark); border-radius: 2px; }
 
 .chat-msg {
-  max-width: 92%;
+  max-width: 95%;
   padding: 7px 10px;
   border-radius: 8px;
-  line-height: 1.45;
+  line-height: 1.5;
   word-break: break-word;
-  font-size: 12.5px;
+  font-size: 12px;
 }
 
 .chat-msg.user {
-  background: #0f62fe22;
-  border: 1px solid #0f62fe33;
-  color: #a8c4ff;
+  background: #eff5ff;
+  border: 1px solid rgba(0, 117, 255, 0.18);
+  color: #1a3a7a;
   align-self: flex-end;
   border-bottom-right-radius: 3px;
 }
 
 .chat-msg.ai {
-  background: #1e2430;
-  border: 1px solid #2e3a50;
-  color: #d0d8e8;
+  background: #f5f4f1;
+  border: 1px solid var(--border);
+  color: var(--text-primary);
   align-self: flex-start;
   border-bottom-left-radius: 3px;
+  white-space: pre-wrap;
 }
 
 .chat-msg.system {
   background: transparent;
   border: none;
-  color: #556;
+  color: var(--text-sub);
   font-style: italic;
-  font-size: 11.5px;
+  font-size: 11px;
   align-self: center;
+  text-align: center;
+  max-width: 100%;
+  padding: 2px 6px;
 }
 
 .chat-msg.typing {
-  background: #1e2430;
-  border: 1px solid #2e3a50;
+  background: #f5f4f1;
+  border: 1px solid var(--border);
   align-self: flex-start;
   border-bottom-left-radius: 3px;
 }
 
-.typing-dots span {
-  display: inline-block;
-  width: 5px; height: 5px;
-  background: #4589ff;
-  border-radius: 50%;
-  margin: 0 2px;
-  animation: bounce 1s infinite;
-}
-.typing-dots span:nth-child(2) { animation-delay: 0.15s; }
-.typing-dots span:nth-child(3) { animation-delay: 0.30s; }
-
-@keyframes bounce {
-  0%, 80%, 100% { transform: translateY(0); opacity: 0.5; }
-  40%           { transform: translateY(-5px); opacity: 1; }
-}
-
-/* ── Quick-action bar ───────────────────────────────────────── */
-#sparky-quick {
-  padding: 6px 10px 0;
+/* Typing dots animation */
+.typing-dots {
   display: flex;
-  gap: 6px;
+  align-items: center;
+  gap: 3px;
+  padding: 2px 0;
+}
+
+.typing-dots span {
+  display: block;
+  width: 5px;
+  height: 5px;
+  background: var(--accent);
+  border-radius: 50%;
+  animation: ai-bounce 1.1s infinite ease-in-out;
+  opacity: 0.5;
+}
+.typing-dots span:nth-child(2) { animation-delay: 0.18s; }
+.typing-dots span:nth-child(3) { animation-delay: 0.36s; }
+
+@keyframes ai-bounce {
+  0%, 80%, 100% { transform: translateY(0);   opacity: 0.4; }
+  40%           { transform: translateY(-4px); opacity: 1;   }
+}
+
+/* ── Quick-action buttons ─────────────────────────────────── */
+
+#sparky-quick {
+  padding: 6px 8px 7px;
+  display: flex;
+  gap: 5px;
   flex-wrap: wrap;
   flex-shrink: 0;
+  border-top: 1px solid var(--border);
 }
 
 .sparky-quick-btn {
   font-size: 11px;
-  padding: 3px 8px;
-  background: #1a2540;
-  border: 1px solid #2a3a5a;
+  padding: 3px 9px;
+  background: transparent;
+  border: 1px solid var(--border);
   border-radius: 20px;
-  color: #6a9eff;
+  color: var(--text-muted);
   cursor: pointer;
-  transition: background 0.15s;
+  font-family: inherit;
+  transition: background 0.12s, border-color 0.12s, color 0.12s;
+  line-height: 1.6;
 }
 
 .sparky-quick-btn:hover {
-  background: #1e3060;
-  border-color: #4589ff;
+  background: #f0f0ef;
+  border-color: var(--border-dark);
+  color: var(--text-primary);
 }
 
-/* ── Input row ─────────────────────────────────────────────── */
+/* ── Input area ───────────────────────────────────────────── */
+
 #sparky-input-row {
   display: flex;
+  align-items: flex-end;
   gap: 6px;
-  padding: 8px 10px;
-  border-top: 1px solid #2e3340;
+  padding: 8px;
+  border-top: 1px solid var(--border);
   flex-shrink: 0;
+  background: var(--bg-sidebar);
 }
 
 #sparky-input {
   flex: 1;
-  background: #0d101a;
-  border: 1px solid #2e3340;
-  border-radius: 8px;
+  background: #fafaf9;
+  border: 1px solid var(--border);
+  border-radius: 7px;
   padding: 6px 10px;
-  color: #e8eaf0;
+  color: var(--text-primary);
   font-family: inherit;
-  font-size: 12.5px;
+  font-size: 12px;
   resize: none;
   outline: none;
-  transition: border-color 0.15s;
+  line-height: 1.5;
+  max-height: 100px;
+  overflow-y: auto;
+  transition: border-color 0.15s, background 0.15s;
 }
 
-#sparky-input:focus { border-color: #0f62fe; }
-#sparky-input::placeholder { color: #445; }
+#sparky-input:focus {
+  border-color: var(--accent);
+  background: #fff;
+}
+
+#sparky-input::placeholder { color: var(--text-sub); }
 
 #sparky-send {
-  background: #0f62fe;
+  background: var(--accent);
   border: none;
-  border-radius: 8px;
-  padding: 0 12px;
+  border-radius: 7px;
+  width: 30px;
+  height: 30px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
   color: #fff;
-  font-size: 15px;
+  font-size: 14px;
   cursor: pointer;
-  transition: background 0.15s;
+  transition: background 0.12s, transform 0.1s;
   flex-shrink: 0;
 }
 
-#sparky-send:hover   { background: #0353e9; }
-#sparky-send:disabled { background: #1a2540; color: #445; cursor: default; }
+#sparky-send:hover   { background: var(--accent-hover); }
+#sparky-send:active  { transform: scale(0.93); }
+#sparky-send:disabled {
+  background: var(--border);
+  color: var(--text-sub);
+  cursor: default;
+  transform: none;
+}
 
-/* ── IBM badge ─────────────────────────────────────────────── */
+/* ── IBM badge ────────────────────────────────────────────── */
+
 #sparky-ibm-badge {
   text-align: center;
-  padding: 4px 0 6px;
+  padding: 4px 0 7px;
   font-size: 10px;
-  color: #445;
+  color: var(--text-sub);
   flex-shrink: 0;
 }
 
 #sparky-ibm-badge span {
-  color: #0f62fe;
+  color: var(--accent);
   font-weight: 600;
 }

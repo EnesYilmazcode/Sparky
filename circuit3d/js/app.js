@@ -587,11 +587,11 @@
     // ── Topology ──
     md += `
 ## Breadboard topology (always true)
-- Columns 1–29. Holes a1–e1 share one node; f1–j1 share another node (center channel divides them).
+- Columns 1–50. Holes a1–e1 share one node; f1–j1 share another node (center channel divides them).
 - Same rule for every column: a-e connected together, f-j connected together.
 - To connect top half (a-e) to bottom half (f-j) of the SAME column, you MUST add a wire.
 - tp = positive top rail (+9V), tn = negative top rail (GND).
-- bp = positive bottom rail (+9V), bn = negative bottom rail (GND).
+- bn = positive bottom rail (+9V), bp = negative bottom rail (GND).
 - Rails are NOT connected to body rows — you must wire from rail to a body hole explicitly.
 `;
     return md;

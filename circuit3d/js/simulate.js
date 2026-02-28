@@ -8,10 +8,10 @@
 //
 //    bb_top_<col>  →  any hole in col <col>, rows a–e
 //    bb_bot_<col>  →  any hole in col <col>, rows f–j
-//    bb_rail_tp    →  all holes in the top + rail row
-//    bb_rail_tn    →  all holes in the top − rail row
-//    bb_rail_bn    →  all holes in the bottom − rail row
-//    bb_rail_bp    →  all holes in the bottom + rail row
+//    bb_rail_tp    →  all holes in the top + rail row    (positive)
+//    bb_rail_tn    →  all holes in the top − rail row    (negative)
+//    bb_rail_bn    →  all holes in the bottom + rail row (positive)
+//    bb_rail_bp    →  all holes in the bottom − rail row (negative)
 //
 //  Wires (drawn by the user) additionally merge any two nodes.
 //

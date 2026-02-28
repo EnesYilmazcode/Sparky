@@ -174,6 +174,52 @@
       </button>
     </div>
 
+    <!-- ── AI PANEL (right sidebar) ───────────────────────── -->
+    <div id="sparky-panel">
+
+      <div id="sparky-header" onclick="sparkyToggle()" title="Toggle AI panel">
+        <div class="sparky-logo">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="currentColor">
+            <path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/>
+          </svg>
+        </div>
+        <span class="sparky-title">Sparky AI</span>
+        <span class="sparky-badge">watsonx</span>
+        <span id="sparky-toggle-icon">❯</span>
+      </div>
+
+      <!-- Collapsed-only expand hint -->
+      <div id="sparky-expand-hint" onclick="sparkyToggle()" title="Expand AI panel">
+        <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+          <polyline points="15 18 9 12 15 6"/>
+        </svg>
+      </div>
+
+      <div id="sparky-messages">
+        <div class="chat-msg system">Ask Sparky to review your circuit or help you build one.</div>
+      </div>
+
+      <div id="sparky-quick">
+        <button class="sparky-quick-btn" onclick="sparkyQuick('Analyze my circuit and tell me if it will work.', false)">🔍 Analyze</button>
+        <button class="sparky-quick-btn" onclick="sparkyQuick('What should I do next?', false)">➡️ Next step</button>
+        <button class="sparky-quick-btn" onclick="sparkyQuick('Build a complete working LED circuit for me from scratch. Place all the components and wires needed.', true)" style="border-color:#16a34a;color:#16a34a">⚡ Build LED</button>
+        <button class="sparky-quick-btn" onclick="sparkyQuick('Find and fix all the errors in my circuit.', true)" style="border-color:#d97706;color:#d97706">🔧 Fix errors</button>
+      </div>
+
+      <div id="sparky-input-row">
+        <textarea id="sparky-input" rows="1" placeholder="Ask Sparky anything…"></textarea>
+        <button id="sparky-send" onclick="sparkyAsk()" title="Send">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+            <line x1="12" y1="19" x2="12" y2="5"/>
+            <polyline points="5 12 12 5 19 12"/>
+          </svg>
+        </button>
+      </div>
+
+      <div id="sparky-ibm-badge">Powered by <span>IBM watsonx</span></div>
+
+    </div>
+
   </div>
 
   <!-- STATUS BAR -->
@@ -182,34 +228,6 @@
     <span id="status-text">Click a component to select it · DEL to delete</span>
   </footer>
 
-</div>
-
-<!-- ── Sparky AI Chat Panel ──────────────────────────────── -->
-<div id="sparky-panel">
-  <div id="sparky-header" onclick="sparkyToggle()">
-    <div class="sparky-logo">AI</div>
-    <span class="sparky-title">Sparky AI</span>
-    <span class="sparky-badge">watsonx</span>
-    <span id="sparky-toggle-icon">▲</span>
-  </div>
-
-  <div id="sparky-messages">
-    <div class="chat-msg system">Ask Sparky to review your circuit or help you build one!</div>
-  </div>
-
-  <div id="sparky-quick">
-    <button class="sparky-quick-btn" onclick="sparkyQuick('Analyze my circuit and tell me if it will work.', false)">🔍 Analyze</button>
-    <button class="sparky-quick-btn" onclick="sparkyQuick('What should I do next?', false)">➡️ Next step</button>
-    <button class="sparky-quick-btn" onclick="sparkyQuick('Build a complete working LED circuit for me from scratch. Place all the components and wires needed.', true)" style="border-color:#22c55e;color:#22c55e">⚡ Build LED</button>
-    <button class="sparky-quick-btn" onclick="sparkyQuick('Find and fix all the errors in my circuit.', true)" style="border-color:#f59e0b;color:#f59e0b">🔧 Fix errors</button>
-  </div>
-
-  <div id="sparky-input-row">
-    <textarea id="sparky-input" rows="1" placeholder="Ask Sparky anything…"></textarea>
-    <button id="sparky-send" onclick="sparkyAsk()">↑</button>
-  </div>
-
-  <div id="sparky-ibm-badge">Powered by <span>IBM watsonx</span></div>
 </div>
 
 <!-- Three.js -->
