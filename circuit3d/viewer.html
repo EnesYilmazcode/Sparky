@@ -1,0 +1,146 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Sparky — Circuit Preview</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    html, body { width: 100%; height: 100%; overflow: hidden; background: #dcdad4; }
+    #canvas-wrap { width: 100%; height: 100%; position: relative; }
+    #canvas { display: block; width: 100%; height: 100%; }
+  </style>
+</head>
+<body>
+  <div id="canvas-wrap">
+    <canvas id="canvas"></canvas>
+  </div>
+
+  <!-- Three.js r128 (same as main editor) -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+  <script src="https://unpkg.com/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+
+  <!-- Reuse scene, breadboard, and component builders -->
+  <script src="js/scene.js"></script>
+  <script src="js/breadboard.js"></script>
+  <script src="js/components.js"></script>
+
+  <script>
+  (function () {
+    const App = window.App;
+
+    // ── Create breadboard and add to scene ──
+    const bb = App.createBreadboard();
+    App.scene.add(bb.group);
+
+    // ── Wire arc builder (replicated from app.js) ──
+    function buildWireGroup(start, end, hexColor) {
+      const g   = new THREE.Group();
+      const mat = new THREE.MeshLambertMaterial({ color: hexColor });
+      const LEG_H = 0.28;
+      const legGeo = new THREE.CylinderGeometry(0.04, 0.04, LEG_H, 7);
+      [start, end].forEach(p => {
+        if (p.y > 0.15) return;
+        const leg = new THREE.Mesh(legGeo, mat.clone());
+        leg.position.set(p.x, -LEG_H / 2 + 0.06, p.z);
+        g.add(leg);
+      });
+      const startY = start.y > 0.15 ? start.y : 0.06;
+      const endY   = end.y   > 0.15 ? end.y   : 0.06;
+      const dist = start.distanceTo(end);
+      const mid  = new THREE.Vector3(
+        (start.x + end.x) / 2,
+        Math.max(startY, endY) + dist * 0.22 + 0.38,
+        (start.z + end.z) / 2
+      );
+      const curve   = new THREE.CatmullRomCurve3([
+        new THREE.Vector3(start.x, startY, start.z),
+        mid,
+        new THREE.Vector3(end.x,   endY,   end.z),
+      ]);
+      const tubeGeo = new THREE.TubeGeometry(curve, 26, 0.043, 7, false);
+      const tube    = new THREE.Mesh(tubeGeo, mat.clone());
+      tube.castShadow = true;
+      g.add(tube);
+      return g;
+    }
+
+    // ── Load demo.sparky and render the circuit ──
+    fetch('../demo.sparky')
+      .then(r => r.json())
+      .then(data => {
+        const components = [];
+
+        // Place components
+        for (const c of (data.components || [])) {
+          let result = null;
+          if (c.type === 'resistor' && c.holeRefs?.length === 2) {
+            const hA = bb.getHole(c.holeRefs[0].col, c.holeRefs[0].row);
+            const hB = bb.getHole(c.holeRefs[1].col, c.holeRefs[1].row);
+            if (hA && hB) result = App.buildResistor(hA, hB);
+          } else if (c.type === 'led' && c.holeRefs?.length === 2) {
+            const hA = bb.getHole(c.holeRefs[0].col, c.holeRefs[0].row);
+            const hB = bb.getHole(c.holeRefs[1].col, c.holeRefs[1].row);
+            if (hA && hB) result = App.buildLED(hA, hB);
+          } else if (c.type === 'buzzer' && c.holeRefs?.length === 2) {
+            const hA = bb.getHole(c.holeRefs[0].col, c.holeRefs[0].row);
+            const hB = bb.getHole(c.holeRefs[1].col, c.holeRefs[1].row);
+            if (hA && hB) result = App.buildBuzzer(hA, hB);
+          } else if (c.type === 'button' && c.holeRefs?.length === 2) {
+            const hA = bb.getHole(c.holeRefs[0].col, c.holeRefs[0].row);
+            const hB = bb.getHole(c.holeRefs[1].col, c.holeRefs[1].row);
+            if (hA && hB) result = App.buildButton(hA, hB);
+          } else if (c.type === 'battery' && c.position) {
+            result = App.buildBattery(c.position.x, c.position.z);
+          }
+          if (result) {
+            App.scene.add(result.group);
+            components.push({ type: c.type, pins: result.pins });
+          } else {
+            components.push(null);
+          }
+        }
+
+        // Draw wires
+        for (const w of (data.wires || [])) {
+          let startWorld = null, endWorld = null;
+          const color = w.color ?? 0xef4444;
+
+          if (w.startHole) {
+            const h = bb.getHole(w.startHole.col, w.startHole.row);
+            if (h) startWorld = h.world.clone();
+          } else if (w.startCompIdx >= 0 && components[w.startCompIdx]) {
+            const pins = components[w.startCompIdx].pins;
+            if (pins[w.startPinIdx]) startWorld = pins[w.startPinIdx].clone();
+          }
+
+          if (w.endHole) {
+            const h = bb.getHole(w.endHole.col, w.endHole.row);
+            if (h) endWorld = h.world.clone();
+          } else if (w.endCompIdx >= 0 && components[w.endCompIdx]) {
+            const pins = components[w.endCompIdx].pins;
+            if (pins[w.endPinIdx]) endWorld = pins[w.endPinIdx].clone();
+          }
+
+          if (startWorld && endWorld) {
+            App.scene.add(buildWireGroup(startWorld, endWorld, color));
+          }
+        }
+      })
+      .catch(err => console.warn('Could not load demo.sparky:', err));
+
+    // ── Render loop ──
+    function animate() {
+      requestAnimationFrame(animate);
+      App.controls.update();
+      App.renderer.render(App.scene, App.camera);
+    }
+    animate();
+
+    // ── Slow auto-rotate for a showcase feel ──
+    App.controls.autoRotate = true;
+    App.controls.autoRotateSpeed = 0.8;
+  })();
+  </script>
+</body>
+</html>
