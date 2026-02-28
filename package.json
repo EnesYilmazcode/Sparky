@@ -1,0 +1,21 @@
+{
+  "scripts": {
+    "studio": "remotion studio",
+    "build": "remotion render src/index.ts SparkyDemo out/sparky-demo.mp4"
+  },
+  "dependencies": {
+    "@react-three/fiber": "^8.18.0",
+    "@remotion/cli": "^4.0.429",
+    "@remotion/player": "^4.0.429",
+    "@remotion/three": "^4.0.429",
+    "@types/three": "^0.183.1",
+    "react": "^18.2.0",
+    "react-dom": "^18.2.0",
+    "remotion": "^4.0.429",
+    "three": "^0.183.1"
+  },
+  "devDependencies": {
+    "@types/react": "^18.2.0",
+    "typescript": "^5.3.0"
+  }
+}
