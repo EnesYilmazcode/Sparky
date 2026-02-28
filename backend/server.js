@@ -4,8 +4,14 @@
  *
  * Run from backend/:  node server.js
  *
- * POST /api/ask   { markdown, message }  →  { reply, actions[] }
+ * POST /api/ask            { markdown, message }  →  { reply, actions[] }
  * GET  /api/health
+ * POST /api/auth/login     { email, password }    →  { access_token, ... }
+ * POST /api/auth/signup    { email, password, name } → { access_token, ... }
+ * GET  /api/auth/me                                →  { user }
+ * GET  /api/circuits                               →  { circuits[] }
+ * POST /api/circuits       { name, circuit }       →  { id, rev }
+ * DELETE /api/circuits/:id                         →  { ok }
  */
 
 const http = require('http');
@@ -31,11 +37,27 @@ const API_KEY    = process.env.WATSONX_APIKEY;
 const PROJECT_ID = process.env.WATSONX_PROJECT_ID;
 const WX_URL     = process.env.WATSONX_URL || 'https://us-south.ml.cloud.ibm.com';
 const MODEL_ID   = 'meta-llama/llama-3-3-70b-instruct';
-const PORT       = 5000;
+const PORT       = 5001;
+
+// IBM App ID
+const APPID_CLIENT_ID     = process.env.APPID_CLIENT_ID;
+const APPID_CLIENT_SECRET = process.env.APPID_CLIENT_SECRET;
+const APPID_OAUTH_URL     = process.env.APPID_OAUTH_URL; // e.g. https://us-south.appid.cloud.ibm.com/oauth/v4/<tenantId>
+
+// IBM Cloudant
+const CLOUDANT_URL    = process.env.CLOUDANT_URL;
+const CLOUDANT_APIKEY = process.env.CLOUDANT_APIKEY;
+const CLOUDANT_DB     = 'sparky_circuits';
 
 if (!API_KEY || !PROJECT_ID) {
-  console.error('❌  Missing WATSONX_APIKEY or WATSONX_PROJECT_ID in backend/.env');
+  console.error('Missing WATSONX_APIKEY or WATSONX_PROJECT_ID in backend/.env');
   process.exit(1);
+}
+if (!APPID_CLIENT_ID || !APPID_CLIENT_SECRET || !APPID_OAUTH_URL) {
+  console.warn('Warning: APPID_CLIENT_ID / APPID_CLIENT_SECRET / APPID_OAUTH_URL not set — auth endpoints will fail');
+}
+if (!CLOUDANT_URL || !CLOUDANT_APIKEY) {
+  console.warn('Warning: CLOUDANT_URL / CLOUDANT_APIKEY not set — circuit storage endpoints will fail');
 }
 
 // ── IAM token cache ───────────────────────────────────────────
@@ -53,6 +75,67 @@ async function getToken() {
   _token = data.access_token;
   _tokenExpiry = Date.now() + (data.expires_in - 120) * 1000;
   return _token;
+}
+
+// ── Cloudant IAM token cache ──────────────────────────────────
+let _cloudantToken = null, _cloudantTokenExpiry = 0;
+
+async function getCloudantToken() {
+  if (_cloudantToken && Date.now() < _cloudantTokenExpiry) return _cloudantToken;
+  const res = await fetch('https://iam.cloud.ibm.com/identity/token', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+    body: `grant_type=urn:ibm:params:oauth:grant-type:apikey&apikey=${CLOUDANT_APIKEY}`,
+  });
+  if (!res.ok) throw new Error(`Cloudant IAM auth failed: ${res.status}`);
+  const data = await res.json();
+  _cloudantToken = data.access_token;
+  _cloudantTokenExpiry = Date.now() + (data.expires_in - 120) * 1000;
+  return _cloudantToken;
+}
+
+async function cloudantRequest(method, dbPath, body) {
+  const token = await getCloudantToken();
+  const url = `${CLOUDANT_URL}/${CLOUDANT_DB}${dbPath}`;
+  const opts = {
+    method,
+    headers: {
+      'Authorization': `Bearer ${token}`,
+      'Content-Type': 'application/json',
+    },
+  };
+  if (body) opts.body = JSON.stringify(body);
+  return fetch(url, opts);
+}
+
+async function ensureCloudantIndex() {
+  try {
+    await cloudantRequest('POST', '/_index', {
+      index: { fields: ['userId', 'savedAt'] },
+      name: 'user-circuits-idx',
+      type: 'json',
+    });
+    console.log('   Cloudant index ready');
+  } catch (e) {
+    console.warn('   Cloudant index warning:', e.message);
+  }
+}
+
+// ── App ID auth helper ───────────────────────────────────────
+async function authenticateRequest(req) {
+  const authHeader = req.headers['authorization'];
+  if (!authHeader || !authHeader.startsWith('Bearer ')) return null;
+  const token = authHeader.slice(7);
+  try {
+    const res = await fetch(`${APPID_OAUTH_URL}/userinfo`, {
+      headers: { 'Authorization': `Bearer ${token}` },
+    });
+    if (!res.ok) return null;
+    const info = await res.json();
+    return { sub: info.sub, email: info.email, name: info.name };
+  } catch {
+    return null;
+  }
 }
 
 // ── Prompts ───────────────────────────────────────────────────
@@ -218,8 +301,8 @@ async function askWatsonx(markdown, userMsg) {
 // ── HTTP server ───────────────────────────────────────────────
 function setCORS(res) {
   res.setHeader('Access-Control-Allow-Origin',  '*');
-  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
 }
 
 function sendJSON(res, status, obj) {
@@ -254,6 +337,143 @@ const server = http.createServer(async (req, res) => {
     return;
   }
 
+  // ── Auth: Google OAuth (redirect to App ID) ────────────────
+  if (req.method === 'GET' && req.url === '/api/auth/google') {
+    const redirectUri = `http://localhost:${PORT}/api/auth/callback`;
+    const authUrl = `${APPID_OAUTH_URL}/authorization?client_id=${APPID_CLIENT_ID}&response_type=code&redirect_uri=${encodeURIComponent(redirectUri)}&scope=openid+email+profile&idp=google`;
+    res.writeHead(302, { Location: authUrl });
+    res.end();
+    return;
+  }
+
+  // ── Auth: OAuth callback (exchange code for tokens) ────────
+  if (req.method === 'GET' && req.url.startsWith('/api/auth/callback')) {
+    try {
+      const urlObj = new URL(req.url, `http://localhost:${PORT}`);
+      const code = urlObj.searchParams.get('code');
+      const error = urlObj.searchParams.get('error');
+
+      if (error || !code) {
+        const html = `<html><body><script>window.opener.postMessage({error:"${error || 'No code received'}"},"*");window.close();</script></body></html>`;
+        res.writeHead(200, { 'Content-Type': 'text/html' });
+        res.end(html);
+        return;
+      }
+
+      const redirectUri = `http://localhost:${PORT}/api/auth/callback`;
+      const tokenRes = await fetch(`${APPID_OAUTH_URL}/token`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/x-www-form-urlencoded',
+          'Authorization': 'Basic ' + Buffer.from(`${APPID_CLIENT_ID}:${APPID_CLIENT_SECRET}`).toString('base64'),
+        },
+        body: `grant_type=authorization_code&code=${code}&redirect_uri=${encodeURIComponent(redirectUri)}`,
+      });
+
+      if (!tokenRes.ok) {
+        const err = await tokenRes.text();
+        console.error('Token exchange failed:', err);
+        const html = `<html><body><script>window.opener.postMessage({error:"Login failed"},"*");window.close();</script></body></html>`;
+        res.writeHead(200, { 'Content-Type': 'text/html' });
+        res.end(html);
+        return;
+      }
+
+      const tokens = await tokenRes.json();
+      console.log('[auth] Google login successful');
+      const html = `<html><body><script>window.opener.postMessage({access_token:"${tokens.access_token}"},"*");window.close();</script></body></html>`;
+      res.writeHead(200, { 'Content-Type': 'text/html' });
+      res.end(html);
+    } catch (e) {
+      console.error('Callback error:', e.message);
+      const html = `<html><body><script>window.opener.postMessage({error:"${e.message}"},"*");window.close();</script></body></html>`;
+      res.writeHead(200, { 'Content-Type': 'text/html' });
+      res.end(html);
+    }
+    return;
+  }
+
+  // ── Auth: Me (validate token) ──────────────────────────────
+  if (req.method === 'GET' && req.url === '/api/auth/me') {
+    try {
+      const user = await authenticateRequest(req);
+      if (!user) return sendJSON(res, 401, { error: 'Not authenticated' });
+      return sendJSON(res, 200, { user });
+    } catch (e) {
+      return sendJSON(res, 401, { error: 'Not authenticated' });
+    }
+  }
+
+  // ── Circuits: List ─────────────────────────────────────────
+  if (req.method === 'GET' && req.url === '/api/circuits') {
+    try {
+      const user = await authenticateRequest(req);
+      if (!user) return sendJSON(res, 401, { error: 'Not authenticated' });
+
+      const queryRes = await cloudantRequest('POST', '/_find', {
+        selector: { userId: user.sub, type: 'circuit' },
+        sort: [{ savedAt: 'desc' }],
+        limit: 100,
+      });
+      const data = await queryRes.json();
+      return sendJSON(res, 200, { circuits: data.docs || [] });
+    } catch (e) {
+      console.error('List circuits error:', e.message);
+      return sendJSON(res, 500, { error: e.message });
+    }
+  }
+
+  // ── Circuits: Create ───────────────────────────────────────
+  if (req.method === 'POST' && req.url === '/api/circuits') {
+    let body = '';
+    req.on('data', chunk => (body += chunk));
+    req.on('end', async () => {
+      try {
+        const user = await authenticateRequest(req);
+        if (!user) return sendJSON(res, 401, { error: 'Not authenticated' });
+
+        const { name, circuit } = JSON.parse(body || '{}');
+        const doc = {
+          type: 'circuit',
+          userId: user.sub,
+          name: name || 'Untitled Circuit',
+          circuit,
+          savedAt: Date.now(),
+        };
+        const saveRes = await cloudantRequest('POST', '', doc);
+        const result = await saveRes.json();
+        console.log(`[circuits] saved "${doc.name}" for ${user.email}`);
+        return sendJSON(res, 201, { id: result.id, rev: result.rev });
+      } catch (e) {
+        console.error('Save circuit error:', e.message);
+        return sendJSON(res, 500, { error: e.message });
+      }
+    });
+    return;
+  }
+
+  // ── Circuits: Delete ───────────────────────────────────────
+  const delMatch = req.url.match(/^\/api\/circuits\/([^/?]+)$/);
+  if (req.method === 'DELETE' && delMatch) {
+    try {
+      const user = await authenticateRequest(req);
+      if (!user) return sendJSON(res, 401, { error: 'Not authenticated' });
+
+      const docId = decodeURIComponent(delMatch[1]);
+      const getRes = await cloudantRequest('GET', `/${docId}`, null);
+      if (!getRes.ok) return sendJSON(res, 404, { error: 'Not found' });
+      const existing = await getRes.json();
+      if (existing.userId !== user.sub) return sendJSON(res, 403, { error: 'Forbidden' });
+
+      await cloudantRequest('DELETE', `/${docId}?rev=${existing._rev}`, null);
+      console.log(`[circuits] deleted "${existing.name}" for ${user.email}`);
+      return sendJSON(res, 200, { ok: true });
+    } catch (e) {
+      console.error('Delete circuit error:', e.message);
+      return sendJSON(res, 500, { error: e.message });
+    }
+  }
+
   sendJSON(res, 404, { error: 'Not found' });
 });
 
@@ -261,4 +481,5 @@ server.listen(PORT, () => {
   console.log(`⚡ Sparky AI  →  http://localhost:${PORT}`);
   console.log(`   Model : ${MODEL_ID}`);
   console.log(`   Health: http://localhost:${PORT}/api/health`);
+  if (CLOUDANT_URL && CLOUDANT_APIKEY) ensureCloudantIndex();
 });

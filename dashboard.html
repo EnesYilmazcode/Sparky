@@ -434,6 +434,7 @@
       <a href="landing.html" class="sidebar-logo">
         <span class="bolt">⚡</span>Sparky
       </a>
+      <div id="user-info" style="font-size:0.75rem; color:var(--text-dim); padding:0.25rem 0.5rem; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;"></div>
     </div>
     <nav class="sidebar-nav">
       <button class="sidebar-item active" id="nav-my" onclick="switchTab('my')">
@@ -441,6 +442,10 @@
       </button>
       <button class="sidebar-item" id="nav-sparks" onclick="switchTab('sparks')">
         <span class="sidebar-icon">✨</span>Sparks
+      </button>
+      <div style="flex:1;"></div>
+      <button class="sidebar-item" onclick="logout()">
+        <span class="sidebar-icon">🚪</span>Log Out
       </button>
     </nav>
   </aside>
@@ -485,8 +490,71 @@
   <div class="toast" id="toast"></div>
 
   <script>
-    // ── Storage key ────────────────────────────────────────────
-    const STORAGE_KEY = 'sparky_circuits';
+    // ── API config ───────────────────────────────────────────────
+    const API_BASE = 'http://localhost:5001';
+
+    // ── Token helpers ────────────────────────────────────────────
+    function getToken() { return localStorage.getItem('sparky_token'); }
+    function clearToken() { localStorage.removeItem('sparky_token'); }
+    function authHeaders() {
+      return {
+        'Content-Type': 'application/json',
+        'Authorization': 'Bearer ' + getToken(),
+      };
+    }
+
+    function logout() {
+      clearToken();
+      window.location.href = 'landing.html';
+    }
+
+    // ── Auth gate ────────────────────────────────────────────────
+    let _currentUser = null;
+    async function checkAuth() {
+      const token = getToken();
+      if (!token) { window.location.href = 'landing.html'; return; }
+      try {
+        const res = await fetch(API_BASE + '/api/auth/me', {
+          headers: { 'Authorization': 'Bearer ' + token },
+        });
+        if (!res.ok) { clearToken(); window.location.href = 'landing.html'; return; }
+        const { user } = await res.json();
+        _currentUser = user;
+        document.getElementById('user-info').textContent = user.email || user.name || '';
+      } catch {
+        clearToken();
+        window.location.href = 'landing.html';
+      }
+    }
+
+    // ── Circuit cache (loaded from API) ──────────────────────────
+    let _circuitsCache = [];
+
+    async function loadCircuits() {
+      try {
+        const res = await fetch(API_BASE + '/api/circuits', { headers: authHeaders() });
+        if (!res.ok) return [];
+        const data = await res.json();
+        _circuitsCache = data.circuits || [];
+        return _circuitsCache;
+      } catch { return []; }
+    }
+
+    async function saveCircuitToCloud(name, circuit) {
+      const res = await fetch(API_BASE + '/api/circuits', {
+        method: 'POST',
+        headers: authHeaders(),
+        body: JSON.stringify({ name, circuit }),
+      });
+      return res.json();
+    }
+
+    async function deleteCircuitFromCloud(docId) {
+      await fetch(API_BASE + '/api/circuits/' + encodeURIComponent(docId), {
+        method: 'DELETE',
+        headers: authHeaders(),
+      });
+    }
 
     // ── Sparks (community examples) ────────────────────────────
     const COMMUNITY_SPARKS = [
@@ -654,21 +722,11 @@
       if (tab === 'sparks') renderSparks();
     }
 
-    // ── localStorage helpers ────────────────────────────────────
-    function loadCircuits() {
-      try { return JSON.parse(localStorage.getItem(STORAGE_KEY) || '[]'); }
-      catch { return []; }
-    }
-    function saveCircuits(arr) {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(arr));
-    }
-
     // ── Render MY CIRCUITS ─────────────────────────────────────
-    function renderMyCircuits() {
-      const circuits = loadCircuits();
+    async function renderMyCircuits() {
+      const circuits = await loadCircuits();
       const grid  = document.getElementById('circuits-grid');
       const count = document.getElementById('circuits-count');
-      // Empty state lives outside the grid
       let emptyEl = document.getElementById('circuits-empty');
 
       count.textContent = circuits.length === 0
@@ -688,7 +746,6 @@
       grid.appendChild(newCard);
 
       if (circuits.length === 0) {
-        // Show empty state centered below the grid
         if (!emptyEl) {
           emptyEl = document.createElement('div');
           emptyEl.id = 'circuits-empty';
@@ -703,7 +760,6 @@
         return;
       }
 
-      // Hide empty state if circuits exist
       if (emptyEl) emptyEl.style.display = 'none';
 
       circuits.forEach((c, idx) => {
@@ -752,16 +808,14 @@
     }
 
     function openCircuit(idx) {
-      const circuits = loadCircuits();
-      const c = circuits[idx];
+      const c = _circuitsCache[idx];
       if (!c) return;
       sessionStorage.setItem('sparky_load_circuit', JSON.stringify(c.circuit));
       window.location.href = 'circuit3d/index.html';
     }
 
     function downloadCircuit(idx) {
-      const circuits = loadCircuits();
-      const c = circuits[idx];
+      const c = _circuitsCache[idx];
       if (!c) return;
       const blob = new Blob([JSON.stringify(c.circuit, null, 2)], { type: 'application/json' });
       const url = URL.createObjectURL(blob);
@@ -773,12 +827,12 @@
       showToast(`Downloaded "${c.name}"`);
     }
 
-    function deleteCircuit(idx) {
-      const circuits = loadCircuits();
-      const name = circuits[idx]?.name ?? 'circuit';
-      circuits.splice(idx, 1);
-      saveCircuits(circuits);
-      renderMyCircuits();
+    async function deleteCircuit(idx) {
+      const c = _circuitsCache[idx];
+      if (!c) return;
+      const name = c.name || 'circuit';
+      await deleteCircuitFromCloud(c._id);
+      await renderMyCircuits();
       showToast(`Deleted "${name}"`);
     }
 
@@ -806,37 +860,24 @@
       document.getElementById('import-input').click();
     }
 
-    document.getElementById('import-input').addEventListener('change', function () {
+    document.getElementById('import-input').addEventListener('change', async function () {
       const files = Array.from(this.files);
       if (!files.length) return;
       let imported = 0;
 
-      const readers = files.map(file => new Promise(resolve => {
-        const reader = new FileReader();
-        reader.onload = e => {
-          try {
-            const data = JSON.parse(e.target.result);
-            const circuits = loadCircuits();
-            const name = file.name.replace(/\.(sparky|json)$/i, '').replace(/_/g, ' ');
-            circuits.push({
-              id: 'local_' + Date.now() + '_' + Math.random().toString(36).slice(2),
-              name,
-              savedAt: Date.now(),
-              circuit: data
-            });
-            saveCircuits(circuits);
-            imported++;
-          } catch {}
-          resolve();
-        };
-        reader.readAsText(file);
-      }));
+      for (const file of files) {
+        try {
+          const text = await file.text();
+          const data = JSON.parse(text);
+          const name = file.name.replace(/\.(sparky|json)$/i, '').replace(/_/g, ' ');
+          await saveCircuitToCloud(name, data);
+          imported++;
+        } catch {}
+      }
 
-      Promise.all(readers).then(() => {
-        this.value = '';
-        renderMyCircuits();
-        showToast(imported === 1 ? 'Circuit imported!' : `${imported} circuits imported!`);
-      });
+      this.value = '';
+      await renderMyCircuits();
+      showToast(imported === 1 ? 'Circuit imported!' : `${imported} circuits imported!`);
     });
 
     // ── Render SPARKS ──────────────────────────────────────────
@@ -862,17 +903,13 @@
       });
     }
 
-    function forkSpark(id) {
+    async function forkSpark(id) {
       const spark = COMMUNITY_SPARKS.find(s => s.id === id);
       if (!spark) return;
-      const blob = new Blob([JSON.stringify(spark.circuit, null, 2)], { type: 'application/json' });
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = `${spark.title.replace(/\s+/g, '_')}.sparky`;
-      a.click();
-      URL.revokeObjectURL(url);
-      showToast(`Forked "${spark.title}"!`);
+      await saveCircuitToCloud(spark.title, spark.circuit);
+      switchTab('my');
+      await renderMyCircuits();
+      showToast(`Forked "${spark.title}" to your circuits!`);
     }
 
     // ── Toast ──────────────────────────────────────────────────
@@ -895,7 +932,10 @@
     }
 
     // ── Init ───────────────────────────────────────────────────
-    renderMyCircuits();
+    (async () => {
+      await checkAuth();
+      await renderMyCircuits();
+    })();
   </script>
 </body>
 </html>
