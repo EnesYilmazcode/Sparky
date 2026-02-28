@@ -188,31 +188,41 @@
     }
     .circuit-card:hover { background: var(--bg-hover); border-color: #ccc; }
 
-    /* New circuit card — compact button style */
+    /* New circuit card — same size as circuit cards */
     .new-card {
-      display: inline-flex;
-      align-items: center;
-      justify-content: center;
-      gap: 0.5rem;
+      display: flex;
+      flex-direction: column;
+      gap: 0.75rem;
       background: transparent;
-      border: 1px dashed var(--border);
+      border: 1.5px dashed var(--border);
       border-radius: 10px;
-      padding: 1rem 1.25rem;
+      padding: 1.25rem;
       cursor: pointer;
       transition: background 0.12s, border-color 0.12s;
-      align-self: start;
-      grid-column: 1;
     }
-    .new-card:hover { background: var(--bg-hover); border-color: #bbb; }
+    .new-card:hover { background: var(--bg-hover); border-color: #aaa; }
+    .new-card-thumb {
+      width: 100%;
+      aspect-ratio: 16/10;
+      border-radius: 6px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      flex-shrink: 0;
+    }
     .new-card-icon {
-      font-size: 1.1rem;
+      font-size: 1.6rem;
       color: var(--text-dim);
       line-height: 1;
     }
     .new-card-label {
       font-size: 0.875rem;
-      font-weight: 500;
+      font-weight: 600;
       color: var(--text-sub);
+    }
+    .new-card-sub {
+      font-size: 0.75rem;
+      color: var(--text-dim);
     }
 
     /* Normal circuit card */
@@ -391,8 +401,100 @@
     .spark-card-footer {
       display: flex;
       align-items: center;
-      justify-content: flex-end;
+      justify-content: space-between;
+      gap: 0.5rem;
     }
+
+    /* ── Publish modal ──────────────────────────────────────── */
+    #publish-modal {
+      position: fixed;
+      inset: 0;
+      background: rgba(0,0,0,0.45);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      z-index: 300;
+    }
+    .publish-card {
+      background: var(--bg);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      box-shadow: 0 8px 40px rgba(0,0,0,0.14);
+      width: 420px;
+      max-width: calc(100vw - 2rem);
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+    }
+    .publish-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 1rem 1.25rem 0.75rem;
+      border-bottom: 1px solid var(--border);
+    }
+    .publish-title-row {
+      font-size: 0.9375rem;
+      font-weight: 700;
+      color: var(--text);
+      letter-spacing: -0.01em;
+    }
+    .publish-close {
+      background: none;
+      border: none;
+      cursor: pointer;
+      color: var(--text-dim);
+      font-size: 0.9rem;
+      padding: 0.2rem 0.4rem;
+      border-radius: 4px;
+      line-height: 1;
+    }
+    .publish-close:hover { background: var(--bg-hover); color: var(--text); }
+    .publish-thumb {
+      width: 100%;
+      aspect-ratio: 16/7;
+      background: #1a1c24;
+      overflow: hidden;
+      flex-shrink: 0;
+    }
+    .publish-thumb img { width: 100%; height: 100%; object-fit: cover; display: block; }
+    .publish-fields {
+      display: flex;
+      flex-direction: column;
+      gap: 0.75rem;
+      padding: 1rem 1.25rem;
+    }
+    .publish-label {
+      display: flex;
+      flex-direction: column;
+      gap: 0.3rem;
+      font-size: 0.8rem;
+      font-weight: 600;
+      color: var(--text-sub);
+    }
+    .publish-input {
+      font-family: 'Inter', sans-serif;
+      font-size: 0.875rem;
+      color: var(--text);
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      padding: 0.45rem 0.65rem;
+      outline: none;
+      transition: border-color 0.15s;
+    }
+    .publish-input:focus { border-color: var(--accent); }
+    .publish-textarea {
+      resize: vertical;
+      min-height: 72px;
+      line-height: 1.5;
+    }
+    .publish-actions {
+      display: flex;
+      gap: 0.5rem;
+      padding: 0 1.25rem 1.25rem;
+    }
+    .publish-actions .btn { flex: 1; justify-content: center; }
 
     /* ── Hidden file input ──────────────────────────────────── */
     #import-input { display: none; }
@@ -486,6 +588,32 @@
   <!-- Hidden import input -->
   <input type="file" id="import-input" accept=".sparky,.json" multiple />
 
+  <!-- Publish Modal -->
+  <div id="publish-modal" style="display:none">
+    <div class="publish-card">
+      <div class="publish-header">
+        <div class="publish-title-row">Publish to Sparks</div>
+        <button class="publish-close" onclick="closePublishModal()">✕</button>
+      </div>
+      <div id="publish-thumb" class="publish-thumb"></div>
+      <div class="publish-fields">
+        <label class="publish-label">Title
+          <input id="publish-name" class="publish-input" type="text" placeholder="Circuit name…">
+        </label>
+        <label class="publish-label">Your name
+          <input id="publish-author" class="publish-input" type="text" placeholder="e.g. @yourname">
+        </label>
+        <label class="publish-label">Description
+          <textarea id="publish-desc" class="publish-input publish-textarea" placeholder="What does this circuit do? What will others learn?"></textarea>
+        </label>
+      </div>
+      <div class="publish-actions">
+        <button class="btn btn-primary" onclick="submitPublish()">Publish</button>
+        <button class="btn btn-ghost" onclick="closePublishModal()">Cancel</button>
+      </div>
+    </div>
+  </div>
+
   <!-- Toast -->
   <div class="toast" id="toast"></div>
 
@@ -527,36 +655,107 @@
       }
     }
 
-    // ── Circuit cache (loaded from API) ──────────────────────────
+    // ── Local project storage ─────────────────────────────────────
+    const LS_KEY = 'sparky_local_projects';
     let _circuitsCache = [];
 
-    async function loadCircuits() {
-      try {
-        const res = await fetch(API_BASE + '/api/circuits', { headers: authHeaders() });
-        if (!res.ok) return [];
-        const data = await res.json();
-        _circuitsCache = data.circuits || [];
-        return _circuitsCache;
-      } catch { return []; }
+    function loadCircuits() {
+      try { _circuitsCache = JSON.parse(localStorage.getItem(LS_KEY) || '[]'); }
+      catch { _circuitsCache = []; }
+      return _circuitsCache;
     }
 
-    async function saveCircuitToCloud(name, circuit) {
-      const res = await fetch(API_BASE + '/api/circuits', {
-        method: 'POST',
-        headers: authHeaders(),
-        body: JSON.stringify({ name, circuit }),
+    function saveCircuitLocal(entry) {
+      const projects = loadCircuits();
+      const idx = projects.findIndex(p => p.id === entry.id);
+      if (idx >= 0) projects[idx] = entry; else projects.unshift(entry);
+      localStorage.setItem(LS_KEY, JSON.stringify(projects));
+    }
+
+    function deleteCircuitLocal(id) {
+      const projects = loadCircuits().filter(p => p.id !== id);
+      localStorage.setItem(LS_KEY, JSON.stringify(projects));
+    }
+
+    // ── Sparks (user-uploaded) ──────────────────────────────────
+    const SPARKS_KEY = 'sparky_sparks';
+
+    function loadSparks() {
+      try { return JSON.parse(localStorage.getItem(SPARKS_KEY) || '[]'); } catch { return []; }
+    }
+
+    function saveSpark(entry) {
+      const sparks = loadSparks();
+      if (!sparks.find(s => s.id === entry.id)) sparks.unshift(entry);
+      localStorage.setItem(SPARKS_KEY, JSON.stringify(sparks));
+    }
+
+    function removeSpark(id) {
+      const sparks = loadSparks().filter(s => s.id !== id);
+      localStorage.setItem(SPARKS_KEY, JSON.stringify(sparks));
+    }
+
+    // ── Publish modal ──────────────────────────────────────────
+    let _publishIdx = null;
+
+    function openPublishModal(idx) {
+      const c = _circuitsCache[idx];
+      if (!c) return;
+      _publishIdx = idx;
+
+      // Pre-fill fields
+      document.getElementById('publish-name').value   = c.name || '';
+      document.getElementById('publish-author').value = localStorage.getItem('sparky_username') || '';
+      document.getElementById('publish-desc').value   = '';
+
+      // Thumbnail preview
+      const th = document.getElementById('publish-thumb');
+      th.innerHTML = c.thumbnail
+        ? `<img src="${c.thumbnail}">`
+        : '';
+
+      document.getElementById('publish-modal').style.display = 'flex';
+      document.getElementById('publish-name').focus();
+    }
+
+    function closePublishModal() {
+      document.getElementById('publish-modal').style.display = 'none';
+      _publishIdx = null;
+    }
+
+    function submitPublish() {
+      const c = _circuitsCache[_publishIdx];
+      if (!c) return;
+
+      const name   = document.getElementById('publish-name').value.trim()   || c.name || 'Untitled';
+      const author = document.getElementById('publish-author').value.trim() || 'Anonymous';
+      const desc   = document.getElementById('publish-desc').value.trim();
+
+      // Persist username for next time
+      localStorage.setItem('sparky_username', author);
+
+      saveSpark({
+        id:         c.id,
+        name,
+        author,
+        desc,
+        thumbnail:  c.thumbnail || null,
+        sharedAt:   new Date().toISOString(),
+        components: c.components || [],
+        wires:      c.wires      || [],
       });
-      return res.json();
+
+      closePublishModal();
+      showToast(`"${name}" published to Sparks!`);
+      if (document.getElementById('tab-sparks').classList.contains('active')) renderSparks();
     }
 
-    async function deleteCircuitFromCloud(docId) {
-      await fetch(API_BASE + '/api/circuits/' + encodeURIComponent(docId), {
-        method: 'DELETE',
-        headers: authHeaders(),
-      });
-    }
+    // Close modal on backdrop click
+    document.getElementById('publish-modal').addEventListener('click', function(e) {
+      if (e.target === this) closePublishModal();
+    });
 
-    // ── Sparks (community examples) ────────────────────────────
+    // legacy placeholder stub — no longer used
     const COMMUNITY_SPARKS = [
       {
         id: 'spark_blink',
@@ -719,12 +918,12 @@
       document.getElementById('topbar-title').textContent = title;
       document.getElementById('topbar-actions').style.display = tab === 'my' ? 'flex' : 'none';
 
-      if (tab === 'sparks') renderSparks();
+      if (tab === 'sparks') renderSparks(); // always re-render (user sparks change)
     }
 
     // ── Render MY CIRCUITS ─────────────────────────────────────
-    async function renderMyCircuits() {
-      const circuits = await loadCircuits();
+    function renderMyCircuits() {
+      const circuits = loadCircuits();
       const grid  = document.getElementById('circuits-grid');
       const count = document.getElementById('circuits-count');
       let emptyEl = document.getElementById('circuits-empty');
@@ -735,13 +934,14 @@
 
       grid.innerHTML = '';
 
-      // New circuit card — compact button
+      // New circuit card — full card size
       const newCard = document.createElement('button');
       newCard.className = 'new-card';
       newCard.onclick = newCircuit;
       newCard.innerHTML = `
-        <span class="new-card-icon">＋</span>
-        <span class="new-card-label">New Circuit</span>
+        <div class="new-card-thumb"><span class="new-card-icon">＋</span></div>
+        <div class="new-card-label">New Circuit</div>
+        <div class="new-card-sub">Start from scratch</div>
       `;
       grid.appendChild(newCard);
 
@@ -771,18 +971,18 @@
       const card = document.createElement('div');
       card.className = 'circuit-card';
 
-      const compCount = c.circuit?.components?.length ?? 0;
-      const wireCount = c.circuit?.wires?.length ?? 0;
-      const saved = c.savedAt ? new Date(c.savedAt).toLocaleDateString() : 'Unknown';
+      const compCount = (c.components ?? c.circuit?.components)?.length ?? 0;
+      const wireCount = (c.wires     ?? c.circuit?.wires    )?.length ?? 0;
+      const saved = c.updatedAt ? new Date(c.updatedAt).toLocaleDateString() : '';
+
+      const thumbHtml = c.thumbnail
+        ? `<img src="${c.thumbnail}" style="width:100%;height:100%;object-fit:cover;display:block;">`
+        : `<div class="card-thumb-grid"><span class="card-thumb-emoji">🔌</span></div>`;
 
       card.innerHTML = `
-        <div class="card-thumb">
-          <div class="card-thumb-grid">
-            <span class="card-thumb-emoji">🔌</span>
-          </div>
-        </div>
+        <div class="card-thumb">${thumbHtml}</div>
         <div>
-          <div class="card-name">${escHtml(c.name)}</div>
+          <div class="card-name">${escHtml(c.name || 'Untitled')}</div>
           <div class="card-meta">${compCount} component${compCount !== 1 ? 's' : ''} · ${wireCount} wire${wireCount !== 1 ? 's' : ''}</div>
         </div>
         <div class="card-row">
@@ -790,15 +990,15 @@
           <div class="card-menu-wrap">
             <button class="card-menu-btn" title="Options" onclick="toggleMenu(event, 'menu-${idx}')">···</button>
             <div class="card-dropdown" id="menu-${idx}">
-              <button class="dropdown-item" onclick="openCircuit(${idx})">↗ Open in Editor</button>
-              <button class="dropdown-item" onclick="downloadCircuit(${idx})">↓ Download</button>
-              <button class="dropdown-item danger" onclick="deleteCircuit(${idx})">✕ Delete</button>
+              <button class="dropdown-item" onclick="openCircuit(${idx})">Open</button>
+              <button class="dropdown-item" onclick="openPublishModal(${idx})">Publish</button>
+              <button class="dropdown-item" onclick="downloadCircuit(${idx})">Download</button>
+              <button class="dropdown-item danger" onclick="deleteCircuit(${idx})">Delete</button>
             </div>
           </div>
         </div>
       `;
 
-      // Click on the main area (not the menu) opens in editor
       card.addEventListener('click', e => {
         if (e.target.closest('.card-menu-wrap')) return;
         openCircuit(idx);
@@ -810,33 +1010,38 @@
     function openCircuit(idx) {
       const c = _circuitsCache[idx];
       if (!c) return;
-      sessionStorage.setItem('sparky_load_circuit', JSON.stringify(c.circuit));
+      // Pass the full entry so designer can restore name + id
+      const payload = { id: c.id, name: c.name, components: c.components ?? c.circuit?.components ?? [], wires: c.wires ?? c.circuit?.wires ?? [] };
+      sessionStorage.setItem('sparky_load_circuit', JSON.stringify(payload));
       window.location.href = 'circuit3d/index.html';
     }
 
     function downloadCircuit(idx) {
       const c = _circuitsCache[idx];
       if (!c) return;
-      const blob = new Blob([JSON.stringify(c.circuit, null, 2)], { type: 'application/json' });
+      const payload = { id: c.id, name: c.name, components: c.components ?? c.circuit?.components ?? [], wires: c.wires ?? c.circuit?.wires ?? [] };
+      const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url;
-      a.download = `${c.name.replace(/\s+/g, '_')}.sparky`;
+      a.download = `${(c.name || 'circuit').replace(/\s+/g, '_')}.sparky`;
       a.click();
       URL.revokeObjectURL(url);
       showToast(`Downloaded "${c.name}"`);
     }
 
-    async function deleteCircuit(idx) {
+    function deleteCircuit(idx) {
       const c = _circuitsCache[idx];
       if (!c) return;
       const name = c.name || 'circuit';
-      await deleteCircuitFromCloud(c._id);
-      await renderMyCircuits();
+      if (!confirm(`Delete "${name}"?`)) return;
+      deleteCircuitLocal(c.id);
+      renderMyCircuits();
       showToast(`Deleted "${name}"`);
     }
 
     function newCircuit() {
+      sessionStorage.removeItem('sparky_load_circuit');
       window.location.href = 'circuit3d/index.html';
     }
 
@@ -869,47 +1074,80 @@
         try {
           const text = await file.text();
           const data = JSON.parse(text);
-          const name = file.name.replace(/\.(sparky|json)$/i, '').replace(/_/g, ' ');
-          await saveCircuitToCloud(name, data);
+          const name = data.name || file.name.replace(/\.(sparky|json)$/i, '').replace(/_/g, ' ');
+          saveCircuitLocal({
+            id:        data.id || (Date.now().toString(36) + Math.random().toString(36).slice(2)),
+            name,
+            thumbnail: data.thumbnail || null,
+            updatedAt: new Date().toISOString(),
+            components: data.components || [],
+            wires:      data.wires      || [],
+          });
           imported++;
         } catch {}
       }
 
       this.value = '';
-      await renderMyCircuits();
+      renderMyCircuits();
       showToast(imported === 1 ? 'Circuit imported!' : `${imported} circuits imported!`);
     });
 
     // ── Render SPARKS ──────────────────────────────────────────
     function renderSparks() {
-      const grid = document.getElementById('sparks-grid');
-      if (grid.children.length > 0) return; // already rendered
+      const grid   = document.getElementById('sparks-grid');
+      const sparks = loadSparks();
+      grid.innerHTML = '';
 
-      COMMUNITY_SPARKS.forEach(spark => {
+      if (!sparks.length) {
+        grid.innerHTML = `
+          <div class="empty-state" style="grid-column:1/-1">
+            <div class="empty-state-icon">✦</div>
+            <div class="empty-state-text">No sparks yet.<br>Share one of your circuits using the ··· menu.</div>
+          </div>`;
+        return;
+      }
+
+      sparks.forEach((spark, idx) => {
+        const thumbHtml = spark.thumbnail
+          ? `<img src="${spark.thumbnail}" style="width:100%;height:100%;object-fit:cover;display:block;">`
+          : `<span style="font-size:2rem;">🔌</span>`;
+
         const card = document.createElement('div');
         card.className = 'spark-card';
         card.innerHTML = `
-          <div class="spark-thumb" style="background:${spark.color}">
-            <span class="spark-thumb-emoji">${spark.emoji}</span>
-          </div>
-          <div class="spark-card-title">${escHtml(spark.title)}</div>
-          <div class="spark-card-author">${escHtml(spark.author)}</div>
-          <div class="spark-card-desc">${escHtml(spark.desc)}</div>
+          <div class="spark-thumb" style="background:#1a1c24">${thumbHtml}</div>
+          <div class="spark-card-title">${escHtml(spark.name || 'Untitled')}</div>
+          <div class="spark-card-author">${spark.author ? escHtml(spark.author) : ''}${spark.sharedAt ? ' · ' + new Date(spark.sharedAt).toLocaleDateString() : ''}</div>
+          ${spark.desc ? `<div class="spark-card-desc">${escHtml(spark.desc)}</div>` : ''}
           <div class="spark-card-footer">
-            <button class="btn btn-ghost" style="font-size:0.75rem;" onclick="forkSpark('${spark.id}')">Fork →</button>
+            <button class="btn btn-ghost" style="font-size:0.75rem;" onclick="forkSpark('${spark.id}')">Fork to My Circuits</button>
+            <button class="btn btn-danger" style="font-size:0.75rem;" onclick="unshareFromSparks('${spark.id}')">Remove</button>
           </div>
         `;
         grid.appendChild(card);
       });
     }
 
-    async function forkSpark(id) {
-      const spark = COMMUNITY_SPARKS.find(s => s.id === id);
+    function forkSpark(id) {
+      const spark = loadSparks().find(s => s.id === id);
       if (!spark) return;
-      await saveCircuitToCloud(spark.title, spark.circuit);
+      saveCircuitLocal({
+        id:        Date.now().toString(36) + Math.random().toString(36).slice(2),
+        name:      spark.name,
+        thumbnail: spark.thumbnail || null,
+        updatedAt: new Date().toISOString(),
+        components: spark.components || [],
+        wires:      spark.wires      || [],
+      });
       switchTab('my');
-      await renderMyCircuits();
-      showToast(`Forked "${spark.title}" to your circuits!`);
+      renderMyCircuits();
+      showToast(`Forked "${spark.name}" to your circuits!`);
+    }
+
+    function unshareFromSparks(id) {
+      removeSpark(id);
+      renderSparks();
+      showToast('Removed from Sparks.');
     }
 
     // ── Toast ──────────────────────────────────────────────────
@@ -932,10 +1170,7 @@
     }
 
     // ── Init ───────────────────────────────────────────────────
-    (async () => {
-      await checkAuth();
-      await renderMyCircuits();
-    })();
+    renderMyCircuits();
   </script>
 </body>
 </html>

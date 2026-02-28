@@ -15,12 +15,21 @@
 
   <!-- TOP BAR -->
   <header id="topbar">
-    <a class="topbar-brand" href="../landing.html" title="Back to homepage" style="text-decoration:none;color:inherit;">
-      <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
-        <path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/>
-      </svg>
-      Sparky
-    </a>
+    <div class="topbar-left-group">
+      <a class="topbar-brand" href="../dashboard.html" title="Back to dashboard" style="text-decoration:none;color:inherit;">
+        <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+          <path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/>
+        </svg>
+        Sparky
+      </a>
+      <span class="topbar-name-sep">·</span>
+      <span id="circuit-name-field"
+            contenteditable="true"
+            spellcheck="false"
+            title="Click to rename circuit"
+            onblur="App.state.circuitName = this.textContent.trim() || 'Untitled'; this.textContent = App.state.circuitName;"
+            onkeydown="if(event.key==='Enter'){event.preventDefault();this.blur();}">Untitled</span>
+    </div>
 
     <div class="topbar-center">
       <button class="btn-simulate" id="sim-run-btn" onclick="App.runSimulation()">
@@ -38,22 +47,13 @@
     </div>
 
     <div class="topbar-actions">
-      <button class="btn-secondary" onclick="App.saveCircuit()" title="Save (.sparky)">
-        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-          <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/>
-          <polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/>
-        </svg>
-        Save
-      </button>
-      <button class="btn-secondary" onclick="App.loadCircuit()" title="Load .sparky file">
+      <button class="btn-secondary" onclick="App.saveCircuit()" title="Download circuit as .sparky file">
         <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
           <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
-          <polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/>
+          <polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/>
         </svg>
-        Load
+        Download
       </button>
-      <div class="topbar-divider"></div>
-      <button class="btn-danger" onclick="App.clearAll()">Clear</button>
     </div>
   </header>
 
@@ -217,6 +217,15 @@
         <kbd>R</kbd> rotate
       </div>
 
+      <!-- Clear All (hidden until board has content) -->
+      <button id="clear-all-btn" title="Clear All" style="display:none" onclick="if(confirm('Clear all components and wires?')) App.clearAll()">
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+          <polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/>
+          <path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4h6v2"/>
+        </svg>
+        Clear All
+      </button>
+
       <!-- Reset camera -->
       <button id="reset-cam-btn" title="Reset camera view" onclick="if(App.controls){App.controls.target.set(0,0,0); App.camera.position.set(0,22,30); App.controls.update();}">
         <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
@@ -266,6 +275,21 @@
 
   </div>
 
+  <!-- Load Preview Modal -->
+  <div id="load-preview-modal" style="display:none">
+    <div class="lpm-card">
+      <div class="lpm-thumb">
+        <img id="lpm-img" src="" alt="Circuit preview" style="display:none">
+        <div id="lpm-placeholder">No preview available</div>
+      </div>
+      <div class="lpm-name" id="lpm-name"></div>
+      <div class="lpm-meta" id="lpm-meta"></div>
+      <div class="lpm-btns">
+        <button class="btn-simulate" id="lpm-confirm">Load Circuit</button>
+        <button class="btn-secondary" onclick="document.getElementById('load-preview-modal').style.display='none'">Cancel</button>
+      </div>
+    </div>
+  </div>
 
 </div>
 

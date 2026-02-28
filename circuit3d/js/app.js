@@ -16,10 +16,31 @@
     components:       [],
     wires:            [],
     breadboard:       null,
+    circuitName:      'Untitled',
+    circuitId:        null,    // assigned on first auto-save
     // Cached hover holes (set by interaction.js during hover)
     _hoverHoleA: null,
     _hoverHoleB: null,
   };
+
+  // ── Local project storage helpers ───────────────────────────
+  const LS_KEY = 'sparky_local_projects';
+
+  function lsProjects() {
+    try { return JSON.parse(localStorage.getItem(LS_KEY) || '[]'); } catch { return []; }
+  }
+  function lsSave(projects) {
+    try { localStorage.setItem(LS_KEY, JSON.stringify(projects)); } catch {}
+  }
+
+  // Find the next available "Untitled (N)" name
+  function nextUntitledName() {
+    const names = new Set(lsProjects().map(p => p.name));
+    if (!names.has('Untitled')) return 'Untitled';
+    let n = 1;
+    while (names.has(`Untitled (${n})`)) n++;
+    return `Untitled (${n})`;
+  }
 
   // Span constants (exposed so interaction.js can read them)
   App.RESISTOR_SPAN = 4;   // columns (or rows) between leads — narrower
@@ -399,10 +420,44 @@
 
   // ── Save / Load ──────────────────────────────────────────────
 
+  // ── Isometric thumbnail capture ──────────────────────────────
+  function captureIsometricThumb() {
+    // Stash camera
+    const prevPos    = App.camera.position.clone();
+    const prevTarget = App.controls.target.clone();
+
+    // Isometric view
+    App.camera.position.set(20, 22, 20);
+    App.controls.target.set(0, 0, 0);
+    App.camera.lookAt(0, 0, 0);
+    App.renderer.render(App.scene, App.camera);
+
+    // Downsample to 320-wide thumbnail
+    const src = App.renderer.domElement;
+    const scale = Math.min(1, 320 / src.width);
+    const th  = document.createElement('canvas');
+    th.width  = Math.round(src.width  * scale);
+    th.height = Math.round(src.height * scale);
+    th.getContext('2d').drawImage(src, 0, 0, th.width, th.height);
+    const dataURL = th.toDataURL('image/jpeg', 0.72);
+
+    // Restore camera
+    App.camera.position.copy(prevPos);
+    App.controls.target.copy(prevTarget);
+    App.camera.lookAt(prevTarget);
+    App.controls.update();
+
+    return dataURL;
+  }
+
   App.saveCircuit = function () {
+    const name = state.circuitName || 'Untitled';
+
     // Build a raw serializable state (cols/rows, not world coords)
     const data = {
-      version: 1,
+      version:   1,
+      name,
+      thumbnail: captureIsometricThumb(),
       components: state.components.map((c, i) => ({
         type:     c.type,
         id:       c.type + '_' + i,
@@ -422,14 +477,18 @@
       })),
     };
 
+    // Also ensure the local project entry is up-to-date
+    if (state.circuitId) _doAutoSave();
+
+    const safeName = name.replace(/[^\w\s\-]/g, '').trim() || 'circuit';
     const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
     const url  = URL.createObjectURL(blob);
     const a    = document.createElement('a');
     a.href     = url;
-    a.download = 'circuit.sparky';
+    a.download = safeName + '.sparky';
     a.click();
     URL.revokeObjectURL(url);
-    App.setHint('Circuit saved as circuit.sparky', 2500);
+    App.setHint(`Saved "${name}"`, 2500);
   };
 
   // ── Internal: load a parsed circuit data object onto the board ─
@@ -494,7 +553,16 @@
       }
     }
     state.wireColor = savedColor;
-    App.setHint(`Loaded ${data.components?.length ?? 0} components, ${data.wires?.length ?? 0} wires`, 3000);
+
+    // Sync circuit name + ID
+    if (data.name) {
+      state.circuitName = data.name;
+      const nf = document.getElementById('circuit-name-field');
+      if (nf) nf.textContent = data.name;
+    }
+    if (data.id) state.circuitId = data.id;
+
+    App.setHint(`Loaded "${data.name || 'circuit'}" — ${data.components?.length ?? 0} components`, 3000);
   };
 
   App.loadCircuit = function () {
@@ -508,10 +576,42 @@
       let data;
       try { data = JSON.parse(text); }
       catch { App.setHint('⚠️ Invalid file', 2500); return; }
-      App.loadCircuitData(data);
+      _showLoadPreview(data);
     };
     inp.click();
   };
+
+  function _showLoadPreview(data) {
+    const modal  = document.getElementById('load-preview-modal');
+    const img    = document.getElementById('lpm-img');
+    const ph     = document.getElementById('lpm-placeholder');
+    const nameEl = document.getElementById('lpm-name');
+    const metaEl = document.getElementById('lpm-meta');
+    const btn    = document.getElementById('lpm-confirm');
+
+    const name = data.name || 'Untitled';
+    nameEl.textContent = name;
+
+    const cc = data.components?.length ?? 0;
+    const wc = data.wires?.length ?? 0;
+    metaEl.textContent = `${cc} component${cc !== 1 ? 's' : ''} · ${wc} wire${wc !== 1 ? 's' : ''}`;
+
+    if (data.thumbnail) {
+      img.src = data.thumbnail;
+      img.style.display = 'block';
+      ph.style.display  = 'none';
+    } else {
+      img.style.display = 'none';
+      ph.style.display  = 'flex';
+    }
+
+    btn.onclick = () => {
+      modal.style.display = 'none';
+      App.loadCircuitData(data);
+    };
+
+    modal.style.display = 'flex';
+  }
 
   // ── Markdown Export (human-readable for AI) ──────────────────
 
@@ -644,16 +744,89 @@
     state.wires.forEach(w => App.scene.remove(w.group));
     state.components = [];
     state.wires      = [];
+    // New blank circuit — get a fresh ID and name
+    state.circuitId   = null;
+    const newName = nextUntitledName();
+    state.circuitName = newName;
+    const nf = document.getElementById('circuit-name-field');
+    if (nf) nf.textContent = newName;
     refreshCounts();
   };
 
   // ── Helpers ───────────────────────────────────────────────────
+
+  // ── Auto-save to localStorage ─────────────────────────────
+  let _autoSaveTimer = null;
+  function scheduleAutoSave() {
+    clearTimeout(_autoSaveTimer);
+    _autoSaveTimer = setTimeout(_doAutoSave, 800);
+  }
+
+  function _doAutoSave() {
+    if (!state.components.length && !state.wires.length) return; // nothing to save
+
+    if (!state.circuitId) {
+      state.circuitId = Date.now().toString(36) + Math.random().toString(36).slice(2);
+    }
+
+    // Lightweight thumbnail for auto-save (smaller than download)
+    let thumb = null;
+    try {
+      const prevPos    = App.camera.position.clone();
+      const prevTarget = App.controls.target.clone();
+      App.camera.position.set(20, 22, 20);
+      App.controls.target.set(0, 0, 0);
+      App.camera.lookAt(0, 0, 0);
+      App.renderer.render(App.scene, App.camera);
+      const src = App.renderer.domElement;
+      const th  = document.createElement('canvas');
+      th.width  = 240; th.height = Math.round(240 * src.height / src.width);
+      th.getContext('2d').drawImage(src, 0, 0, th.width, th.height);
+      thumb = th.toDataURL('image/jpeg', 0.55);
+      App.camera.position.copy(prevPos);
+      App.controls.target.copy(prevTarget);
+      App.camera.lookAt(prevTarget);
+      App.controls.update();
+    } catch {}
+
+    const entry = {
+      id:         state.circuitId,
+      name:       state.circuitName,
+      thumbnail:  thumb,
+      updatedAt:  new Date().toISOString(),
+      components: state.components.map((c, i) => ({
+        type:     c.type,
+        holeRefs: c.holeRefs,
+        position: c.group ? { x: +c.group.position.x.toFixed(3), z: +c.group.position.z.toFixed(3) } : null,
+      })),
+      wires: state.wires.map(w => ({
+        startHole:    w.startHole,
+        endHole:      w.endHole,
+        startCompIdx: w.startComp ? state.components.indexOf(w.startComp) : -1,
+        startPinIdx:  w.startPinIdx,
+        endCompIdx:   w.endComp   ? state.components.indexOf(w.endComp)   : -1,
+        endPinIdx:    w.endPinIdx,
+        color:        w.group?.children?.[0]?.material?.color?.getHex?.() ?? state.wireColor,
+      })),
+    };
+
+    const projects = lsProjects();
+    const idx = projects.findIndex(p => p.id === state.circuitId);
+    if (idx >= 0) projects[idx] = entry; else projects.unshift(entry);
+    lsSave(projects);
+  }
 
   function refreshCounts() {
     const cc = document.getElementById('comp-count');
     const wc = document.getElementById('wire-count');
     if (cc) cc.textContent = state.components.length;
     if (wc) wc.textContent = state.wires.length;
+
+    const clearBtn = document.getElementById('clear-all-btn');
+    if (clearBtn) clearBtn.style.display =
+      (state.components.length || state.wires.length) ? 'flex' : 'none';
+
+    scheduleAutoSave();
   }
 
   // ── Boot ─────────────────────────────────────────────────────
@@ -669,7 +842,18 @@
   const _pending = sessionStorage.getItem('sparky_load_circuit');
   if (_pending) {
     sessionStorage.removeItem('sparky_load_circuit');
-    try { App.loadCircuitData(JSON.parse(_pending)); } catch (e) { console.warn('Auto-load failed', e); }
+    try {
+      const loaded = JSON.parse(_pending);
+      // Restore project ID so auto-save updates the same entry
+      if (loaded.id) state.circuitId = loaded.id;
+      App.loadCircuitData(loaded);
+    } catch (e) { console.warn('Auto-load failed', e); }
+  } else {
+    // New circuit — pick an auto-incremented untitled name
+    const name = nextUntitledName();
+    state.circuitName = name;
+    const nf = document.getElementById('circuit-name-field');
+    if (nf) nf.textContent = name;
   }
 
 })(window.App = window.App || {});
