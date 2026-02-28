@@ -37,7 +37,7 @@ const API_KEY    = process.env.WATSONX_APIKEY;
 const PROJECT_ID = process.env.WATSONX_PROJECT_ID;
 const WX_URL     = process.env.WATSONX_URL || 'https://us-south.ml.cloud.ibm.com';
 const MODEL_ID   = 'meta-llama/llama-3-3-70b-instruct';
-const PORT       = 5001;
+const PORT       = process.env.PORT || 5001;
 
 // IBM App ID
 const APPID_CLIENT_ID     = process.env.APPID_CLIENT_ID;
@@ -50,8 +50,7 @@ const CLOUDANT_APIKEY = process.env.CLOUDANT_APIKEY;
 const CLOUDANT_DB     = 'sparky_circuits';
 
 if (!API_KEY || !PROJECT_ID) {
-  console.error('Missing WATSONX_APIKEY or WATSONX_PROJECT_ID in backend/.env');
-  process.exit(1);
+  console.warn('Warning: WATSONX_APIKEY or WATSONX_PROJECT_ID not set — /api/ask will fail');
 }
 if (!APPID_CLIENT_ID || !APPID_CLIENT_SECRET || !APPID_OAUTH_URL) {
   console.warn('Warning: APPID_CLIENT_ID / APPID_CLIENT_SECRET / APPID_OAUTH_URL not set — auth endpoints will fail');
