@@ -338,7 +338,9 @@ const server = http.createServer(async (req, res) => {
 
   // ── Auth: Google OAuth (redirect to App ID) ────────────────
   if (req.method === 'GET' && req.url === '/api/auth/google') {
-    const redirectUri = `http://localhost:${PORT}/api/auth/callback`;
+    const proto = req.headers['x-forwarded-proto'] || 'http';
+    const host = req.headers['host'] || `localhost:${PORT}`;
+    const redirectUri = `${proto}://${host}/api/auth/callback`;
     const authUrl = `${APPID_OAUTH_URL}/authorization?client_id=${APPID_CLIENT_ID}&response_type=code&redirect_uri=${encodeURIComponent(redirectUri)}&scope=openid+email+profile&idp=google`;
     res.writeHead(302, { Location: authUrl });
     res.end();
@@ -348,7 +350,9 @@ const server = http.createServer(async (req, res) => {
   // ── Auth: OAuth callback (exchange code for tokens) ────────
   if (req.method === 'GET' && req.url.startsWith('/api/auth/callback')) {
     try {
-      const urlObj = new URL(req.url, `http://localhost:${PORT}`);
+      const cbProto = req.headers['x-forwarded-proto'] || 'http';
+      const cbHost = req.headers['host'] || `localhost:${PORT}`;
+      const urlObj = new URL(req.url, `${cbProto}://${cbHost}`);
       const code = urlObj.searchParams.get('code');
       const error = urlObj.searchParams.get('error');
 
@@ -359,7 +363,7 @@ const server = http.createServer(async (req, res) => {
         return;
       }
 
-      const redirectUri = `http://localhost:${PORT}/api/auth/callback`;
+      const redirectUri = `${cbProto}://${cbHost}/api/auth/callback`;
       const tokenRes = await fetch(`${APPID_OAUTH_URL}/token`, {
         method: 'POST',
         headers: {
