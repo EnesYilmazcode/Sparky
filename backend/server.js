@@ -37,7 +37,7 @@ const API_KEY    = process.env.WATSONX_APIKEY;
 const PROJECT_ID = process.env.WATSONX_PROJECT_ID;
 const WX_URL     = process.env.WATSONX_URL || 'https://us-south.ml.cloud.ibm.com';
 const MODEL_ID   = 'meta-llama/llama-3-3-70b-instruct';
-const PORT       = process.env.PORT || 5001;
+const PORT       = 5001;
 
 // IBM App ID
 const APPID_CLIENT_ID     = process.env.APPID_CLIENT_ID;
@@ -50,7 +50,8 @@ const CLOUDANT_APIKEY = process.env.CLOUDANT_APIKEY;
 const CLOUDANT_DB     = 'sparky_circuits';
 
 if (!API_KEY || !PROJECT_ID) {
-  console.warn('Warning: WATSONX_APIKEY or WATSONX_PROJECT_ID not set — /api/ask will fail');
+  console.error('Missing WATSONX_APIKEY or WATSONX_PROJECT_ID in backend/.env');
+  process.exit(1);
 }
 if (!APPID_CLIENT_ID || !APPID_CLIENT_SECRET || !APPID_OAUTH_URL) {
   console.warn('Warning: APPID_CLIENT_ID / APPID_CLIENT_SECRET / APPID_OAUTH_URL not set — auth endpoints will fail');
@@ -338,9 +339,7 @@ const server = http.createServer(async (req, res) => {
 
   // ── Auth: Google OAuth (redirect to App ID) ────────────────
   if (req.method === 'GET' && req.url === '/api/auth/google') {
-    const host = req.headers['host'] || `localhost:${PORT}`;
-    const proto = req.headers['x-forwarded-proto'] || 'http';
-    const redirectUri = `${proto}://${host}/api/auth/callback`;
+    const redirectUri = `http://localhost:${PORT}/api/auth/callback`;
     const authUrl = `${APPID_OAUTH_URL}/authorization?client_id=${APPID_CLIENT_ID}&response_type=code&redirect_uri=${encodeURIComponent(redirectUri)}&scope=openid+email+profile&idp=google`;
     res.writeHead(302, { Location: authUrl });
     res.end();
@@ -350,7 +349,7 @@ const server = http.createServer(async (req, res) => {
   // ── Auth: OAuth callback (exchange code for tokens) ────────
   if (req.method === 'GET' && req.url.startsWith('/api/auth/callback')) {
     try {
-      const urlObj = new URL(req.url, `http://${req.headers['host'] || 'localhost:' + PORT}`);
+      const urlObj = new URL(req.url, `http://localhost:${PORT}`);
       const code = urlObj.searchParams.get('code');
       const error = urlObj.searchParams.get('error');
 
@@ -361,9 +360,7 @@ const server = http.createServer(async (req, res) => {
         return;
       }
 
-      const cbHost = req.headers['host'] || `localhost:${PORT}`;
-      const cbProto = req.headers['x-forwarded-proto'] || 'http';
-      const redirectUri = `${cbProto}://${cbHost}/api/auth/callback`;
+      const redirectUri = `http://localhost:${PORT}/api/auth/callback`;
       const tokenRes = await fetch(`${APPID_OAUTH_URL}/token`, {
         method: 'POST',
         headers: {
@@ -475,34 +472,6 @@ const server = http.createServer(async (req, res) => {
       console.error('Delete circuit error:', e.message);
       return sendJSON(res, 500, { error: e.message });
     }
-  }
-
-  // ── Static file serving ───────────────────────────────────
-  const STATIC_ROOT = path.join(__dirname, '..');
-  const MIME = {
-    '.html': 'text/html', '.css': 'text/css', '.js': 'application/javascript',
-    '.json': 'application/json', '.png': 'image/png', '.jpg': 'image/jpeg',
-    '.jpeg': 'image/jpeg', '.gif': 'image/gif', '.svg': 'image/svg+xml',
-    '.ico': 'image/x-icon', '.woff': 'font/woff', '.woff2': 'font/woff2',
-    '.glb': 'model/gltf-binary', '.sparky': 'application/octet-stream',
-  };
-
-  if (req.method === 'GET') {
-    let urlPath = decodeURIComponent(req.url.split('?')[0]);
-    if (urlPath === '/') urlPath = '/index.html';
-    const filePath = path.join(STATIC_ROOT, urlPath);
-    // Prevent directory traversal
-    if (!filePath.startsWith(STATIC_ROOT)) return sendJSON(res, 403, { error: 'Forbidden' });
-    try {
-      const stat = fs.statSync(filePath);
-      if (stat.isFile()) {
-        const ext = path.extname(filePath).toLowerCase();
-        const contentType = MIME[ext] || 'application/octet-stream';
-        res.writeHead(200, { 'Content-Type': contentType });
-        fs.createReadStream(filePath).pipe(res);
-        return;
-      }
-    } catch { /* file not found — fall through to 404 */ }
   }
 
   sendJSON(res, 404, { error: 'Not found' });
