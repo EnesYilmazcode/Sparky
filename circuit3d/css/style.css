@@ -25,7 +25,6 @@
   --selected-border: #0075ff;
   --topbar-h:     46px;
   --sidebar-w:    210px;
-  --status-h:     30px;
 }
 
 html, body {
@@ -207,80 +206,10 @@ html, body {
   align-items: center;
   justify-content: center;
   flex-shrink: 0;
-  position: relative;
-  overflow: hidden;
+  color: var(--text-primary);
 }
 
-/* Resistor icon */
-.resistor-bar {
-  display: block;
-  width: 22px;
-  height: 8px;
-  background: #d4a96a;
-  border-radius: 2px;
-  position: relative;
-}
-.resistor-bar::before,
-.resistor-bar::after {
-  content: '';
-  position: absolute;
-  width: 4px;
-  height: 2px;
-  background: #aaa;
-  top: 3px;
-}
-.resistor-bar::before { left: -4px; }
-.resistor-bar::after  { right: -4px; }
-
-/* LED icon */
-.led-dome {
-  display: block;
-  width: 18px;
-  height: 18px;
-  border-radius: 50% 50% 20% 20%;
-  background: linear-gradient(135deg, #ff5555 40%, #ff9999);
-  opacity: 0.9;
-}
-
-/* Battery icon */
-.battery-icon { flex-direction: column; gap: 0; }
-.battery-body {
-  display: block;
-  width: 16px;
-  height: 20px;
-  background: #222;
-  border-radius: 2px;
-}
-.battery-term {
-  display: block;
-  font-size: 8px;
-  font-weight: 700;
-  color: #888;
-  letter-spacing: -1px;
-}
-
-/* Wire icon */
-.wire-icon {}
-.wire-line {
-  display: block;
-  width: 22px;
-  height: 2px;
-  background: #ef4444;
-  border-radius: 2px;
-  position: relative;
-}
-.wire-line::before,
-.wire-line::after {
-  content: '';
-  position: absolute;
-  width: 6px;
-  height: 6px;
-  border-radius: 50%;
-  background: #ef4444;
-  top: -2px;
-}
-.wire-line::before { left: -2px; }
-.wire-line::after  { right: -2px; }
+.comp-item.active .comp-item-icon { color: #fff; background: rgba(255,255,255,0.18); border-color: rgba(255,255,255,0.3); }
 
 .comp-item-text {
   display: flex;
@@ -402,34 +331,6 @@ canvas {
   padding: 3px 8px;
   pointer-events: none;
   display: none;
-}
-
-/* ── STATUS BAR ─────────────────────────────── */
-
-#statusbar {
-  height: var(--status-h);
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  padding: 0 14px;
-  background: var(--bg-topbar);
-  border-top: 1px solid var(--border);
-  flex-shrink: 0;
-}
-
-.status-badge {
-  font-size: 10px;
-  font-weight: 600;
-  letter-spacing: 0.5px;
-  padding: 2px 8px;
-  border-radius: 4px;
-  background: var(--accent);
-  color: #fff;
-}
-
-#status-text {
-  font-size: 11px;
-  color: var(--text-muted);
 }
 
 /* ── SIMULATE BUTTON ────────────────────────── */

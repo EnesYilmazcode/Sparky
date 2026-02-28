@@ -176,6 +176,44 @@
   40%           { transform: translateY(-4px); opacity: 1;   }
 }
 
+/* ── Pending-changes bar ──────────────────────────────────── */
+
+#sparky-pending-bar {
+  display: none;          /* shown via JS when AI has suggestions */
+  gap: 6px;
+  padding: 7px 8px;
+  border-top: 2px solid #fcd34d;
+  background: #fffbeb;
+  flex-shrink: 0;
+}
+
+.pending-accept,
+.pending-decline {
+  flex: 1;
+  padding: 5px 0;
+  border-radius: 5px;
+  font-family: inherit;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.12s;
+}
+
+.pending-accept {
+  background: #16a34a;
+  border: none;
+  color: #fff;
+}
+.pending-accept:hover { background: #15803d; }
+
+.pending-decline {
+  background: transparent;
+  border: 1px solid var(--border-dark);
+  color: var(--text-muted);
+  transition: background 0.12s, color 0.12s;
+}
+.pending-decline:hover { background: #f5f4f1; color: var(--text-primary); }
+
 /* ── Input area ───────────────────────────────────────────── */
 
 #sparky-input-row {
@@ -211,30 +249,6 @@
 }
 
 #sparky-input::placeholder { color: var(--text-sub); }
-
-#sparky-send {
-  background: var(--accent);
-  border: none;
-  border-radius: 7px;
-  width: 30px;
-  height: 30px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  color: #fff;
-  cursor: pointer;
-  transition: background 0.12s, transform 0.1s;
-  flex-shrink: 0;
-}
-
-#sparky-send:hover  { background: var(--accent-hover); }
-#sparky-send:active { transform: scale(0.93); }
-#sparky-send:disabled {
-  background: var(--border);
-  color: var(--text-sub);
-  cursor: default;
-  transform: none;
-}
 
 /* ── IBM badge ────────────────────────────────────────────── */
 

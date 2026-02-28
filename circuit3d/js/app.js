@@ -88,8 +88,6 @@
         (m === 'wire'  && b.dataset.type === 'wire'));
     });
 
-    document.getElementById('status-mode-badge').textContent = m.toUpperCase();
-    document.getElementById('status-text').textContent       = MODE_HINTS[m] || '';
     document.getElementById('wire-color-row').style.display  = m === 'wire' ? 'block' : 'none';
     document.getElementById('rotate-badge').style.display    = m === 'place' ? 'block' : 'none';
     App.setHint(MODE_HINTS[m]);

@@ -269,17 +269,6 @@
     body.castShadow = true;
     group.add(body);
 
-    // Blue label band
-    const label = box(W - 0.01, H * 0.55, D + 0.01,
-      new THREE.MeshLambertMaterial({ color: 0x1a3a9a }));
-    label.position.set(0, H * 0.52, 0);
-    group.add(label);
-
-    // "9V" white rectangle
-    const nineV = box(0.6, 0.22, D + 0.02, new THREE.MeshLambertMaterial({ color: 0xffffff }));
-    nineV.position.set(0, H * 0.52, 0);
-    group.add(nineV);
-
     // Snap connector platform
     const snap = box(W * 0.65, 0.22, D * 0.55, new THREE.MeshLambertMaterial({ color: 0x333333 }));
     snap.position.set(0, H + 0.11, 0);
@@ -647,16 +636,6 @@
       const b = box(W, H, D, ghostMat(0x111111, ba));
       b.position.y = H / 2;
       group.add(b);
-
-      // Label band
-      const lb = box(W - 0.01, H * 0.55, D + 0.01, ghostMat(0x1a3a9a, ba));
-      lb.position.y = H * 0.52;
-      group.add(lb);
-
-      // "9V" stripe
-      const nv = box(0.6, 0.22, D + 0.02, ghostMat(0xffffff, ba * 0.7));
-      nv.position.y = H * 0.52;
-      group.add(nv);
 
       // Snap connector platform
       const snap = box(W * 0.65, 0.22, D * 0.55, ghostMat(0x333333, ba));
