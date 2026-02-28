@@ -473,6 +473,33 @@ const server = http.createServer(async (req, res) => {
     }
   }
 
+  // ── Static file serving ───────────────────────────────────
+  const STATIC_ROOT = path.join(__dirname, '..');
+  const MIME = {
+    '.html': 'text/html', '.css': 'text/css', '.js': 'application/javascript',
+    '.json': 'application/json', '.png': 'image/png', '.jpg': 'image/jpeg',
+    '.jpeg': 'image/jpeg', '.gif': 'image/gif', '.svg': 'image/svg+xml',
+    '.ico': 'image/x-icon', '.woff': 'font/woff', '.woff2': 'font/woff2',
+    '.glb': 'model/gltf-binary', '.sparky': 'application/octet-stream',
+  };
+
+  if (req.method === 'GET') {
+    let urlPath = decodeURIComponent(req.url.split('?')[0]);
+    if (urlPath === '/') urlPath = '/index.html';
+    const filePath = path.join(STATIC_ROOT, urlPath);
+    if (!filePath.startsWith(STATIC_ROOT)) return sendJSON(res, 403, { error: 'Forbidden' });
+    try {
+      const stat = fs.statSync(filePath);
+      if (stat.isFile()) {
+        const ext = path.extname(filePath).toLowerCase();
+        const contentType = MIME[ext] || 'application/octet-stream';
+        res.writeHead(200, { 'Content-Type': contentType });
+        fs.createReadStream(filePath).pipe(res);
+        return;
+      }
+    } catch { /* file not found — fall through to 404 */ }
+  }
+
   sendJSON(res, 404, { error: 'Not found' });
 });
 
