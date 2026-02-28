@@ -37,6 +37,7 @@ const API_KEY    = process.env.WATSONX_APIKEY;
 const PROJECT_ID = process.env.WATSONX_PROJECT_ID;
 const WX_URL     = process.env.WATSONX_URL || 'https://us-south.ml.cloud.ibm.com';
 const MODEL_ID   = 'meta-llama/llama-3-3-70b-instruct';
+const GOOGLE_API_KEY = process.env.GOOGLE_API_KEY;
 const PORT       = process.env.PORT || 5001;
 
 // IBM App ID
@@ -276,61 +277,56 @@ function parseActions(text) {
   return { reply: cleanReply(text.slice(0, match.index)), actions };
 }
 
-// ── Call watsonx ──────────────────────────────────────────────
-// ── Classify intent: does the user want to build or just ask? ──
-async function classifyIntent(userMsg, token) {
-  const classifyPrompt = `Classify the user's intent. Reply with exactly one word: BUILD or QUESTION.
+// ── Classify intent locally (no API call) ────────────────────
+const BUILD_WORDS = /\b(build|add|place|wire|connect|create|make|put|set up|setup|attach|hook|remove|delete|clear|fix|move)\b/i;
 
-BUILD = the user wants to place, add, wire, connect, create, build, fix, remove, or modify components on a circuit board.
-QUESTION = the user wants an explanation, analysis, help understanding, or is asking about concepts.
+function classifyIntent(userMsg) {
+  return BUILD_WORDS.test(userMsg) ? 'BUILD' : 'QUESTION';
+}
 
-Examples:
-"add an LED" → BUILD
-"build me a circuit with 3 LEDs" → BUILD
-"wire the resistor to ground" → BUILD
-"what does this circuit do?" → QUESTION
-"explain how LEDs work" → QUESTION
-"what's wrong with my circuit?" → QUESTION
-"can you help me understand resistors?" → QUESTION
-"why isn't it working?" → QUESTION
-"hey" → QUESTION
-"hello" → QUESTION
+// ── Ask Gemini ───────────────────────────────────────────────
+async function askGemini(markdown, userMsg) {
+  const msg = userMsg || 'Analyze my circuit and tell me what to do next.';
 
-User message: "${userMsg}"
-Intent:`;
+  const intent = classifyIntent(msg);
+  console.log(`[intent] "${msg.slice(0,50)}" → ${intent}`);
+
+  const toolsSection = intent === 'BUILD'
+    ? `\n${TOOLS_ADDENDUM}\n\nCRITICAL REPLY RULE: Your text reply before the actions block must be ONLY a short confirmation of what you built. Examples: "I built a basic LED circuit for you." or "I added a button that controls the LED." Do NOT describe steps, wiring details, or component locations. Just confirm what you did in one sentence.`
+    : '\n\nDo NOT output any actions blocks. Answer in 1-2 sentences max like a TA giving a quick explanation. No filler, no praise, no step-by-step breakdowns.';
+
+  const systemPrompt = `${BASE_PROMPT}${toolsSection}`;
+  const userPrompt = `BOARD STATE:\n${markdown || '**Board status: EMPTY — no components or wires placed yet.**'}\n\nQUESTION: ${msg}`;
 
   const res = await fetch(
-    `${WX_URL}/ml/v1/text/generation?version=2023-05-29`,
+    `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${GOOGLE_API_KEY}`,
     {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${token}`,
-      },
+      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        model_id: MODEL_ID,
-        input: classifyPrompt,
-        project_id: PROJECT_ID,
-        parameters: {
-          max_new_tokens: 5,
-          temperature: 0,
-          repetition_penalty: 1.0,
+        system_instruction: { parts: [{ text: systemPrompt }] },
+        contents: [{ parts: [{ text: userPrompt }] }],
+        generationConfig: {
+          temperature: 0.3,
+          maxOutputTokens: 1000,
         },
       }),
     }
   );
-  if (!res.ok) return 'BUILD'; // fallback to including tools
+  if (!res.ok) {
+    const err = await res.text();
+    throw new Error(`Gemini ${res.status}: ${err}`);
+  }
   const data = await res.json();
-  const result = (data.results?.[0]?.generated_text ?? '').trim().toUpperCase();
-  return result.includes('BUILD') ? 'BUILD' : 'QUESTION';
+  return data.candidates?.[0]?.content?.parts?.[0]?.text ?? '(no reply)';
 }
 
+// ── Ask watsonx (fallback) ───────────────────────────────────
 async function askWatsonx(markdown, userMsg) {
   const token = await getToken();
-  const msg   = userMsg || 'Analyze my circuit and tell me what to do next.';
+  const msg = userMsg || 'Analyze my circuit and tell me what to do next.';
 
-  // Classify intent first — only include tools if user wants to build
-  const intent = await classifyIntent(msg, token);
+  const intent = classifyIntent(msg);
   console.log(`[intent] "${msg.slice(0,50)}" → ${intent}`);
 
   const toolsSection = intent === 'BUILD'
@@ -395,7 +391,9 @@ const server = http.createServer(async (req, res) => {
     req.on('end', async () => {
       try {
         const { markdown = '', message = '' } = JSON.parse(body || '{}');
-        const raw = await askWatsonx(markdown, message);
+        const raw = GOOGLE_API_KEY
+          ? await askGemini(markdown, message)
+          : await askWatsonx(markdown, message);
         const { reply, actions } = parseActions(raw);
         console.log(`[ask] "${message.slice(0,60)}" → ${actions.length} action(s)`);
         return sendJSON(res, 200, { reply, actions });
