@@ -154,16 +154,75 @@
   };
 
   App.placeButton = function (holeA, holeB) {
-    const { group, pins } = App.buildButton(holeA, holeB);
+    const { group, pins, capMesh } = App.buildButton(holeA, holeB);
     App.scene.add(group);
     const record = {
       type: 'button', group, pins, pinMeshes: [],
       holeRefs: [{ col: holeA.col, row: holeA.row },
                  { col: holeB.col, row: holeB.row }],
+      pressed: false,
+      capMesh,
     };
+    if (capMesh) capMesh.userData.ownerComp = record;
     addPinMarkers(record);
     state.components.push(record);
     refreshCounts();
+  };
+
+  // ── Toggle button pressed state ──────────────────────────────
+  // Animates the cap smoothly down (press) or back up (release).
+  App.toggleButton = function (comp) {
+    if (comp.type !== 'button') return;
+    comp.pressed = !comp.pressed;
+
+    const cap = comp.capMesh;
+    if (cap) {
+      // Ensure the cap has its own material so we can tint it independently
+      if (!cap.userData.matCloned) {
+        cap.material = cap.material.clone();
+        cap.userData.matCloned = true;
+      }
+
+      const targetY   = comp.pressed ? cap.userData.capPressY : cap.userData.capRestY;
+      const targetCol = comp.pressed ? 0x44cc44 : 0xe8e8e8;
+      const targetEmi = comp.pressed ? 0x115511 : 0x000000;
+      const targetEmiI = comp.pressed ? 0.6 : 0;
+
+      // Kill any in-progress animation on this cap
+      if (cap.userData._animId) cancelAnimationFrame(cap.userData._animId);
+
+      const startY   = cap.position.y;
+      const startCol = cap.material.color.getHex();
+      const startEmi = cap.material.emissive.getHex();
+      const startEmiI = cap.material.emissiveIntensity;
+      const duration  = 80; // ms — snappy but visible
+      const t0        = performance.now();
+
+      const colA = new THREE.Color(startCol);
+      const colB = new THREE.Color(targetCol);
+      const emiA = new THREE.Color(startEmi);
+      const emiB = new THREE.Color(targetEmi);
+
+      function tick(now) {
+        const p = Math.min((now - t0) / duration, 1);
+        // Ease out cubic
+        const e = 1 - Math.pow(1 - p, 3);
+
+        cap.position.y = startY + (targetY - startY) * e;
+        cap.material.color.lerpColors(colA, colB, e);
+        cap.material.emissive.lerpColors(emiA, emiB, e);
+        cap.material.emissiveIntensity = startEmiI + (targetEmiI - startEmiI) * e;
+
+        if (p < 1) {
+          cap.userData._animId = requestAnimationFrame(tick);
+        } else {
+          cap.userData._animId = null;
+        }
+      }
+
+      cap.userData._animId = requestAnimationFrame(tick);
+    }
+
   };
 
   App.placeBattery = function (wx, wz) {

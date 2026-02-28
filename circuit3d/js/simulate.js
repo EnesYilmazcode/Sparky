@@ -101,7 +101,14 @@
       if (na && nb) uf.union(na, nb);
     });
 
-    // 3. Resolve each pin to its root
+    // 3. Buttons that are pressed act as closed switches — merge their two pins
+    components.forEach((comp, ci) => {
+      if (comp.type === 'button' && comp.pressed) {
+        uf.union(pinNode[ci][0], pinNode[ci][1]);
+      }
+    });
+
+    // 4. Resolve each pin to its root
     return components.map((comp, ci) => ({
       comp,
       // nodes[pi] = root node of pin pi
@@ -213,10 +220,62 @@
     if (b) b.style.display = 'none';
   }
 
+  // ── Button click handler (active only during simulation) ─────
+  let _btnClickHandler = null;
+
+  function installButtonClicks() {
+    removeButtonClicks();
+    const canvas    = document.getElementById('canvas');
+    const raycaster = new THREE.Raycaster();
+    const mouseNDC  = new THREE.Vector2();
+
+    _btnClickHandler = function (e) {
+      // Only fire on a clean click (not a drag)
+      const r = canvas.getBoundingClientRect();
+      mouseNDC.x =  ((e.clientX - r.left) / r.width)  * 2 - 1;
+      mouseNDC.y = -((e.clientY - r.top)  / r.height) * 2 + 1;
+      raycaster.setFromCamera(mouseNDC, App.camera);
+
+      const capMeshes = [];
+      App.state.components.forEach(c => {
+        if (c.type === 'button' && c.capMesh) capMeshes.push(c.capMesh);
+      });
+      if (!capMeshes.length) return;
+
+      const hits = raycaster.intersectObjects(capMeshes, false);
+      if (!hits.length) return;
+
+      const cap  = hits[0].object;
+      const comp = cap.userData.ownerComp;
+      if (comp) {
+        App.toggleButton(comp);   // animate cap + flip comp.pressed
+        App.runSimulation();      // re-evaluate circuit with new button state
+      }
+    };
+
+    canvas.addEventListener('click', _btnClickHandler);
+  }
+
+  function removeButtonClicks() {
+    if (_btnClickHandler) {
+      const canvas = document.getElementById('canvas');
+      canvas.removeEventListener('click', _btnClickHandler);
+      _btnClickHandler = null;
+    }
+  }
+
+  // ── Internal: clear visual state only (no button/UI reset) ──
+  function clearSimVisuals() {
+    activeLights.forEach(l => App.scene.remove(l));
+    activeLights.length = 0;
+    App.state.components.forEach(c => { if (c.type === 'led') dimLED(c); });
+    hideResults();
+  }
+
   // ── Public: runSimulation ───────────────────────────────────
   App.runSimulation = function () {
     const { components, wires } = App.state;
-    App.stopSimulation();
+    clearSimVisuals(); // preserve button states across re-runs
 
     if (!components.length) {
       showResults([{ text: 'No components placed.', cls: 'sim-warn' }]);
@@ -226,6 +285,10 @@
     const graph   = buildGraph(components, wires);
     const lines   = [];
     const bats    = graph.filter(g => g.comp.type === 'battery');
+    const buttons = components.filter(c => c.type === 'button');
+    if (buttons.length) {
+      lines.push({ text: `🔘 ${buttons.length} button${buttons.length > 1 ? 's' : ''} in circuit — click to press`, cls: 'sim-info' });
+    }
 
     if (!bats.length) {
       showResults([{ text: 'No battery in circuit.', cls: 'sim-warn' }]);
@@ -291,14 +354,27 @@
     showResults(lines);
     document.getElementById('sim-run-btn').style.display  = 'none';
     document.getElementById('sim-stop-btn').style.display = 'inline-flex';
+    installButtonClicks();
   };
 
   // ── Public: stopSimulation ──────────────────────────────────
   App.stopSimulation = function () {
-    activeLights.forEach(l => App.scene.remove(l));
-    activeLights.length = 0;
-    App.state.components.forEach(c => { if (c.type === 'led') dimLED(c); });
-    hideResults();
+    clearSimVisuals();
+    // Reset all buttons directly — no toggleButton call to avoid re-entrancy
+    App.state.components.forEach(c => {
+      if (c.type !== 'button') return;
+      c.pressed = false;
+      const cap = c.capMesh;
+      if (!cap) return;
+      if (cap.userData._animId) { cancelAnimationFrame(cap.userData._animId); cap.userData._animId = null; }
+      cap.position.y = cap.userData.capRestY;
+      if (cap.userData.matCloned) {
+        cap.material.color.setHex(0xe8e8e8);
+        cap.material.emissive.setHex(0x000000);
+        cap.material.emissiveIntensity = 0;
+      }
+    });
+    removeButtonClicks();
     const runBtn  = document.getElementById('sim-run-btn');
     const stopBtn = document.getElementById('sim-stop-btn');
     if (runBtn)  runBtn.style.display  = 'inline-flex';

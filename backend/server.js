@@ -2,10 +2,9 @@
  * Sparky AI Backend — Node.js (zero npm dependencies, CommonJS)
  * Requires Node 18+
  *
- * Run from project root:  node backend/server.js
- * Run from backend/:      node server.js
+ * Run from backend/:  node server.js
  *
- * POST /api/ask   { markdown, message, tools_enabled }  →  { reply, actions[] }
+ * POST /api/ask   { markdown, message }  →  { reply, actions[] }
  * GET  /api/health
  */
 
@@ -57,58 +56,110 @@ async function getToken() {
 }
 
 // ── Prompts ───────────────────────────────────────────────────
-const BASE_PROMPT = `You are Sparky, a friendly AI electronics tutor. You help beginners build circuits on a virtual 830-point breadboard.
+const BASE_PROMPT =
+`You are Sparky, a friendly AI electronics tutor. You help beginners build circuits on a virtual 830-point breadboard.
 
-You will be shown the current board state as markdown tables, then a question. Answer the question based on what is actually on the board.
+You will be shown the current board state as markdown tables, then a question. Answer based on what is actually on the board.
 
-IMPORTANT breadboard rules:
-- Columns 1-29. In each column: holes a/b/c/d/e share one electrical node (top section); holes f/g/h/i/j share another node (bottom section).
-- The center channel physically separates top (a-e) from bottom (f-j). You MUST add a wire to connect across it.
-- tp = positive power rail (+9V). tn = negative power rail / GND. These run the full board length.
-- Rails are NOT automatically connected to body holes — you must add a wire from tp/tn to the body hole.
-- LED pin_A = cathode (−) → to GND. LED pin_B = anode (+) → to higher voltage through a resistor.
-- Every LED needs a 220-470 ohm resistor in series or it will burn out instantly at 9V.
-- Battery pin0 = positive (+). Battery pin1 = negative (−). They are off-board; connect via the wire ref shown in the board state.
+BREADBOARD RULES:
+- Columns 1-29. Rows a/b/c/d/e = top half. Rows f/g/h/i/j = bottom half.
+- Same column + same half = electrically connected (e.g. a14 and e14 share a node).
+- The CENTER CHANNEL separates top from bottom — a14 and f14 are NOT connected unless you add a wire.
+- tp_N = positive power rail at column N (+9V). tn_N = GND rail at column N.
+- Rails are NOT auto-connected to body holes — always add a wire from tp/tn to the body hole.
+- Battery pin0 = positive (+), pin1 = negative (−). Off-board; wire to the rails first.
+- LED holeA = cathode (−) → GND. LED holeB = anode (+) → resistor → power.
+- Every LED needs a resistor in series.
 
 Reply style: 2-5 sentences max. Be specific with hole names like "a14" or "tp_10". Be encouraging.`;
 
-const TOOLS_ADDENDUM = `
-
-You can modify the circuit by appending an actions JSON block at the very end of your reply.
-Format EXACTLY like this — valid JSON array, nothing else inside the block:
-
-\`\`\`actions
-[
-  { "tool": "place_battery" },
-  { "tool": "place_resistor", "holeA": "a16", "holeB": "a20" },
-  { "tool": "place_led",      "holeA": "e14", "holeB": "e16" },
-  { "tool": "add_wire", "from": "battery_0_pin0", "to": "tp_20", "color": "red" },
-  { "tool": "add_wire", "from": "battery_0_pin1", "to": "tn_14", "color": "black" },
-  { "tool": "add_wire", "from": "tp_20", "to": "a20",  "color": "red" },
-  { "tool": "add_wire", "from": "e16",   "to": "a16",  "color": "yellow" },
-  { "tool": "add_wire", "from": "e14",   "to": "tn_14","color": "black" }
-]
-\`\`\`
-
-Available tools:
-- place_battery                          (always place before wiring to it)
-- place_resistor  "holeA"  "holeB"       (holeA and holeB must be 4 columns apart in same row, e.g. a16 and a20)
-- place_led       "holeA"  "holeB"       (holeA=cathode(−), holeB=anode(+), 2 columns apart, e.g. e14 and e16)
-- place_buzzer    "holeA"  "holeB"       (2 columns apart)
-- place_button    "holeA"  "holeB"       (3 columns apart)
-- add_wire        "from"   "to"  "color" (color: "red"|"yellow"|"green"|"blue"|"black"|"white")
-- delete_all
-
-WIRE NAMING:
-- Breadboard hole: "e14", "a10", "tp_10", "tn_5" etc.
-- Battery terminal: "battery_0_pin0" (positive), "battery_0_pin1" (negative)
-  (replace 0 with the battery index shown in the board state)
-
-Only append the actions block if the user is asking you to build or fix something. Do NOT include it for analysis-only questions.`;
+// Tools addendum — stored as an array of strings joined to avoid backtick escaping issues
+const TOOLS_ADDENDUM = [
+  '',
+  'You can modify the circuit by appending an actions JSON block at the very end of your reply.',
+  'Output ONLY a valid JSON array inside the block — no comments, no trailing commas.',
+  '',
+  '=== SIZING RULES ===',
+  'place_resistor : holeA and holeB exactly 4 columns apart, same row. E.g. a3 and a7.',
+  'place_led      : holeA=cathode(−), holeB=anode(+), exactly 2 columns apart, same row. E.g. a9 and a7 (cathode a9, anode a7).',
+  'place_button   : exactly 3 columns apart, same row. E.g. a12 and a15.',
+  'place_buzzer   : exactly 2 columns apart, same row.',
+  'Components on the same row MUST NOT share any columns — keep ranges non-overlapping.',
+  '',
+  '=== WIRING RECIPE FOR ONE LED (columns C to C+6) ===',
+  'Power flows: tp_C -> resistor(holeA=a{C}, holeB=a{C+4}) -> LED anode(holeB=a{C+4}) -> LED cathode(holeA=a{C+6}) -> tn_{C+6}',
+  'Note: resistor holeB and LED holeB share the same hole a{C+4} = they connect automatically.',
+  'Wires needed: (1) tp_{C} to a{C}  (2) a{C+6} to tn_{C+6}',
+  'For N LEDs in parallel, start each set 8 columns after the previous (C, C+8, C+16 ...).',
+  '',
+  '=== EXAMPLE: single LED at columns 3-9 ===',
+  '```actions',
+  '[',
+  '  { "tool": "place_battery" },',
+  '  { "tool": "add_wire", "from": "battery_0_pin0", "to": "tp_3",  "color": "red"   },',
+  '  { "tool": "add_wire", "from": "battery_0_pin1", "to": "tn_9",  "color": "black" },',
+  '  { "tool": "place_resistor", "holeA": "a3", "holeB": "a7" },',
+  '  { "tool": "place_led",      "holeA": "a9", "holeB": "a7" },',
+  '  { "tool": "add_wire", "from": "tp_3", "to": "a3",   "color": "red"   },',
+  '  { "tool": "add_wire", "from": "a9",   "to": "tn_9", "color": "black" }',
+  ']',
+  '```',
+  '',
+  '=== EXAMPLE: three LEDs in parallel (starts at cols 3, 11, 19) ===',
+  '```actions',
+  '[',
+  '  { "tool": "place_battery" },',
+  '  { "tool": "add_wire", "from": "battery_0_pin0", "to": "tp_3",  "color": "red"   },',
+  '  { "tool": "add_wire", "from": "battery_0_pin1", "to": "tn_9",  "color": "black" },',
+  '  { "tool": "place_resistor", "holeA": "a3",  "holeB": "a7"  },',
+  '  { "tool": "place_led",      "holeA": "a9",  "holeB": "a7"  },',
+  '  { "tool": "add_wire", "from": "tp_3",  "to": "a3",   "color": "red"   },',
+  '  { "tool": "add_wire", "from": "a9",    "to": "tn_9", "color": "black" },',
+  '  { "tool": "place_resistor", "holeA": "a11", "holeB": "a15" },',
+  '  { "tool": "place_led",      "holeA": "a17", "holeB": "a15" },',
+  '  { "tool": "add_wire", "from": "tp_11", "to": "a11",  "color": "red"   },',
+  '  { "tool": "add_wire", "from": "a17",   "to": "tn_17","color": "black" },',
+  '  { "tool": "place_resistor", "holeA": "a19", "holeB": "a23" },',
+  '  { "tool": "place_led",      "holeA": "a25", "holeB": "a23" },',
+  '  { "tool": "add_wire", "from": "tp_19", "to": "a19",  "color": "red"   },',
+  '  { "tool": "add_wire", "from": "a25",   "to": "tn_25","color": "black" }',
+  ']',
+  '```',
+  '',
+  '=== EXAMPLE: LED + push button (button in series on GND side) ===',
+  '```actions',
+  '[',
+  '  { "tool": "place_battery" },',
+  '  { "tool": "add_wire", "from": "battery_0_pin0", "to": "tp_3",  "color": "red"   },',
+  '  { "tool": "add_wire", "from": "battery_0_pin1", "to": "tn_16", "color": "black" },',
+  '  { "tool": "place_resistor", "holeA": "a3",  "holeB": "a7"  },',
+  '  { "tool": "place_led",      "holeA": "a9",  "holeB": "a7"  },',
+  '  { "tool": "place_button",   "holeA": "a12", "holeB": "a15" },',
+  '  { "tool": "add_wire", "from": "tp_3",  "to": "a3",   "color": "red"    },',
+  '  { "tool": "add_wire", "from": "a9",    "to": "a12",  "color": "yellow" },',
+  '  { "tool": "add_wire", "from": "a15",   "to": "tn_15","color": "black"  }',
+  ']',
+  '```',
+  '',
+  '=== TOOLS ===',
+  'place_battery',
+  'place_resistor  holeA holeB   (4 cols apart, same row)',
+  'place_led       holeA holeB   (holeA=cathode−, holeB=anode+, 2 cols apart, same row)',
+  'place_buzzer    holeA holeB   (2 cols apart, same row)',
+  'place_button    holeA holeB   (3 cols apart, same row)',
+  'add_wire        from to color (red|yellow|green|blue|black|white)',
+  'delete_all',
+  '',
+  '=== WIRE NAMES ===',
+  'Body hole: "a3", "e14", "j22"',
+  'Rail: "tp_5" (positive col 5), "tn_5" (GND col 5)',
+  'Battery: "battery_0_pin0" (+), "battery_0_pin1" (−)  [use index from board state]',
+  '',
+  'Append an actions block whenever the user asks you to build, place, add, wire, fix, connect, create, or modify the circuit. Do NOT include it for pure analysis questions.',
+].join('\n');
 
 // ── Clean up model output ─────────────────────────────────────
 function cleanReply(raw) {
-  // Strip common role-play artifacts the model sometimes appends
   return raw
     .replace(/\n?QUESTION:\s*$/, '')
     .replace(/\n?BOARD STATE:\s*$/, '')
@@ -116,7 +167,7 @@ function cleanReply(raw) {
     .trim();
 }
 
-// ── Parse ```actions block ────────────────────────────────────
+// ── Parse ```actions or ```json block ─────────────────────────
 function parseActions(text) {
   const match = text.match(/```(?:actions|json)\s*([\s\S]*?)```/);
   if (!match) return { reply: cleanReply(text), actions: [] };
@@ -128,20 +179,11 @@ function parseActions(text) {
 }
 
 // ── Call watsonx ──────────────────────────────────────────────
-async function askWatsonx(markdown, userMsg, toolsEnabled) {
-  const token  = await getToken();
-  const system = toolsEnabled ? BASE_PROMPT + TOOLS_ADDENDUM : BASE_PROMPT;
-  const msg    = userMsg || 'Analyze my circuit and tell me what to do next.';
+async function askWatsonx(markdown, userMsg) {
+  const token = await getToken();
+  const msg   = userMsg || 'Analyze my circuit and tell me what to do next.';
 
-  // Use QUESTION/ANSWER format — avoids collision with stop sequences
-  const prompt = `${system}
-
-BOARD STATE:
-${markdown || '**Board status: EMPTY — no components or wires placed yet.**'}
-
-QUESTION: ${msg}
-
-ANSWER:`;
+  const prompt = `${BASE_PROMPT}\n${TOOLS_ADDENDUM}\n\nBOARD STATE:\n${markdown || '**Board status: EMPTY — no components or wires placed yet.**'}\n\nQUESTION: ${msg}\n\nANSWER:`;
 
   const res = await fetch(
     `${WX_URL}/ml/v1/text/generation?version=2023-05-29`,
@@ -156,9 +198,9 @@ ANSWER:`;
         input: prompt,
         project_id: PROJECT_ID,
         parameters: {
-          max_new_tokens: 800,
+          max_new_tokens: 1000,
           min_new_tokens: 10,
-          temperature: 0.4,
+          temperature: 0.3,
           repetition_penalty: 1.1,
           stop_sequences: ['\nQUESTION:', '\nBOARD STATE:'],
         },
@@ -199,8 +241,8 @@ const server = http.createServer(async (req, res) => {
     req.on('data', chunk => (body += chunk));
     req.on('end', async () => {
       try {
-        const { markdown = '', message = '', tools_enabled = false } = JSON.parse(body || '{}');
-        const raw = await askWatsonx(markdown, message, tools_enabled);
+        const { markdown = '', message = '' } = JSON.parse(body || '{}');
+        const raw = await askWatsonx(markdown, message);
         const { reply, actions } = parseActions(raw);
         console.log(`[ask] "${message.slice(0,60)}" → ${actions.length} action(s)`);
         return sendJSON(res, 200, { reply, actions });

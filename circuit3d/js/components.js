@@ -474,6 +474,9 @@
     const cap = cylinder(0.18, 0.12, 18,
       new THREE.MeshLambertMaterial({ color: 0xe8e8e8 }));
     cap.position.set(midX, LEAD_H + 0.34, midZ);
+    cap.userData.isButtonCap = true;
+    cap.userData.capRestY    = LEAD_H + 0.34;
+    cap.userData.capPressY   = LEAD_H + 0.22;
     group.add(cap);
 
     // Tiny ring around cap base
@@ -489,7 +492,7 @@
       new THREE.Vector3(ax, 0, az),
       new THREE.Vector3(bx, 0, bz),
     ];
-    return { group, pins };
+    return { group, pins, capMesh: cap };
   }
 
   // ─────────────────────────────────────────────────────────────

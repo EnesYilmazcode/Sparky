@@ -365,7 +365,7 @@ async function sparkyAsk(overrideMsg, toolsEnabled) {
     const resp = await fetch(SPARKY_API, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ markdown, message: msg, tools_enabled: !!toolsEnabled }),
+      body: JSON.stringify({ markdown, message: msg, tools_enabled: true }),
     });
 
     const data = await resp.json();
