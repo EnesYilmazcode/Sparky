@@ -135,6 +135,8 @@
 
       for (const entry of graph) {
         if (entry.comp === skipComp) continue;
+        // Open buttons are breaks in the circuit — cannot be traversed
+        if (entry.comp.type === 'button' && !entry.comp.pressed) continue;
         const ns = entry.nodes;
 
         for (let inPin = 0; inPin < ns.length; inPin++) {
@@ -275,6 +277,7 @@
   // ── Public: runSimulation ───────────────────────────────────
   App.runSimulation = function () {
     const { components, wires } = App.state;
+    const isRerun = _btnClickHandler !== null; // already running = button click re-run
     clearSimVisuals(); // preserve button states across re-runs
 
     if (!components.length) {
@@ -286,12 +289,14 @@
     const lines   = [];
     const bats    = graph.filter(g => g.comp.type === 'battery');
     const buttons = components.filter(c => c.type === 'button');
-    if (buttons.length) {
-      lines.push({ text: `🔘 ${buttons.length} button${buttons.length > 1 ? 's' : ''} in circuit — click to press`, cls: 'sim-info' });
-    }
+    buttons.forEach((btn, i) => {
+      const state = btn.pressed ? '🟢 CLOSED (current flowing)' : '⭕ OPEN — click to press';
+      lines.push({ text: `Button ${i + 1}: ${state}`, cls: btn.pressed ? 'sim-on' : 'sim-info' });
+    });
 
     if (!bats.length) {
       showResults([{ text: 'No battery in circuit.', cls: 'sim-warn' }]);
+      if (!isRerun) installButtonClicks();
       return;
     }
 
@@ -354,7 +359,9 @@
     showResults(lines);
     document.getElementById('sim-run-btn').style.display  = 'none';
     document.getElementById('sim-stop-btn').style.display = 'inline-flex';
-    installButtonClicks();
+    // Only install the click handler on the first run — re-runs from
+    // the button handler itself keep the same handler alive.
+    if (!isRerun) installButtonClicks();
   };
 
   // ── Public: stopSimulation ──────────────────────────────────

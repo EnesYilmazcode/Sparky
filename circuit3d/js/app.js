@@ -184,7 +184,7 @@
       }
 
       const targetY   = comp.pressed ? cap.userData.capPressY : cap.userData.capRestY;
-      const targetCol = comp.pressed ? 0x44cc44 : 0xe8e8e8;
+      const targetCol = comp.pressed ? 0x44cc44 : 0xe5e5e5;
       const targetEmi = comp.pressed ? 0x115511 : 0x000000;
       const targetEmiI = comp.pressed ? 0.6 : 0;
 

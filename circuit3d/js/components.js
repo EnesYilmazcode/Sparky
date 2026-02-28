@@ -443,49 +443,65 @@
     const bx = holeB.x, bz = holeB.z;
     const midX = (ax + bx) / 2;
     const midZ = (az + bz) / 2;
-    const LEAD_H = 0.55;
+    const LEAD_H = 0.42;  // lead height — body sits right on top
 
-    // Vertical leads (shorter — button sits lower)
+    // Determine span direction to orient the connector rail correctly
+    const dx = bx - ax, dz = bz - az;
+    const spanLen = Math.sqrt(dx * dx + dz * dz);
+
+    // Vertical leads going from board surface up to rail height
     [[ax, az], [bx, bz]].forEach(([x, z]) => {
       const l = new THREE.Mesh(
-        new THREE.CylinderGeometry(0.022, 0.022, LEAD_H, 7),
+        new THREE.CylinderGeometry(0.025, 0.025, LEAD_H, 8),
         LEAD_MAT()
       );
       l.position.set(x, LEAD_H / 2, z);
       group.add(l);
     });
 
-    // Square body (light green PCB color)
-    const body = box(0.52, 0.28, 0.52,
-      new THREE.MeshLambertMaterial({ color: 0x3a7a3a }));
-    body.position.set(midX, LEAD_H + 0.14, midZ);
+    // Horizontal metal rail connecting both leads at top — the bridge bar
+    // Oriented along the span direction using rotation
+    const railGeo = new THREE.CylinderGeometry(0.025, 0.025, spanLen, 8);
+    const rail    = new THREE.Mesh(railGeo, LEAD_MAT());
+    // Rotate rail to lie horizontal along the span
+    rail.rotation.z = Math.atan2(dz, dx) + Math.PI / 2;  // tilt 90° so axis aligns
+    if (Math.abs(dz) > Math.abs(dx)) {
+      // Primarily Z direction — rotate around X instead
+      rail.rotation.z = 0;
+      rail.rotation.x = Math.PI / 2;
+    }
+    rail.position.set(midX, LEAD_H, midZ);
+    group.add(rail);
+
+    // Square body sitting on the rail
+    const body = box(0.50, 0.30, 0.50,
+      new THREE.MeshLambertMaterial({ color: 0x2d6a2d }));
+    body.position.set(midX, LEAD_H + 0.15, midZ);
     body.castShadow = true;
     group.add(body);
 
-    // Small silver pin stubs on body sides
-    [ax, bx].forEach((x, i) => {
-      const stub = box(Math.abs(bx - ax) * 0.25, 0.06, 0.06, LEAD_MAT());
-      const dir = i === 0 ? -1 : 1;
-      stub.position.set(midX + dir * 0.32, LEAD_H + 0.05, midZ);
-      group.add(stub);
-    });
+    // Cap stem (the white plastic column the cap sits on)
+    const stem = cylinder(0.09, 0.10, 10,
+      new THREE.MeshLambertMaterial({ color: 0xdddddd }));
+    stem.position.set(midX, LEAD_H + 0.36, midZ);
+    group.add(stem);
 
-    // Round cap on top (off-white / light gray)
-    const cap = cylinder(0.18, 0.12, 18,
-      new THREE.MeshLambertMaterial({ color: 0xe8e8e8 }));
-    cap.position.set(midX, LEAD_H + 0.34, midZ);
+    // Round cap on top — only presses down 0.07 units
+    const cap = cylinder(0.19, 0.10, 18,
+      new THREE.MeshLambertMaterial({ color: 0xe5e5e5 }));
+    cap.position.set(midX, LEAD_H + 0.47, midZ);
     cap.userData.isButtonCap = true;
-    cap.userData.capRestY    = LEAD_H + 0.34;
-    cap.userData.capPressY   = LEAD_H + 0.22;
+    cap.userData.capRestY    = LEAD_H + 0.47;
+    cap.userData.capPressY   = LEAD_H + 0.40;   // only 0.07 down — subtle
     group.add(cap);
 
-    // Tiny ring around cap base
+    // Thin ring at cap base
     const ring = new THREE.Mesh(
-      new THREE.TorusGeometry(0.19, 0.025, 6, 16),
-      new THREE.MeshLambertMaterial({ color: 0xaaaaaa })
+      new THREE.TorusGeometry(0.20, 0.022, 6, 18),
+      new THREE.MeshLambertMaterial({ color: 0x999999 })
     );
     ring.rotation.x = Math.PI / 2;
-    ring.position.set(midX, LEAD_H + 0.28, midZ);
+    ring.position.set(midX, LEAD_H + 0.42, midZ);
     group.add(ring);
 
     const pins = [
