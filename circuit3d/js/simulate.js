@@ -31,7 +31,55 @@
     battery:  { voltage: 9.0 },
     resistor: { resistance: 220 },    // 220 Ω default
     led:      { forwardVoltage: 2.0, thresholdCurrent: 0.001 },
+    buzzer:   { resistance: 42,      thresholdCurrent: 0.001 },
   };
+
+  // ── Buzzer audio ─────────────────────────────────────────────
+  let _audioCtx = null;
+  const _buzzerNodes = new Map(); // comp → { osc, gain }
+
+  function _getAudioCtx() {
+    if (!_audioCtx) _audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    return _audioCtx;
+  }
+
+  function activateBuzzer(comp) {
+    if (_buzzerNodes.has(comp)) return;
+    try {
+      const ctx  = _getAudioCtx();
+      const osc  = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.type = 'square';
+      osc.frequency.value = 220;   // low, buzzy tone
+      gain.gain.value = 0.12;
+      osc.connect(gain);
+      gain.connect(ctx.destination);
+      osc.start();
+      _buzzerNodes.set(comp, { osc, gain });
+    } catch {}
+  }
+
+  function deactivateBuzzer(comp) {
+    const node = _buzzerNodes.get(comp);
+    if (!node) return;
+    try {
+      const ctx = _getAudioCtx();
+      node.gain.gain.setTargetAtTime(0, ctx.currentTime, 0.02);
+      setTimeout(() => { try { node.osc.stop(); } catch {} }, 80);
+    } catch {}
+    _buzzerNodes.delete(comp);
+  }
+
+  function stopAllBuzzers() {
+    _buzzerNodes.forEach((node) => {
+      try {
+        const ctx = _getAudioCtx();
+        node.gain.gain.setTargetAtTime(0, ctx.currentTime, 0.02);
+        setTimeout(() => { try { node.osc.stop(); } catch {} }, 80);
+      } catch {}
+    });
+    _buzzerNodes.clear();
+  }
 
   // ── Union-Find ──────────────────────────────────────────────
   class UnionFind {
@@ -268,7 +316,11 @@
   function clearSimVisuals() {
     activeLights.forEach(l => App.scene.remove(l));
     activeLights.length = 0;
-    App.state.components.forEach(c => { if (c.type === 'led') dimLED(c); });
+    App.state.components.forEach(c => {
+      if (c.type === 'led')    dimLED(c);
+      if (c.type === 'buzzer') deactivateBuzzer(c);
+    });
+    stopAllBuzzers();
     hideResults();
   }
 
@@ -318,8 +370,8 @@
       }
 
       // Each path is an independent parallel branch — evaluate separately.
-      // Track lit LEDs so a shared LED isn't processed twice.
-      const litLEDs = new Set();
+      const litLEDs     = new Set();
+      const litBuzzers  = new Set();
       let   shortCircuit = false;
 
       paths.forEach((path, pi) => {
@@ -346,20 +398,34 @@
         const I_mA = I * 1000;
 
         path.forEach(step => {
-          if (step.comp.type !== 'led') return;
-          if (litLEDs.has(step.comp)) return; // already processed
-          litLEDs.add(step.comp);
-          if (I >= PROPS.led.thresholdCurrent) {
-            lightUpLED(step.comp);
-            lines.push({ text: `  💡 LED ON  (${I_mA.toFixed(1)} mA)`, cls: 'sim-on' });
-          } else {
-            lines.push({ text: '  LED: current too low.', cls: 'sim-warn' });
+          const type = step.comp.type;
+
+          if (type === 'led') {
+            if (litLEDs.has(step.comp)) return;
+            litLEDs.add(step.comp);
+            if (I >= PROPS.led.thresholdCurrent) {
+              lightUpLED(step.comp);
+              lines.push({ text: `  💡 LED ON  (${I_mA.toFixed(1)} mA)`, cls: 'sim-on' });
+            } else {
+              lines.push({ text: '  LED: current too low.', cls: 'sim-warn' });
+            }
+          }
+
+          if (type === 'buzzer') {
+            if (litBuzzers.has(step.comp)) return;
+            litBuzzers.add(step.comp);
+            if (I >= PROPS.buzzer.thresholdCurrent) {
+              activateBuzzer(step.comp);
+              lines.push({ text: `  🔔 BUZZER ON  (${I_mA.toFixed(1)} mA)`, cls: 'sim-on' });
+            } else {
+              lines.push({ text: '  Buzzer: current too low.', cls: 'sim-warn' });
+            }
           }
         });
       });
 
-      if (!shortCircuit && litLEDs.size === 0 && paths.length > 0) {
-        lines.push({ text: '  No LEDs in circuit path.', cls: 'sim-info' });
+      if (!shortCircuit && litLEDs.size === 0 && litBuzzers.size === 0 && paths.length > 0) {
+        lines.push({ text: '  No output components in circuit path.', cls: 'sim-info' });
       }
     });
 

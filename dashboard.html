@@ -93,7 +93,7 @@
     }
     .sidebar-item:hover { background: var(--bg-hover); color: var(--text); }
     .sidebar-item.active { background: var(--bg-hover); color: var(--text); font-weight: 600; }
-    .sidebar-icon { font-size: 1rem; width: 1.25rem; text-align: center; flex-shrink: 0; }
+    .sidebar-icon { width: 15px; height: 15px; display: inline-flex; align-items: center; justify-content: center; flex-shrink: 0; color: currentColor; }
 
     /* ── Main ───────────────────────────────────────────────── */
     .main {
@@ -540,14 +540,14 @@
     </div>
     <nav class="sidebar-nav">
       <button class="sidebar-item active" id="nav-my" onclick="switchTab('my')">
-        <span class="sidebar-icon">🗂</span>My Circuits
+        <span class="sidebar-icon"><svg width="15" height="15" viewBox="0 0 15 15" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="1.5" y="1.5" width="4.5" height="4.5" rx="1"/><rect x="9" y="1.5" width="4.5" height="4.5" rx="1"/><rect x="1.5" y="9" width="4.5" height="4.5" rx="1"/><rect x="9" y="9" width="4.5" height="4.5" rx="1"/></svg></span>My Circuits
       </button>
       <button class="sidebar-item" id="nav-sparks" onclick="switchTab('sparks')">
-        <span class="sidebar-icon">✨</span>Sparks
+        <span class="sidebar-icon"><svg width="15" height="15" viewBox="0 0 15 15" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M9 2L4.5 8.5H8.5L6 13 11.5 6H7.5L9 2z"/></svg></span>Sparks
       </button>
       <div style="flex:1;"></div>
       <button class="sidebar-item" onclick="logout()">
-        <span class="sidebar-icon">🚪</span>Log Out
+        <span class="sidebar-icon"><svg width="15" height="15" viewBox="0 0 15 15" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M5.5 3H3a1 1 0 00-1 1v7a1 1 0 001 1h2.5"/><path d="M9 5.5l3 2-3 2"/><line x1="12" y1="7.5" x2="6" y2="7.5"/></svg></span>Log Out
       </button>
     </nav>
   </aside>
@@ -638,6 +638,8 @@
 
     // ── Auth gate ────────────────────────────────────────────────
     let _currentUser = null;
+    let _authUsername = null; // set when /api/auth/me succeeds
+
     async function checkAuth() {
       const token = getToken();
       if (!token) { window.location.href = 'landing.html'; return; }
@@ -653,6 +655,30 @@
         clearToken();
         window.location.href = 'landing.html';
       }
+    }
+
+    // Silent auth — try to get logged-in user; never redirects on failure
+    async function tryAuth() {
+      const token = getToken();
+      if (!token) return;
+      try {
+        const res = await fetch(API_BASE + '/api/auth/me', {
+          headers: { 'Authorization': 'Bearer ' + token },
+        });
+        if (!res.ok) return;
+        const data = await res.json();
+        const user = data.user || data;
+        _currentUser = user;
+        if (user.email) {
+          _authUsername = user.email.split('@')[0];
+          localStorage.setItem('sparky_username', _authUsername);
+          document.getElementById('user-info').textContent = _authUsername;
+        } else if (user.name) {
+          _authUsername = user.name;
+          localStorage.setItem('sparky_username', _authUsername);
+          document.getElementById('user-info').textContent = _authUsername;
+        }
+      } catch { /* offline / no backend — ignore */ }
     }
 
     // ── Local project storage ─────────────────────────────────────
@@ -704,9 +730,16 @@
       _publishIdx = idx;
 
       // Pre-fill fields
-      document.getElementById('publish-name').value   = c.name || '';
-      document.getElementById('publish-author').value = localStorage.getItem('sparky_username') || '';
-      document.getElementById('publish-desc').value   = '';
+      document.getElementById('publish-name').value = c.name || '';
+      document.getElementById('publish-desc').value = '';
+
+      const authorEl = document.getElementById('publish-author');
+      const knownUser = _authUsername || localStorage.getItem('sparky_username') || '';
+      authorEl.value    = knownUser;
+      authorEl.readOnly = !!_authUsername;
+      authorEl.style.background = _authUsername ? 'var(--bg-hover)' : '';
+      authorEl.style.color      = _authUsername ? 'var(--text-sub)' : '';
+      authorEl.style.cursor     = _authUsername ? 'default' : '';
 
       // Thumbnail preview
       const th = document.getElementById('publish-thumb');
@@ -731,8 +764,8 @@
       const author = document.getElementById('publish-author').value.trim() || 'Anonymous';
       const desc   = document.getElementById('publish-desc').value.trim();
 
-      // Persist username for next time
-      localStorage.setItem('sparky_username', author);
+      // Persist username for next time (only if not locked to auth account)
+      if (!_authUsername) localStorage.setItem('sparky_username', author);
 
       saveSpark({
         id:         c.id,
@@ -755,8 +788,9 @@
       if (e.target === this) closePublishModal();
     });
 
-    // legacy placeholder stub — no longer used
-    const COMMUNITY_SPARKS = [
+    // COMMUNITY_SPARKS removed — sparks are user-published circuits from localStorage
+    const COMMUNITY_SPARKS_REMOVED = true; // tombstone
+    if (false) { const _unused = [
       {
         id: 'spark_blink',
         title: 'Classic Blink LED',
@@ -905,7 +939,7 @@
           ]
         }
       }
-    ];
+    ]; }
 
     // ── Tab switching ──────────────────────────────────────────
     function switchTab(tab) {
@@ -977,7 +1011,7 @@
 
       const thumbHtml = c.thumbnail
         ? `<img src="${c.thumbnail}" style="width:100%;height:100%;object-fit:cover;display:block;">`
-        : `<div class="card-thumb-grid"><span class="card-thumb-emoji">🔌</span></div>`;
+        : `<div class="card-thumb-grid"><span class="card-thumb-emoji" style="color:var(--text-dim)"><svg width="36" height="25" viewBox="0 0 36 25" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"><rect x="1" y="4" width="34" height="17" rx="1.5"/><line x1="7" y1="4" x2="7" y2="21"/><line x1="13" y1="4" x2="13" y2="21"/><line x1="18" y1="4" x2="18" y2="21"/><line x1="23" y1="4" x2="23" y2="21"/><line x1="29" y1="4" x2="29" y2="21"/><line x1="4" y1="1.5" x2="4" y2="4"/><line x1="10" y1="1.5" x2="10" y2="4"/><line x1="15" y1="1.5" x2="15" y2="4"/><line x1="20" y1="1.5" x2="20" y2="4"/><line x1="26" y1="1.5" x2="26" y2="4"/><line x1="31" y1="1.5" x2="31" y2="4"/><line x1="4" y1="21" x2="4" y2="23.5"/><line x1="10" y1="21" x2="10" y2="23.5"/><line x1="15" y1="21" x2="15" y2="23.5"/><line x1="20" y1="21" x2="20" y2="23.5"/><line x1="26" y1="21" x2="26" y2="23.5"/><line x1="31" y1="21" x2="31" y2="23.5"/></svg></span></div>`;
 
       card.innerHTML = `
         <div class="card-thumb">${thumbHtml}</div>
@@ -1110,7 +1144,7 @@
       sparks.forEach((spark, idx) => {
         const thumbHtml = spark.thumbnail
           ? `<img src="${spark.thumbnail}" style="width:100%;height:100%;object-fit:cover;display:block;">`
-          : `<span style="font-size:2rem;">🔌</span>`;
+          : `<span style="color:#555"><svg width="40" height="28" viewBox="0 0 36 25" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"><rect x="1" y="4" width="34" height="17" rx="1.5"/><line x1="7" y1="4" x2="7" y2="21"/><line x1="13" y1="4" x2="13" y2="21"/><line x1="18" y1="4" x2="18" y2="21"/><line x1="23" y1="4" x2="23" y2="21"/><line x1="29" y1="4" x2="29" y2="21"/><line x1="4" y1="1.5" x2="4" y2="4"/><line x1="10" y1="1.5" x2="10" y2="4"/><line x1="15" y1="1.5" x2="15" y2="4"/><line x1="20" y1="1.5" x2="20" y2="4"/><line x1="26" y1="1.5" x2="26" y2="4"/><line x1="31" y1="1.5" x2="31" y2="4"/><line x1="4" y1="21" x2="4" y2="23.5"/><line x1="10" y1="21" x2="10" y2="23.5"/><line x1="15" y1="21" x2="15" y2="23.5"/><line x1="20" y1="21" x2="20" y2="23.5"/><line x1="26" y1="21" x2="26" y2="23.5"/><line x1="31" y1="21" x2="31" y2="23.5"/></svg></span>`;
 
         const card = document.createElement('div');
         card.className = 'spark-card';
@@ -1170,6 +1204,7 @@
     }
 
     // ── Init ───────────────────────────────────────────────────
+    tryAuth(); // silently populate username if logged in (non-blocking)
     renderMyCircuits();
   </script>
 </body>
