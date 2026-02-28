@@ -218,13 +218,13 @@
     comp.group.traverse(obj => {
       if (!obj.isMesh || !obj.material.transparent) return;
       obj.material = obj.material.clone();
-      obj.material.emissiveIntensity = 2.2;
-      obj.material.opacity = 0.97;
+      obj.material.emissiveIntensity = 3.5;
+      obj.material.opacity = 1.0;
     });
 
     const ledColor = getDomeColor(comp) ?? 0xffffff;
     const p0 = comp.pins[0], p1 = comp.pins[1];
-    const light = new THREE.PointLight(ledColor, 4.0, 7);
+    const light = new THREE.PointLight(ledColor, 8.0, 10);
     light.position.set((p0.x + p1.x) / 2, 3.0, (p0.z + p1.z) / 2);
     App.scene.add(light);
     activeLights.push(light);

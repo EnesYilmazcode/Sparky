@@ -375,12 +375,74 @@ function sparkyExecActions(actions) {
         App.placeBattery(13, 0); done++;
       } else if (a.tool === 'add_wire') {
         execWire(a.from, a.to, a.color); done++;
+      } else if (a.tool === 'remove_component') {
+        if (execRemoveComponent(a.id)) done++;
+      } else if (a.tool === 'remove_wire') {
+        if (execRemoveWire(a.from, a.to)) done++;
       } else if (a.tool === 'delete_all') {
         App.clearAll(); done++;
       }
     } catch (e) { console.warn('Action failed:', a, e.message); }
   });
   return done;
+}
+
+function execRemoveComponent(compId) {
+  if (!compId) return false;
+  // Parse id like "resistor_0", "led_1", "battery_0"
+  const m = compId.match(/^(\w+)_(\d+)$/);
+  if (!m) return false;
+  const type = m[1], idx = parseInt(m[2]);
+  const comps = App.state.components.filter(c => c.type === type);
+  const comp = comps[idx];
+  if (!comp) { console.warn('remove_component: not found:', compId); return false; }
+  // Remove from scene
+  (comp.pinMeshes || []).forEach(pm => App.scene.remove(pm));
+  App.scene.remove(comp.group);
+  App.state.components = App.state.components.filter(c => c !== comp);
+  console.log('Removed component:', compId);
+  return true;
+}
+
+function execRemoveWire(fromStr, toStr) {
+  if (!fromStr || !toStr) return false;
+  const bb = App.state.breadboard;
+  // Helper to normalize a wire endpoint to a comparable string
+  function holeKey(ref) {
+    if (!ref) return null;
+    return ref.row + (ref.col + 1);
+  }
+  function pinKey(comp, pinIdx) {
+    if (!comp) return null;
+    const idx = App.state.components.indexOf(comp);
+    return `${comp.type}_${idx}_pin${pinIdx}`;
+  }
+  function wireEndKey(w, side) {
+    if (side === 'start') {
+      if (w.startHole) return holeKey(w.startHole);
+      if (w.startComp) return pinKey(w.startComp, w.startPinIdx);
+    } else {
+      if (w.endHole) return holeKey(w.endHole);
+      if (w.endComp) return pinKey(w.endComp, w.endPinIdx);
+    }
+    return null;
+  }
+  // Normalize the from/to strings for comparison
+  const normFrom = fromStr.toLowerCase();
+  const normTo = toStr.toLowerCase();
+  // Find matching wire (check both orderings)
+  const idx = App.state.wires.findIndex(w => {
+    const ws = wireEndKey(w, 'start');
+    const we = wireEndKey(w, 'end');
+    if (!ws || !we) return false;
+    return (ws === normFrom && we === normTo) || (ws === normTo && we === normFrom);
+  });
+  if (idx === -1) { console.warn('remove_wire: not found:', fromStr, '→', toStr); return false; }
+  const wire = App.state.wires[idx];
+  App.scene.remove(wire.group);
+  App.state.wires.splice(idx, 1);
+  console.log('Removed wire:', fromStr, '→', toStr);
+  return true;
 }
 
 function execWire(fromStr, toStr, colorName) {
@@ -469,6 +531,49 @@ function sparkyPreviewActions(actions) {
 
     } else if (a.tool === 'add_wire') {
       ghost = _buildWireGhost(a.from, a.to, a.color, pendingPins);
+
+    } else if (a.tool === 'remove_component') {
+      // Highlight the component to be removed with red tint
+      const m = a.id && a.id.match(/^(\w+)_(\d+)$/);
+      if (m) {
+        const comps = App.state.components.filter(c => c.type === m[1]);
+        const comp = comps[parseInt(m[2])];
+        if (comp && comp.group) {
+          comp.group.traverse(child => {
+            if (child.isMesh && child.material) {
+              child._origMaterial = child.material;
+              child.material = child.material.clone();
+              child.material.color.set(0xff0000);
+              child.material.transparent = true;
+              child.material.opacity = 0.5;
+            }
+          });
+          _pendingGhosts.push({ _isRemovalHighlight: true, comp: comp });
+        }
+      }
+
+    } else if (a.tool === 'remove_wire') {
+      // Highlight the wire to be removed with red tint
+      const normFrom = a.from?.toLowerCase(), normTo = a.to?.toLowerCase();
+      function hk(ref) { return ref ? ref.row + (ref.col + 1) : null; }
+      function pk(comp, pi) { const i = App.state.components.indexOf(comp); return comp ? `${comp.type}_${i}_pin${pi}` : null; }
+      const wire = App.state.wires.find(w => {
+        const ws = w.startHole ? hk(w.startHole) : pk(w.startComp, w.startPinIdx);
+        const we = w.endHole ? hk(w.endHole) : pk(w.endComp, w.endPinIdx);
+        return (ws === normFrom && we === normTo) || (ws === normTo && we === normFrom);
+      });
+      if (wire && wire.group) {
+        wire.group.traverse(child => {
+          if (child.isMesh && child.material) {
+            child._origMaterial = child.material;
+            child.material = child.material.clone();
+            child.material.color.set(0xff0000);
+            child.material.transparent = true;
+            child.material.opacity = 0.5;
+          }
+        });
+        _pendingGhosts.push({ _isRemovalHighlight: true, wire: wire });
+      }
     }
     // delete_all: no ghost mesh — flagged in the pending bar text instead
 
@@ -540,7 +645,22 @@ function sparkyDeclineChanges() {
 }
 
 function _sparkyClearGhosts() {
-  _pendingGhosts.forEach(g => App.scene.remove(g));
+  _pendingGhosts.forEach(g => {
+    if (g._isRemovalHighlight) {
+      // Restore original materials on highlighted components/wires
+      const target = g.comp ? g.comp.group : g.wire ? g.wire.group : null;
+      if (target) {
+        target.traverse(child => {
+          if (child.isMesh && child._origMaterial) {
+            child.material = child._origMaterial;
+            delete child._origMaterial;
+          }
+        });
+      }
+    } else {
+      App.scene.remove(g);
+    }
+  });
   _pendingGhosts = [];
 }
 
