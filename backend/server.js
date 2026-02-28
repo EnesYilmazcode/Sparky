@@ -153,6 +153,12 @@ BREADBOARD RULES:
 - LED holeA = cathode (−) → GND. LED holeB = anode (+) → resistor → power.
 - Every LED needs a resistor in series.
 
+BUILDING BEHAVIOR:
+- When the user asks you to build, fix, or help with a circuit, FIRST look at the current board state and infer what the user is trying to build (e.g. "a simple LED circuit", "an LED with a button", etc.).
+- ALWAYS start your actions with { "tool": "delete_all" } to clear the board, then build the complete working circuit from scratch.
+- Do NOT try to patch or modify the existing circuit — clear it and rebuild it correctly.
+- After building, explain what you built and briefly how it works so the student learns.
+
 Reply style: 2-5 sentences max. Be specific with hole names like "a14" or "tp_10". Be encouraging.`;
 
 // Tools addendum — stored as an array of strings joined to avoid backtick escaping issues
@@ -238,6 +244,7 @@ const TOOLS_ADDENDUM = [
   'Battery: "battery_0_pin0" (+), "battery_0_pin1" (−)  [use index from board state]',
   '',
   'Append an actions block whenever the user asks you to build, place, add, wire, fix, connect, create, or modify the circuit. Do NOT include it for pure analysis questions.',
+  'IMPORTANT: When building or fixing a circuit, ALWAYS begin the actions array with { "tool": "delete_all" }, then build the full correct circuit from scratch. Infer the user\'s intent from what is on the board — e.g. if they have an incomplete LED circuit, rebuild a correct LED circuit. Never try to patch — always clear and rebuild.',
 ].join('\n');
 
 // ── Clean up model output ─────────────────────────────────────
