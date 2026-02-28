@@ -118,24 +118,26 @@
 
   // ── Path finding ─────────────────────────────────────────────
   //
-  //  DFS from startNode → endNode, respecting polarity:
-  //   - A resistor can be traversed in either direction.
-  //   - An LED can only be traversed from anode (pin 1) → cathode (pin 0).
-  //   - A battery is the source; it is excluded from the search.
+  //  Backtracking DFS — finds ALL complete paths from startNode to
+  //  endNode so that parallel branches (multiple LEDs) are each
+  //  evaluated independently.  Cap at 30 paths for safety.
   //
-  //  Returns ordered list of { comp, enteredViaPinIdx, exitedViaPinIdx }
-  //  or null if no path exists.
-  //
-  function findPath(graph, startNode, endNode, skipComp) {
-    const visited = new Set([startNode]);
-    const path    = [];
+  function findAllPaths(graph, startNode, endNode, skipComp) {
+    const allPaths = [];
+    const visited  = new Set([startNode]);
+    const path     = [];
 
     function dfs(cur) {
-      if (cur === endNode) return true;
+      if (allPaths.length >= 30) return; // safety cap
+
+      if (cur === endNode) {
+        allPaths.push([...path]);
+        return; // record path and keep searching (don't stop here)
+      }
 
       for (const entry of graph) {
         if (entry.comp === skipComp) continue;
-        // Open buttons are breaks in the circuit — cannot be traversed
+        // Open buttons break the circuit
         if (entry.comp.type === 'button' && !entry.comp.pressed) continue;
         const ns = entry.nodes;
 
@@ -144,25 +146,21 @@
 
           for (let outPin = 0; outPin < ns.length; outPin++) {
             if (outPin === inPin) continue;
-
-            // LED is treated as bidirectional — current flows either way.
-            // (Real diodes are unidirectional but we keep it simple here.)
-
             const next = ns[outPin];
             if (visited.has(next)) continue;
 
             visited.add(next);
             path.push({ comp: entry.comp, inPin, outPin });
-            if (dfs(next)) return true;
+            dfs(next);        // don't early-exit; backtrack and keep going
             path.pop();
             visited.delete(next);
           }
         }
       }
-      return false;
     }
 
-    return dfs(startNode) ? [...path] : null;
+    dfs(startNode);
+    return allPaths;
   }
 
   // ── Visual: LED on/off ──────────────────────────────────────
@@ -307,12 +305,10 @@
 
       lines.push({ text: `Battery ${bi + 1}: ${V}V`, cls: 'sim-info' });
 
-      const path = findPath(graph, posNode, negNode, bat.comp);
+      const paths = findAllPaths(graph, posNode, negNode, bat.comp);
 
-      if (!path) {
+      if (!paths.length) {
         lines.push({ text: '  Circuit open — no complete path.', cls: 'sim-warn' });
-
-        // Give more specific hints
         const hasBatConn = graph.some(g =>
           g.comp !== bat.comp && g.nodes.some(n => n === posNode || n === negNode));
         if (!hasBatConn) {
@@ -321,39 +317,50 @@
         return;
       }
 
-      let totalR  = 0;
-      let totalVf = 0;
-      path.forEach(step => {
-        const p = PROPS[step.comp.type] || {};
-        totalR  += p.resistance     || 0;
-        totalVf += p.forwardVoltage || 0;
-        lines.push({ text: `  → ${step.comp.type}`, cls: 'sim-path' });
-      });
+      // Each path is an independent parallel branch — evaluate separately.
+      // Track lit LEDs so a shared LED isn't processed twice.
+      const litLEDs = new Set();
+      let   shortCircuit = false;
 
-      const netV = V - totalVf;
-      if (netV <= 0) {
-        lines.push({ text: '  Voltage too low to drive circuit.', cls: 'sim-warn' });
-        return;
-      }
-      if (totalR === 0) {
-        lines.push({ text: '  ⚠ Short circuit — no resistance in path!', cls: 'sim-err' });
-        return;
-      }
+      paths.forEach((path, pi) => {
+        let totalR  = 0;
+        let totalVf = 0;
+        path.forEach(step => {
+          const p = PROPS[step.comp.type] || {};
+          totalR  += p.resistance     || 0;
+          totalVf += p.forwardVoltage || 0;
+        });
 
-      const I    = netV / totalR;
-      const I_mA = I * 1000;
-      lines.push({ text: `  Current: ${I_mA.toFixed(1)} mA`, cls: 'sim-info' });
+        if (totalR === 0) {
+          if (!shortCircuit) {
+            lines.push({ text: '  ⚠ Short circuit — no resistance in path!', cls: 'sim-err' });
+            shortCircuit = true;
+          }
+          return;
+        }
 
-      path.forEach(step => {
-        if (step.comp.type === 'led') {
+        const netV = V - totalVf;
+        if (netV <= 0) return; // not enough voltage for this branch
+
+        const I    = netV / totalR;
+        const I_mA = I * 1000;
+
+        path.forEach(step => {
+          if (step.comp.type !== 'led') return;
+          if (litLEDs.has(step.comp)) return; // already processed
+          litLEDs.add(step.comp);
           if (I >= PROPS.led.thresholdCurrent) {
             lightUpLED(step.comp);
             lines.push({ text: `  💡 LED ON  (${I_mA.toFixed(1)} mA)`, cls: 'sim-on' });
           } else {
             lines.push({ text: '  LED: current too low.', cls: 'sim-warn' });
           }
-        }
+        });
       });
+
+      if (!shortCircuit && litLEDs.size === 0 && paths.length > 0) {
+        lines.push({ text: '  No LEDs in circuit path.', cls: 'sim-info' });
+      }
     });
 
     showResults(lines);
