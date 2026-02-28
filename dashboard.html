@@ -50,8 +50,12 @@
     }
 
     .sidebar-top {
-      padding: 1.25rem 1rem 0.75rem;
+      height: 56px;
+      display: flex;
+      align-items: center;
+      padding: 0 1rem;
       border-bottom: 1px solid var(--border-lo);
+      flex-shrink: 0;
     }
     .sidebar-logo {
       display: flex;
@@ -496,6 +500,59 @@
     }
     .publish-actions .btn { flex: 1; justify-content: center; }
 
+    /* ── Sparks toolbar ────────────────────────────────────── */
+    .sparks-toolbar {
+      display: flex;
+      gap: 0.5rem;
+      margin-bottom: 1.25rem;
+      align-items: center;
+    }
+    .sparks-search-input {
+      flex: 1;
+      font-family: 'Inter', sans-serif;
+      font-size: 0.8125rem;
+      color: var(--text);
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      padding: 0.4rem 0.75rem;
+      outline: none;
+      transition: border-color 0.15s;
+    }
+    .sparks-search-input:focus { border-color: var(--accent); }
+    .sparks-fav-btn.active { background: #fef9c3; border-color: #fbbf24; color: #92400e; }
+    .sparks-fav-btn.active svg { stroke: #f59e0b; }
+
+    /* Star button on spark cards */
+    .star-btn {
+      background: none;
+      border: none;
+      cursor: pointer;
+      color: var(--text-dim);
+      padding: 0.2rem;
+      border-radius: 4px;
+      display: flex;
+      align-items: center;
+      transition: color 0.1s;
+      line-height: 1;
+      flex-shrink: 0;
+    }
+    .star-btn:hover { color: #f59e0b; }
+    .star-btn.starred { color: #f59e0b; }
+
+    /* Count badge in sidebar */
+    .nav-count {
+      font-size: 0.7rem;
+      background: var(--bg-hover);
+      color: var(--text-dim);
+      border-radius: 100px;
+      padding: 0.1rem 0.45rem;
+      margin-left: auto;
+      font-weight: 500;
+      flex-shrink: 0;
+    }
+    .nav-count:empty { display: none; }
+
     /* ── Hidden file input ──────────────────────────────────── */
     #import-input { display: none; }
 
@@ -534,18 +591,18 @@
   <aside class="sidebar">
     <div class="sidebar-top">
       <a href="landing.html" class="sidebar-logo">
-        <span class="bolt">⚡</span>Sparky
+        <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" class="bolt"><path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/></svg>Sparky
       </a>
-      <div id="user-info" style="font-size:0.75rem; color:var(--text-dim); padding:0.25rem 0.5rem; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;"></div>
     </div>
     <nav class="sidebar-nav">
       <button class="sidebar-item active" id="nav-my" onclick="switchTab('my')">
-        <span class="sidebar-icon"><svg width="15" height="15" viewBox="0 0 15 15" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="1.5" y="1.5" width="4.5" height="4.5" rx="1"/><rect x="9" y="1.5" width="4.5" height="4.5" rx="1"/><rect x="1.5" y="9" width="4.5" height="4.5" rx="1"/><rect x="9" y="9" width="4.5" height="4.5" rx="1"/></svg></span>My Circuits
+        <span class="sidebar-icon"><svg width="15" height="15" viewBox="0 0 15 15" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="1.5" y="1.5" width="4.5" height="4.5" rx="1"/><rect x="9" y="1.5" width="4.5" height="4.5" rx="1"/><rect x="1.5" y="9" width="4.5" height="4.5" rx="1"/><rect x="9" y="9" width="4.5" height="4.5" rx="1"/></svg></span>My Circuits<span id="circuits-count" class="nav-count"></span>
       </button>
       <button class="sidebar-item" id="nav-sparks" onclick="switchTab('sparks')">
         <span class="sidebar-icon"><svg width="15" height="15" viewBox="0 0 15 15" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M9 2L4.5 8.5H8.5L6 13 11.5 6H7.5L9 2z"/></svg></span>Sparks
       </button>
       <div style="flex:1;"></div>
+      <div id="user-info" style="font-size:0.75rem; color:var(--text-dim); padding:0.4rem 0.75rem; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;"></div>
       <button class="sidebar-item" onclick="logout()">
         <span class="sidebar-icon"><svg width="15" height="15" viewBox="0 0 15 15" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M5.5 3H3a1 1 0 00-1 1v7a1 1 0 001 1h2.5"/><path d="M9 5.5l3 2-3 2"/><line x1="12" y1="7.5" x2="6" y2="7.5"/></svg></span>Log Out
       </button>
@@ -565,9 +622,6 @@
     <div class="content">
       <!-- MY CIRCUITS TAB -->
       <div class="tab-panel active" id="tab-my">
-        <div class="section-head">
-          <h2 id="circuits-count">Your circuits</h2>
-        </div>
         <div class="circuit-grid" id="circuits-grid">
           <!-- Populated by JS -->
         </div>
@@ -575,8 +629,12 @@
 
       <!-- SPARKS TAB -->
       <div class="tab-panel" id="tab-sparks">
-        <div class="section-head">
-          <h2>Community Sparks</h2>
+        <div class="sparks-toolbar">
+          <input type="search" id="sparks-search" class="sparks-search-input" placeholder="Search sparks..." oninput="renderSparks()">
+          <button class="btn btn-ghost sparks-fav-btn" id="sparks-fav-btn" onclick="toggleFavFilter()">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>
+            Favorites
+          </button>
         </div>
         <div class="spark-grid" id="sparks-grid">
           <!-- Populated by JS -->
@@ -962,9 +1020,7 @@
       const count = document.getElementById('circuits-count');
       let emptyEl = document.getElementById('circuits-empty');
 
-      count.textContent = circuits.length === 0
-        ? 'Your circuits'
-        : `Your circuits (${circuits.length})`;
+      if (count) count.textContent = circuits.length > 0 ? String(circuits.length) : '';
 
       grid.innerHTML = '';
 
@@ -1126,32 +1182,77 @@
       showToast(imported === 1 ? 'Circuit imported!' : `${imported} circuits imported!`);
     });
 
+    // ── Starred sparks ─────────────────────────────────────────
+    const STARRED_KEY = 'sparky_starred';
+    let _favOnly = false;
+
+    function getStarred() {
+      try { return new Set(JSON.parse(localStorage.getItem(STARRED_KEY) || '[]')); } catch { return new Set(); }
+    }
+
+    function toggleStar(id, e) {
+      e.stopPropagation();
+      const starred = getStarred();
+      if (starred.has(id)) starred.delete(id); else starred.add(id);
+      localStorage.setItem(STARRED_KEY, JSON.stringify([...starred]));
+      renderSparks();
+    }
+
+    function toggleFavFilter() {
+      _favOnly = !_favOnly;
+      const btn = document.getElementById('sparks-fav-btn');
+      if (btn) btn.classList.toggle('active', _favOnly);
+      renderSparks();
+    }
+
     // ── Render SPARKS ──────────────────────────────────────────
     function renderSparks() {
-      const grid   = document.getElementById('sparks-grid');
-      const sparks = loadSparks();
+      const grid = document.getElementById('sparks-grid');
+      const starred = getStarred();
+      const query = (document.getElementById('sparks-search')?.value || '').toLowerCase().trim();
+      let sparks = loadSparks();
+
+      if (query) sparks = sparks.filter(s =>
+        (s.name || '').toLowerCase().includes(query) ||
+        (s.author || '').toLowerCase().includes(query) ||
+        (s.desc || '').toLowerCase().includes(query)
+      );
+      if (_favOnly) sparks = sparks.filter(s => starred.has(s.id));
+
       grid.innerHTML = '';
 
       if (!sparks.length) {
         grid.innerHTML = `
           <div class="empty-state" style="grid-column:1/-1">
-            <div class="empty-state-icon">✦</div>
-            <div class="empty-state-text">No sparks yet.<br>Share one of your circuits using the ··· menu.</div>
+            <div class="empty-state-icon" style="font-size:1.5rem;opacity:0.35">✦</div>
+            <div class="empty-state-text">${_favOnly ? 'No starred sparks yet.' : 'No sparks yet.'}<br>${_favOnly ? 'Star a spark to find it here.' : 'Share one of your circuits using the ··· menu.'}</div>
           </div>`;
         return;
       }
 
-      sparks.forEach((spark, idx) => {
+      const BOARD_SVG = `<svg width="40" height="28" viewBox="0 0 36 25" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"><rect x="1" y="4" width="34" height="17" rx="1.5"/><line x1="7" y1="4" x2="7" y2="21"/><line x1="13" y1="4" x2="13" y2="21"/><line x1="18" y1="4" x2="18" y2="21"/><line x1="23" y1="4" x2="23" y2="21"/><line x1="29" y1="4" x2="29" y2="21"/><line x1="4" y1="1.5" x2="4" y2="4"/><line x1="10" y1="1.5" x2="10" y2="4"/><line x1="15" y1="1.5" x2="15" y2="4"/><line x1="20" y1="1.5" x2="20" y2="4"/><line x1="26" y1="1.5" x2="26" y2="4"/><line x1="31" y1="1.5" x2="31" y2="4"/><line x1="4" y1="21" x2="4" y2="23.5"/><line x1="10" y1="21" x2="10" y2="23.5"/><line x1="15" y1="21" x2="15" y2="23.5"/><line x1="20" y1="21" x2="20" y2="23.5"/><line x1="26" y1="21" x2="26" y2="23.5"/><line x1="31" y1="21" x2="31" y2="23.5"/></svg>`;
+
+      sparks.forEach((spark) => {
+        const isStarred = starred.has(spark.id);
+        const starFill   = isStarred ? '#f59e0b' : 'none';
+        const starStroke = isStarred ? '#f59e0b' : 'currentColor';
         const thumbHtml = spark.thumbnail
           ? `<img src="${spark.thumbnail}" style="width:100%;height:100%;object-fit:cover;display:block;">`
-          : `<span style="color:#555"><svg width="40" height="28" viewBox="0 0 36 25" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"><rect x="1" y="4" width="34" height="17" rx="1.5"/><line x1="7" y1="4" x2="7" y2="21"/><line x1="13" y1="4" x2="13" y2="21"/><line x1="18" y1="4" x2="18" y2="21"/><line x1="23" y1="4" x2="23" y2="21"/><line x1="29" y1="4" x2="29" y2="21"/><line x1="4" y1="1.5" x2="4" y2="4"/><line x1="10" y1="1.5" x2="10" y2="4"/><line x1="15" y1="1.5" x2="15" y2="4"/><line x1="20" y1="1.5" x2="20" y2="4"/><line x1="26" y1="1.5" x2="26" y2="4"/><line x1="31" y1="1.5" x2="31" y2="4"/><line x1="4" y1="21" x2="4" y2="23.5"/><line x1="10" y1="21" x2="10" y2="23.5"/><line x1="15" y1="21" x2="15" y2="23.5"/><line x1="20" y1="21" x2="20" y2="23.5"/><line x1="26" y1="21" x2="26" y2="23.5"/><line x1="31" y1="21" x2="31" y2="23.5"/></svg></span>`;
+          : `<span style="color:#555">${BOARD_SVG}</span>`;
 
         const card = document.createElement('div');
         card.className = 'spark-card';
         card.innerHTML = `
           <div class="spark-thumb" style="background:#1a1c24">${thumbHtml}</div>
-          <div class="spark-card-title">${escHtml(spark.name || 'Untitled')}</div>
-          <div class="spark-card-author">${spark.author ? escHtml(spark.author) : ''}${spark.sharedAt ? ' · ' + new Date(spark.sharedAt).toLocaleDateString() : ''}</div>
+          <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:0.5rem;">
+            <div>
+              <div class="spark-card-title">${escHtml(spark.name || 'Untitled')}</div>
+              <div class="spark-card-author">${spark.author ? escHtml(spark.author) : ''}${spark.sharedAt ? ' · ' + new Date(spark.sharedAt).toLocaleDateString() : ''}</div>
+            </div>
+            <button class="star-btn ${isStarred ? 'starred' : ''}" onclick="toggleStar('${spark.id}', event)" title="${isStarred ? 'Unstar' : 'Star'}">
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="${starFill}" stroke="${starStroke}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>
+            </button>
+          </div>
           ${spark.desc ? `<div class="spark-card-desc">${escHtml(spark.desc)}</div>` : ''}
           <div class="spark-card-footer">
             <button class="btn btn-ghost" style="font-size:0.75rem;" onclick="forkSpark('${spark.id}')">Fork to My Circuits</button>

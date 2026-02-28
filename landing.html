@@ -34,66 +34,22 @@
       -webkit-font-smoothing: antialiased;
     }
 
-    /* ── Navbar ─────────────────────────────────────────────── */
-    nav {
+    /* ── Floating logo ──────────────────────────────────────── */
+    .floating-logo {
       position: fixed;
-      top: 0; left: 0; right: 0;
+      top: 1.25rem;
+      left: 1.5rem;
       z-index: 100;
       display: flex;
       align-items: center;
-      justify-content: space-between;
-      padding: 0 2rem;
-      height: 56px;
-      border-bottom: 1px solid var(--border);
-      background: rgba(255,255,255,0.92);
-      backdrop-filter: blur(12px);
-      -webkit-backdrop-filter: blur(12px);
-    }
-
-    .nav-wordmark {
-      display: flex;
-      align-items: center;
-      gap: 0.5rem;
-      font-size: 1rem;
+      gap: 0.45rem;
+      font-size: 0.9375rem;
       font-weight: 600;
-      color: var(--white);
+      color: var(--text);
       text-decoration: none;
       letter-spacing: -0.01em;
     }
-    .nav-wordmark .bolt {
-      font-size: 1.1rem;
-      color: var(--accent-hi);
-    }
-
-    .nav-links {
-      display: flex;
-      align-items: center;
-      gap: 0.25rem;
-    }
-    .nav-link {
-      font-size: 0.875rem;
-      font-weight: 450;
-      color: var(--text-sub);
-      text-decoration: none;
-      padding: 0.4rem 0.75rem;
-      border-radius: 6px;
-      transition: color 0.15s, background 0.15s;
-    }
-    .nav-link:hover { color: var(--text); background: var(--bg-hover); }
-
-    .nav-btn {
-      font-size: 0.8125rem;
-      font-weight: 500;
-      color: #ffffff;
-      text-decoration: none;
-      padding: 0.4rem 1rem;
-      border-radius: 6px;
-      border: 1px solid var(--accent);
-      background: var(--accent);
-      transition: background 0.15s, border-color 0.15s;
-      margin-left: 0.5rem;
-    }
-    .nav-btn:hover { background: var(--accent-hi); border-color: var(--accent-hi); }
+    .floating-logo svg { color: var(--accent-hi); }
 
     /* ── Hero ───────────────────────────────────────────────── */
     .hero {
@@ -101,7 +57,7 @@
       flex-direction: column;
       align-items: center;
       text-align: center;
-      padding: 10rem 2rem 7rem;
+      padding: 6rem 2rem 5rem;
       max-width: 860px;
       margin: 0 auto;
     }
@@ -324,28 +280,6 @@
       flex-shrink: 0;
     }
 
-    /* ── Footer ─────────────────────────────────────────────── */
-    footer {
-      border-top: 1px solid var(--border);
-      padding: 2rem;
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      gap: 1rem;
-      flex-wrap: wrap;
-    }
-    .footer-left {
-      display: flex;
-      align-items: center;
-      gap: 0.5rem;
-      font-size: 0.875rem;
-      color: var(--text-dim);
-    }
-    .footer-left .bolt { color: var(--accent-hi); }
-    .footer-right {
-      font-size: 0.8125rem;
-      color: var(--text-dim);
-    }
 
     /* ── Animations ─────────────────────────────────────────── */
     @keyframes fadeUp {
@@ -447,50 +381,28 @@
       text-align: center;
       margin-top: 0.75rem;
     }
-    .nav-btn-outline {
-      font-size: 0.8125rem;
-      font-weight: 500;
-      color: var(--text);
-      text-decoration: none;
-      padding: 0.4rem 1rem;
-      border-radius: 6px;
-      border: 1px solid var(--border);
-      background: transparent;
-      transition: background 0.15s, border-color 0.15s;
-      margin-left: 0.5rem;
-      cursor: pointer;
-      font-family: 'Inter', sans-serif;
-    }
-    .nav-btn-outline:hover { background: var(--bg-hover); border-color: #c4c4c8; }
 
     /* ── Responsive ─────────────────────────────────────────── */
     @media (max-width: 600px) {
-      nav { padding: 0 1rem; }
-      .nav-link { display: none; }
-      .hero { padding: 8rem 1.25rem 4rem; }
+      .hero { padding: 5rem 1.25rem 3rem; }
       .cta-strip { padding: 2rem 1.5rem; }
     }
   </style>
 </head>
 <body>
 
-  <!-- Navbar -->
-  <nav>
-    <a href="#" class="nav-wordmark">
-      <span class="bolt">⚡</span>Sparky
-    </a>
-    <div class="nav-links" id="nav-links">
-      <button class="nav-btn-outline" onclick="openModal()">Sign In</button>
-    </div>
-  </nav>
+  <!-- Floating logo -->
+  <a href="#" class="floating-logo">
+    <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/></svg>
+    Sparky
+  </a>
 
   <!-- Hero -->
   <section class="hero">
     <h1>Build circuits.<br /><em>Get AI guidance.</em></h1>
     <p>
-      Sparky is a 3D breadboard circuit designer that teaches you electronics
-      as you build. Place components, draw wires, run the simulation — and ask
-      the AI tutor anything.
+      Place components on a 3D breadboard, draw wires, and run a live simulation.
+      The built-in AI tutor answers your questions and builds circuits with you.
     </p>
     <div class="hero-actions" id="hero-actions">
       <button class="btn-primary" onclick="openModal()" style="cursor:pointer;">Get Started</button>
@@ -502,7 +414,7 @@
     <div class="preview-frame">
       <iframe src="circuit3d/viewer.html" loading="lazy" title="Interactive 3D circuit preview"></iframe>
       <div class="preview-launch">
-        <a href="circuit3d/index.html" class="btn-primary" style="font-size:0.8125rem; padding:0.4rem 1rem;">Open Designer →</a>
+        <button onclick="openWithDemo()" class="btn-primary" style="font-size:0.8125rem; padding:0.4rem 1rem; border:none; cursor:pointer;">Open Designer →</button>
       </div>
     </div>
   </div>
@@ -561,15 +473,6 @@
       </div>
     </div>
   </div>
-
-  <!-- Footer -->
-  <footer>
-    <div class="footer-left">
-      <span class="bolt">⚡</span>
-      <span><strong>Sparky</strong> — 3D Circuit Designer</span>
-    </div>
-    <div class="footer-right">Built for IBM Skills Build Hackathon</div>
-  </footer>
 
   <!-- Auth Modal -->
   <div class="modal-overlay" id="auth-modal">
@@ -630,6 +533,19 @@
       if (e.target === this) closeModal();
     });
 
+    // ── Open designer with demo circuit ─────────────────────
+    function openWithDemo() {
+      fetch('demo.sparky')
+        .then(r => r.json())
+        .then(data => {
+          sessionStorage.setItem('sparky_load_circuit', JSON.stringify(data));
+          window.location.href = 'circuit3d/index.html';
+        })
+        .catch(() => {
+          window.location.href = 'circuit3d/index.html';
+        });
+    }
+
     // ── Check auth state on load ─────────────────────────────
     async function checkAuthState() {
       const token = getToken();
@@ -641,11 +557,10 @@
         });
         if (!res.ok) { clearToken(); return; }
 
-        document.getElementById('nav-links').innerHTML =
-          '<a href="dashboard.html" class="nav-btn">Dashboard →</a>';
         document.getElementById('hero-actions').innerHTML =
           '<a href="dashboard.html" class="btn-primary">Go to Dashboard</a>';
-        document.getElementById('cta-actions').innerHTML =
+        const ctaEl = document.getElementById('cta-actions');
+        if (ctaEl) ctaEl.innerHTML =
           '<a href="dashboard.html" class="btn-primary">Go to Dashboard</a>';
       } catch {
         clearToken();
