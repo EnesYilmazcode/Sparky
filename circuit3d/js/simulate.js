@@ -218,40 +218,17 @@
     comp.group.traverse(obj => {
       if (!obj.isMesh || !obj.material.transparent) return;
       obj.material = obj.material.clone();
-      obj.material.emissiveIntensity = 5.0;
-      obj.material.opacity = 1.0;
+      obj.material.emissiveIntensity = 2.2;
+      obj.material.opacity = 0.97;
     });
 
     const ledColor = getDomeColor(comp) ?? 0xffffff;
     const p0 = comp.pins[0], p1 = comp.pins[1];
-    const cx = (p0.x + p1.x) / 2, cz = (p0.z + p1.z) / 2;
-
-    // Strong point light close to the LED dome
-    const light = new THREE.PointLight(ledColor, 10.0, 10);
-    light.position.set(cx, 1.5, cz);
+    const light = new THREE.PointLight(ledColor, 4.0, 7);
+    light.position.set((p0.x + p1.x) / 2, 3.0, (p0.z + p1.z) / 2);
     App.scene.add(light);
     activeLights.push(light);
     comp._simLight = light;
-
-    // Glow sprite for a visible bloom effect
-    const canvas = document.createElement('canvas');
-    canvas.width = 128; canvas.height = 128;
-    const ctx = canvas.getContext('2d');
-    const c = new THREE.Color(ledColor);
-    const gradient = ctx.createRadialGradient(64, 64, 0, 64, 64, 64);
-    gradient.addColorStop(0, `rgba(${c.r*255|0},${c.g*255|0},${c.b*255|0},0.9)`);
-    gradient.addColorStop(0.3, `rgba(${c.r*255|0},${c.g*255|0},${c.b*255|0},0.4)`);
-    gradient.addColorStop(1, 'rgba(0,0,0,0)');
-    ctx.fillStyle = gradient;
-    ctx.fillRect(0, 0, 128, 128);
-    const tex = new THREE.CanvasTexture(canvas);
-    const spriteMat = new THREE.SpriteMaterial({ map: tex, transparent: true, blending: THREE.AdditiveBlending, depthWrite: false });
-    const sprite = new THREE.Sprite(spriteMat);
-    sprite.scale.set(3.0, 3.0, 1);
-    sprite.position.set(cx, 1.2, cz);
-    App.scene.add(sprite);
-    activeLights.push(sprite);
-    comp._simGlow = sprite;
   }
 
   function dimLED(comp) {
@@ -261,7 +238,6 @@
       obj.material.opacity = 0.88;
     });
     if (comp._simLight) { App.scene.remove(comp._simLight); comp._simLight = null; }
-    if (comp._simGlow) { App.scene.remove(comp._simGlow); comp._simGlow = null; }
   }
 
   function getDomeColor(comp) {

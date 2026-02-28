@@ -37,7 +37,6 @@ const API_KEY    = process.env.WATSONX_APIKEY;
 const PROJECT_ID = process.env.WATSONX_PROJECT_ID;
 const WX_URL     = process.env.WATSONX_URL || 'https://us-south.ml.cloud.ibm.com';
 const MODEL_ID   = 'meta-llama/llama-3-3-70b-instruct';
-const GOOGLE_API_KEY = process.env.GOOGLE_API_KEY;
 const PORT       = process.env.PORT || 5001;
 
 // IBM App ID
@@ -154,14 +153,7 @@ BREADBOARD RULES:
 - LED holeA = cathode (−) → GND. LED holeB = anode (+) → resistor → power.
 - Every LED needs a resistor in series.
 
-REPLY RULES:
-- NEVER use markdown formatting. No hashtags, asterisks, backticks, or bullet dashes. Plain text only.
-- Talk like a chill TA walking around the lab. Short, natural, helpful.
-- MAX 2 sentences. Seriously, 2 sentences max. No exceptions.
-- Do NOT over-explain. Do NOT list steps. Do NOT repeat yourself. Do NOT add filler encouragement like "great job" or "you got this" or "keep going".
-- If the student wants more detail, they will ask. Only go deeper when explicitly asked.
-- Example good answer: "The battery sends current through the resistor to limit it, then through the LED which lights up, and back to ground."
-- Example bad answer: anything longer than 2 sentences, anything that lists components one by one, anything with filler praise.`;
+Reply style: 2-5 sentences max. Be specific with hole names like "a14" or "tp_10". Be encouraging.`;
 
 // Tools addendum — stored as an array of strings joined to avoid backtick escaping issues
 const TOOLS_ADDENDUM = [
@@ -254,21 +246,12 @@ function cleanReply(raw) {
     .replace(/\n?QUESTION:\s*$/, '')
     .replace(/\n?BOARD STATE:\s*$/, '')
     .replace(/\n?Sparky:\s*$/, '')
-    .replace(/#{1,6}\s?/g, '')        // strip markdown headings
-    .replace(/\*{1,3}([^*]+)\*{1,3}/g, '$1')  // strip bold/italic
-    .replace(/`([^`]+)`/g, '$1')      // strip inline code
-    .replace(/^[-*]\s/gm, '')         // strip bullet points
     .trim();
 }
 
 // ── Parse ```actions or ```json block ─────────────────────────
 function parseActions(text) {
-  // Try fenced block first: ```actions ... ``` or ```json ... ```
-  let match = text.match(/```(?:actions|json)\s*([\s\S]*?)```/);
-  // Fallback: unfenced "actions" label followed by JSON array
-  if (!match) match = text.match(/\bactions\s*\n(\[[\s\S]*\])/);
-  // Fallback: bare JSON array at end of reply
-  if (!match) match = text.match(/\n(\[[\s\S]*\])\s*$/);
+  const match = text.match(/```(?:actions|json)\s*([\s\S]*?)```/);
   if (!match) return { reply: cleanReply(text), actions: [] };
   let actions = [];
   try { actions = JSON.parse(match[1].trim()); } catch (e) {
@@ -277,62 +260,12 @@ function parseActions(text) {
   return { reply: cleanReply(text.slice(0, match.index)), actions };
 }
 
-// ── Classify intent locally (no API call) ────────────────────
-const BUILD_WORDS = /\b(build|add|place|wire|connect|create|make|put|set up|setup|attach|hook|remove|delete|clear|fix|move)\b/i;
-
-function classifyIntent(userMsg) {
-  return BUILD_WORDS.test(userMsg) ? 'BUILD' : 'QUESTION';
-}
-
-// ── Ask Gemini ───────────────────────────────────────────────
-async function askGemini(markdown, userMsg) {
-  const msg = userMsg || 'Analyze my circuit and tell me what to do next.';
-
-  const intent = classifyIntent(msg);
-  console.log(`[intent] "${msg.slice(0,50)}" → ${intent}`);
-
-  const toolsSection = intent === 'BUILD'
-    ? `\n${TOOLS_ADDENDUM}\n\nCRITICAL REPLY RULE: Your text reply before the actions block must be ONLY a short confirmation of what you built. Examples: "I built a basic LED circuit for you." or "I added a button that controls the LED." Do NOT describe steps, wiring details, or component locations. Just confirm what you did in one sentence.`
-    : '\n\nDo NOT output any actions blocks. Answer in 1-2 sentences max like a TA giving a quick explanation. No filler, no praise, no step-by-step breakdowns.';
-
-  const systemPrompt = `${BASE_PROMPT}${toolsSection}`;
-  const userPrompt = `BOARD STATE:\n${markdown || '**Board status: EMPTY — no components or wires placed yet.**'}\n\nQUESTION: ${msg}`;
-
-  const res = await fetch(
-    `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${GOOGLE_API_KEY}`,
-    {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        system_instruction: { parts: [{ text: systemPrompt }] },
-        contents: [{ parts: [{ text: userPrompt }] }],
-        generationConfig: {
-          temperature: 0.3,
-          maxOutputTokens: 1000,
-        },
-      }),
-    }
-  );
-  if (!res.ok) {
-    const err = await res.text();
-    throw new Error(`Gemini ${res.status}: ${err}`);
-  }
-  const data = await res.json();
-  return data.candidates?.[0]?.content?.parts?.[0]?.text ?? '(no reply)';
-}
-
-// ── Ask watsonx (fallback) ───────────────────────────────────
+// ── Call watsonx ──────────────────────────────────────────────
 async function askWatsonx(markdown, userMsg) {
   const token = await getToken();
-  const msg = userMsg || 'Analyze my circuit and tell me what to do next.';
+  const msg   = userMsg || 'Analyze my circuit and tell me what to do next.';
 
-  const intent = classifyIntent(msg);
-  console.log(`[intent] "${msg.slice(0,50)}" → ${intent}`);
-
-  const toolsSection = intent === 'BUILD'
-    ? `\n${TOOLS_ADDENDUM}\n\nCRITICAL REPLY RULE: Your text reply before the actions block must be ONLY a short confirmation of what you built. Examples: "I built a basic LED circuit for you." or "I added a button that controls the LED." Do NOT describe steps, wiring details, or component locations. Just confirm what you did in one sentence.`
-    : '\n\nDo NOT output any actions blocks. Answer in 1-2 sentences max like a TA giving a quick explanation. No filler, no praise, no step-by-step breakdowns.';
-  const prompt = `${BASE_PROMPT}${toolsSection}\n\nBOARD STATE:\n${markdown || '**Board status: EMPTY — no components or wires placed yet.**'}\n\nQUESTION: ${msg}\n\nANSWER:`;
+  const prompt = `${BASE_PROMPT}\n${TOOLS_ADDENDUM}\n\nBOARD STATE:\n${markdown || '**Board status: EMPTY — no components or wires placed yet.**'}\n\nQUESTION: ${msg}\n\nANSWER:`;
 
   const res = await fetch(
     `${WX_URL}/ml/v1/text/generation?version=2023-05-29`,
@@ -391,9 +324,7 @@ const server = http.createServer(async (req, res) => {
     req.on('end', async () => {
       try {
         const { markdown = '', message = '' } = JSON.parse(body || '{}');
-        const raw = GOOGLE_API_KEY
-          ? await askGemini(markdown, message)
-          : await askWatsonx(markdown, message);
+        const raw = await askWatsonx(markdown, message);
         const { reply, actions } = parseActions(raw);
         console.log(`[ask] "${message.slice(0,60)}" → ${actions.length} action(s)`);
         return sendJSON(res, 200, { reply, actions });
