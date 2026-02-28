@@ -174,42 +174,33 @@
       </button>
     </div>
 
-    <!-- ── AI PANEL (right sidebar) ───────────────────────── -->
+    <!-- ── AI PANEL (right sidebar) ─────────────────────────── -->
     <div id="sparky-panel">
 
-      <div id="sparky-header" onclick="sparkyToggle()" title="Toggle AI panel">
-        <div class="sparky-logo">
-          <svg width="13" height="13" viewBox="0 0 24 24" fill="currentColor">
-            <path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/>
-          </svg>
-        </div>
-        <span class="sparky-title">Sparky AI</span>
-        <span class="sparky-badge">watsonx</span>
-        <span id="sparky-toggle-icon">❯</span>
-      </div>
-
-      <!-- Collapsed-only expand hint -->
-      <div id="sparky-expand-hint" onclick="sparkyToggle()" title="Expand AI panel">
-        <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
-          <polyline points="15 18 9 12 15 6"/>
-        </svg>
-      </div>
-
       <div id="sparky-messages">
-        <div class="chat-msg system">Ask Sparky to review your circuit or help you build one.</div>
-      </div>
 
-      <div id="sparky-quick">
-        <button class="sparky-quick-btn" onclick="sparkyQuick('Analyze my circuit and tell me if it will work.', false)">🔍 Analyze</button>
-        <button class="sparky-quick-btn" onclick="sparkyQuick('What should I do next?', false)">➡️ Next step</button>
-        <button class="sparky-quick-btn" onclick="sparkyQuick('Build a complete working LED circuit for me from scratch. Place all the components and wires needed.', true)" style="border-color:#16a34a;color:#16a34a">⚡ Build LED</button>
-        <button class="sparky-quick-btn" onclick="sparkyQuick('Find and fix all the errors in my circuit.', true)" style="border-color:#d97706;color:#d97706">🔧 Fix errors</button>
+        <!-- Welcome / empty state -->
+        <div id="sparky-welcome">
+          <div class="sparky-welcome-icon">
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/>
+            </svg>
+          </div>
+          <div class="sparky-welcome-title">Sparky</div>
+          <div class="sparky-welcome-sub">What would you like to build?</div>
+          <div id="sparky-suggestions">
+            <button class="sparky-suggest-btn" onclick="sparkyQuick('Build a complete working LED circuit from scratch. Place all the components and wires needed.', true)">⚡ Build an LED circuit</button>
+            <button class="sparky-suggest-btn" onclick="sparkyQuick('Analyze my circuit and tell me if it will work correctly.', false)">🔍 Analyze my circuit</button>
+            <button class="sparky-suggest-btn" onclick="sparkyQuick('What components or wires should I add to improve my circuit?', false)">🔧 What should I add?</button>
+          </div>
+        </div>
+
       </div>
 
       <div id="sparky-input-row">
         <textarea id="sparky-input" rows="1" placeholder="Ask Sparky anything…"></textarea>
         <button id="sparky-send" onclick="sparkyAsk()" title="Send">
-          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
             <line x1="12" y1="19" x2="12" y2="5"/>
             <polyline points="5 12 12 5 19 12"/>
           </svg>
@@ -248,10 +239,17 @@
 const SPARKY_API = 'http://localhost:5001/api/ask';
 
 function sparkyToggle() {
-  document.getElementById('sparky-panel').classList.toggle('collapsed');
+  const panel = document.getElementById('sparky-panel');
+  const tab   = document.getElementById('ai-toggle-tab');
+  panel.classList.toggle('collapsed');
+  tab.classList.toggle('panel-open', !panel.classList.contains('collapsed'));
 }
 
 function sparkyAddMsg(text, role) {
+  // Hide welcome state on first real message
+  const welcome = document.getElementById('sparky-welcome');
+  if (welcome) welcome.classList.add('hidden');
+
   const box = document.getElementById('sparky-messages');
   const el  = document.createElement('div');
   el.className   = 'chat-msg ' + role;
@@ -262,6 +260,9 @@ function sparkyAddMsg(text, role) {
 }
 
 function sparkyTyping() {
+  const welcome = document.getElementById('sparky-welcome');
+  if (welcome) welcome.classList.add('hidden');
+
   const box = document.getElementById('sparky-messages');
   const el  = document.createElement('div');
   el.className = 'chat-msg typing';

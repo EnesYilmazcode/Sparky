@@ -1,154 +1,23 @@
 /* ─────────────────────────────────────────────────────────────
    Sparky AI Panel — right sidebar, light mode
-   Matches the existing Circuit3D UI system (--bg-sidebar, --border, etc.)
 ───────────────────────────────────────────────────────────── */
 
 /* ── Panel shell ─────────────────────────────────────────── */
 
 #sparky-panel {
   width: 280px;
-  min-width: 280px;
   display: flex;
   flex-direction: column;
   background: var(--bg-sidebar);
   border-left: 1px solid var(--border);
   flex-shrink: 0;
   overflow: hidden;
-  transition: width 0.22s cubic-bezier(0.4, 0, 0.2, 1),
-              min-width 0.22s cubic-bezier(0.4, 0, 0.2, 1);
   font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
   font-size: 13px;
   color: var(--text-primary);
 }
 
-#sparky-panel.collapsed {
-  width: 40px;
-  min-width: 40px;
-}
-
-/* ── Header ──────────────────────────────────────────────── */
-
-#sparky-header {
-  display: flex;
-  align-items: center;
-  gap: 7px;
-  padding: 9px 10px;
-  background: var(--bg-sidebar);
-  border-bottom: 1px solid var(--border);
-  cursor: pointer;
-  user-select: none;
-  flex-shrink: 0;
-  overflow: hidden;
-  white-space: nowrap;
-  transition: background 0.1s;
-}
-
-#sparky-header:hover {
-  background: #f5f4f1;
-}
-
-.sparky-logo {
-  width: 22px;
-  height: 22px;
-  background: var(--accent);
-  border-radius: 5px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  flex-shrink: 0;
-  color: #fff;
-}
-
-.sparky-title {
-  font-size: 12.5px;
-  font-weight: 600;
-  color: var(--text-primary);
-  flex: 1;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  transition: opacity 0.15s;
-}
-
-.sparky-badge {
-  font-size: 9px;
-  background: rgba(0, 117, 255, 0.08);
-  color: var(--accent);
-  border: 1px solid rgba(0, 117, 255, 0.22);
-  border-radius: 3px;
-  padding: 1px 5px;
-  font-weight: 600;
-  letter-spacing: 0.3px;
-  flex-shrink: 0;
-  transition: opacity 0.15s;
-}
-
-#sparky-toggle-icon {
-  color: var(--text-muted);
-  font-size: 11px;
-  line-height: 1;
-  transition: transform 0.22s, color 0.1s;
-  flex-shrink: 0;
-}
-
-#sparky-header:hover #sparky-toggle-icon {
-  color: var(--text-primary);
-}
-
-/* Collapsed state: hide text, keep logo centred */
-#sparky-panel.collapsed #sparky-header {
-  justify-content: center;
-  padding: 9px 9px;
-  gap: 0;
-}
-
-#sparky-panel.collapsed .sparky-title,
-#sparky-panel.collapsed .sparky-badge,
-#sparky-panel.collapsed #sparky-toggle-icon {
-  display: none;
-}
-
-/* Hide body content when collapsed */
-#sparky-panel.collapsed #sparky-messages,
-#sparky-panel.collapsed #sparky-section-divider,
-#sparky-panel.collapsed #sparky-quick,
-#sparky-panel.collapsed #sparky-input-row,
-#sparky-panel.collapsed #sparky-ibm-badge {
-  display: none;
-}
-
-/* Expand chevron shown below the logo when collapsed */
-#sparky-expand-hint {
-  display: none;
-  flex-direction: column;
-  align-items: center;
-  padding: 8px 0 4px;
-  color: var(--text-sub);
-  font-size: 10px;
-  gap: 4px;
-  cursor: pointer;
-  user-select: none;
-  flex-shrink: 0;
-}
-
-#sparky-expand-hint:hover { color: var(--accent); }
-
-#sparky-panel.collapsed #sparky-expand-hint {
-  display: flex;
-}
-
-/* ── Section heading inside panel ────────────────────────── */
-
-.ai-section-label {
-  font-size: 10px;
-  font-weight: 600;
-  letter-spacing: 0.6px;
-  text-transform: uppercase;
-  color: var(--text-sub);
-  padding: 8px 10px 4px;
-  flex-shrink: 0;
-}
-
-/* ── Messages ─────────────────────────────────────────────── */
+/* ── Messages area ────────────────────────────────────────── */
 
 #sparky-messages {
   flex: 1;
@@ -157,20 +26,94 @@
   display: flex;
   flex-direction: column;
   gap: 7px;
-  min-height: 60px;
 }
 
 #sparky-messages::-webkit-scrollbar         { width: 4px; }
 #sparky-messages::-webkit-scrollbar-track   { background: transparent; }
 #sparky-messages::-webkit-scrollbar-thumb   { background: var(--border-dark); border-radius: 2px; }
 
+/* ── Welcome / empty state ────────────────────────────────── */
+
+#sparky-welcome {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  padding: 20px 14px 12px;
+  gap: 6px;
+  min-height: 0;
+}
+
+#sparky-welcome.hidden {
+  display: none;
+}
+
+.sparky-welcome-icon {
+  width: 44px;
+  height: 44px;
+  background: var(--accent);
+  border-radius: 11px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #fff;
+  margin-bottom: 4px;
+  flex-shrink: 0;
+}
+
+.sparky-welcome-title {
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--text-primary);
+  letter-spacing: -0.2px;
+}
+
+.sparky-welcome-sub {
+  font-size: 11.5px;
+  color: var(--text-muted);
+  margin-bottom: 10px;
+}
+
+/* Suggestion chips */
+#sparky-suggestions {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  width: 100%;
+}
+
+.sparky-suggest-btn {
+  width: 100%;
+  padding: 7px 11px;
+  background: #fafaf9;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  font-family: inherit;
+  font-size: 11.5px;
+  color: var(--text-primary);
+  cursor: pointer;
+  text-align: left;
+  line-height: 1.4;
+  transition: background 0.12s, border-color 0.12s;
+}
+
+.sparky-suggest-btn:hover {
+  background: #f0f0ef;
+  border-color: var(--border-dark);
+}
+
+/* ── Chat messages ─────────────────────────────────────────── */
+
 .chat-msg {
-  max-width: 95%;
+  max-width: 96%;
   padding: 7px 10px;
   border-radius: 8px;
   line-height: 1.5;
   word-break: break-word;
   font-size: 12px;
+  flex-shrink: 0;
 }
 
 .chat-msg.user {
@@ -199,7 +142,7 @@
   align-self: center;
   text-align: center;
   max-width: 100%;
-  padding: 2px 6px;
+  padding: 2px 4px;
 }
 
 .chat-msg.typing {
@@ -209,7 +152,6 @@
   border-bottom-left-radius: 3px;
 }
 
-/* Typing dots animation */
 .typing-dots {
   display: flex;
   align-items: center;
@@ -232,36 +174,6 @@
 @keyframes ai-bounce {
   0%, 80%, 100% { transform: translateY(0);   opacity: 0.4; }
   40%           { transform: translateY(-4px); opacity: 1;   }
-}
-
-/* ── Quick-action buttons ─────────────────────────────────── */
-
-#sparky-quick {
-  padding: 6px 8px 7px;
-  display: flex;
-  gap: 5px;
-  flex-wrap: wrap;
-  flex-shrink: 0;
-  border-top: 1px solid var(--border);
-}
-
-.sparky-quick-btn {
-  font-size: 11px;
-  padding: 3px 9px;
-  background: transparent;
-  border: 1px solid var(--border);
-  border-radius: 20px;
-  color: var(--text-muted);
-  cursor: pointer;
-  font-family: inherit;
-  transition: background 0.12s, border-color 0.12s, color 0.12s;
-  line-height: 1.6;
-}
-
-.sparky-quick-btn:hover {
-  background: #f0f0ef;
-  border-color: var(--border-dark);
-  color: var(--text-primary);
 }
 
 /* ── Input area ───────────────────────────────────────────── */
@@ -310,14 +222,13 @@
   align-items: center;
   justify-content: center;
   color: #fff;
-  font-size: 14px;
   cursor: pointer;
   transition: background 0.12s, transform 0.1s;
   flex-shrink: 0;
 }
 
-#sparky-send:hover   { background: var(--accent-hover); }
-#sparky-send:active  { transform: scale(0.93); }
+#sparky-send:hover  { background: var(--accent-hover); }
+#sparky-send:active { transform: scale(0.93); }
 #sparky-send:disabled {
   background: var(--border);
   color: var(--text-sub);
