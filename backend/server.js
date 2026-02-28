@@ -153,7 +153,14 @@ BREADBOARD RULES:
 - LED holeA = cathode (−) → GND. LED holeB = anode (+) → resistor → power.
 - Every LED needs a resistor in series.
 
-Reply style: 2-5 sentences max. Be specific with hole names like "a14" or "tp_10". Be encouraging.`;
+REPLY RULES:
+- NEVER use markdown formatting. No hashtags, asterisks, backticks, or bullet dashes. Plain text only.
+- Talk like a chill TA walking around the lab. Short, natural, helpful.
+- MAX 2 sentences. Seriously, 2 sentences max. No exceptions.
+- Do NOT over-explain. Do NOT list steps. Do NOT repeat yourself. Do NOT add filler encouragement like "great job" or "you got this" or "keep going".
+- If the student wants more detail, they will ask. Only go deeper when explicitly asked.
+- Example good answer: "The battery sends current through the resistor to limit it, then through the LED which lights up, and back to ground."
+- Example bad answer: anything longer than 2 sentences, anything that lists components one by one, anything with filler praise.`;
 
 // Tools addendum — stored as an array of strings joined to avoid backtick escaping issues
 const TOOLS_ADDENDUM = [
@@ -246,12 +253,21 @@ function cleanReply(raw) {
     .replace(/\n?QUESTION:\s*$/, '')
     .replace(/\n?BOARD STATE:\s*$/, '')
     .replace(/\n?Sparky:\s*$/, '')
+    .replace(/#{1,6}\s?/g, '')        // strip markdown headings
+    .replace(/\*{1,3}([^*]+)\*{1,3}/g, '$1')  // strip bold/italic
+    .replace(/`([^`]+)`/g, '$1')      // strip inline code
+    .replace(/^[-*]\s/gm, '')         // strip bullet points
     .trim();
 }
 
 // ── Parse ```actions or ```json block ─────────────────────────
 function parseActions(text) {
-  const match = text.match(/```(?:actions|json)\s*([\s\S]*?)```/);
+  // Try fenced block first: ```actions ... ``` or ```json ... ```
+  let match = text.match(/```(?:actions|json)\s*([\s\S]*?)```/);
+  // Fallback: unfenced "actions" label followed by JSON array
+  if (!match) match = text.match(/\bactions\s*\n(\[[\s\S]*\])/);
+  // Fallback: bare JSON array at end of reply
+  if (!match) match = text.match(/\n(\[[\s\S]*\])\s*$/);
   if (!match) return { reply: cleanReply(text), actions: [] };
   let actions = [];
   try { actions = JSON.parse(match[1].trim()); } catch (e) {
@@ -261,11 +277,66 @@ function parseActions(text) {
 }
 
 // ── Call watsonx ──────────────────────────────────────────────
+// ── Classify intent: does the user want to build or just ask? ──
+async function classifyIntent(userMsg, token) {
+  const classifyPrompt = `Classify the user's intent. Reply with exactly one word: BUILD or QUESTION.
+
+BUILD = the user wants to place, add, wire, connect, create, build, fix, remove, or modify components on a circuit board.
+QUESTION = the user wants an explanation, analysis, help understanding, or is asking about concepts.
+
+Examples:
+"add an LED" → BUILD
+"build me a circuit with 3 LEDs" → BUILD
+"wire the resistor to ground" → BUILD
+"what does this circuit do?" → QUESTION
+"explain how LEDs work" → QUESTION
+"what's wrong with my circuit?" → QUESTION
+"can you help me understand resistors?" → QUESTION
+"why isn't it working?" → QUESTION
+"hey" → QUESTION
+"hello" → QUESTION
+
+User message: "${userMsg}"
+Intent:`;
+
+  const res = await fetch(
+    `${WX_URL}/ml/v1/text/generation?version=2023-05-29`,
+    {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${token}`,
+      },
+      body: JSON.stringify({
+        model_id: MODEL_ID,
+        input: classifyPrompt,
+        project_id: PROJECT_ID,
+        parameters: {
+          max_new_tokens: 5,
+          temperature: 0,
+          repetition_penalty: 1.0,
+        },
+      }),
+    }
+  );
+  if (!res.ok) return 'BUILD'; // fallback to including tools
+  const data = await res.json();
+  const result = (data.results?.[0]?.generated_text ?? '').trim().toUpperCase();
+  return result.includes('BUILD') ? 'BUILD' : 'QUESTION';
+}
+
 async function askWatsonx(markdown, userMsg) {
   const token = await getToken();
   const msg   = userMsg || 'Analyze my circuit and tell me what to do next.';
 
-  const prompt = `${BASE_PROMPT}\n${TOOLS_ADDENDUM}\n\nBOARD STATE:\n${markdown || '**Board status: EMPTY — no components or wires placed yet.**'}\n\nQUESTION: ${msg}\n\nANSWER:`;
+  // Classify intent first — only include tools if user wants to build
+  const intent = await classifyIntent(msg, token);
+  console.log(`[intent] "${msg.slice(0,50)}" → ${intent}`);
+
+  const toolsSection = intent === 'BUILD'
+    ? `\n${TOOLS_ADDENDUM}\n\nCRITICAL REPLY RULE: Your text reply before the actions block must be ONLY a short confirmation of what you built. Examples: "I built a basic LED circuit for you." or "I added a button that controls the LED." Do NOT describe steps, wiring details, or component locations. Just confirm what you did in one sentence.`
+    : '\n\nDo NOT output any actions blocks. Answer in 1-2 sentences max like a TA giving a quick explanation. No filler, no praise, no step-by-step breakdowns.';
+  const prompt = `${BASE_PROMPT}${toolsSection}\n\nBOARD STATE:\n${markdown || '**Board status: EMPTY — no components or wires placed yet.**'}\n\nQUESTION: ${msg}\n\nANSWER:`;
 
   const res = await fetch(
     `${WX_URL}/ml/v1/text/generation?version=2023-05-29`,
