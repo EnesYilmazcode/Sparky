@@ -761,6 +761,7 @@
     clearTimeout(_autoSaveTimer);
     _autoSaveTimer = setTimeout(_doAutoSave, 800);
   }
+  App.scheduleAutoSave = scheduleAutoSave;
 
   function _doAutoSave() {
     if (!state.components.length && !state.wires.length) return; // nothing to save

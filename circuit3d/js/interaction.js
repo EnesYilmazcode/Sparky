@@ -402,8 +402,8 @@
 
     // ── Keyboard ─────────────────────────────────────────────
     document.addEventListener('keydown', e => {
-      const tag = document.activeElement?.tagName;
-      if (tag === 'INPUT' || tag === 'TEXTAREA') return;
+      const el = document.activeElement;
+      if (el?.tagName === 'INPUT' || el?.tagName === 'TEXTAREA' || el?.isContentEditable) return;
 
       if (e.key === 'r' || e.key === 'R') {
         // Toggle rotation (0 ↔ 1)

@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Sparky</title>
   <link rel="preconnect" href="https://fonts.googleapis.com" />
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap" rel="stylesheet" />
+  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=Inter:wght@400;500;600&display=swap" rel="stylesheet" />
   <link rel="stylesheet" href="css/style.css" />
   <link rel="stylesheet" href="css/chat.css" />
 </head>
@@ -27,7 +27,7 @@
             contenteditable="true"
             spellcheck="false"
             title="Click to rename circuit"
-            onblur="App.state.circuitName = this.textContent.trim() || 'Untitled'; this.textContent = App.state.circuitName;"
+            onblur="App.state.circuitName = this.textContent.trim() || 'Untitled'; this.textContent = App.state.circuitName; if(App.scheduleAutoSave) App.scheduleAutoSave();"
             onkeydown="if(event.key==='Enter'){event.preventDefault();this.blur();}">Untitled</span>
     </div>
 

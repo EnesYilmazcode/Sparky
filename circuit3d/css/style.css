@@ -11,19 +11,19 @@
 
 :root {
   --bg-canvas:    #dcdad4;   /* warm gray workbench */
-  --bg-sidebar:   #ffffff;
-  --bg-topbar:    #ffffff;
-  --border:       #e0ddd8;
-  --border-dark:  #c8c5bf;
-  --text-primary: #1a1a1a;
-  --text-muted:   #888;
-  --text-sub:     #aaa;
-  --accent:       #0075ff;
-  --accent-hover: #005fd4;
-  --danger:       #e53935;
-  --selected-bg:  #eaf2ff;
-  --selected-border: #0075ff;
-  --topbar-h:     46px;
+  --bg-sidebar:   #FAF9F6;
+  --bg-topbar:    #FAF9F6;
+  --border:       #E0DCD5;
+  --border-dark:  #C8C3BA;
+  --text-primary: #1A1814;
+  --text-muted:   #9C9690;
+  --text-sub:     #9C9690;
+  --accent:       #D97706;
+  --accent-hover: #B45309;
+  --danger:       #dc2626;
+  --selected-bg:  #FEF3C7;
+  --selected-border: #D97706;
+  --topbar-h:     48px;
   --sidebar-w:    210px;
 }
 
@@ -70,6 +70,7 @@ html, body {
   display: flex;
   align-items: center;
   gap: 7px;
+  font-family: 'Space Grotesk', sans-serif;
   font-weight: 700;
   font-size: 15px;
   color: var(--text-primary);
@@ -78,7 +79,7 @@ html, body {
   flex-shrink: 0;
 }
 
-.topbar-brand svg { color: var(--accent); }
+.topbar-brand svg { color: var(--accent); filter: drop-shadow(0 0 3px rgba(217,119,6,0.3)); }
 
 .topbar-name-sep {
   color: var(--border-dark);
@@ -110,6 +111,7 @@ html, body {
 #circuit-name-field:focus {
   border-color: var(--accent);
   background: #fff;
+  box-shadow: 0 0 0 2px rgba(217,119,6,0.1);
 }
 
 /* ── Load preview modal ──────────────────────── */
@@ -117,7 +119,8 @@ html, body {
 #load-preview-modal {
   position: fixed;
   inset: 0;
-  background: rgba(0,0,0,0.45);
+  background: rgba(26,24,20,0.5);
+  backdrop-filter: blur(4px);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -164,6 +167,7 @@ html, body {
 }
 
 .lpm-name {
+  font-family: 'Space Grotesk', sans-serif;
   font-size: 15px;
   font-weight: 700;
   color: var(--text-primary);
@@ -202,7 +206,7 @@ html, body {
 .stat-badge {
   font-size: 11px;
   color: var(--text-muted);
-  background: #f4f3f0;
+  background: #F3F1EC;
   border: 1px solid var(--border);
   border-radius: 4px;
   padding: 3px 8px;
@@ -274,11 +278,12 @@ html, body {
 }
 
 .sidebar-section-label {
+  font-family: 'Space Grotesk', sans-serif;
   font-size: 10px;
   font-weight: 600;
   letter-spacing: 0.6px;
   text-transform: uppercase;
-  color: var(--text-sub);
+  color: var(--accent);
   padding: 4px 6px 6px;
 }
 
@@ -298,7 +303,7 @@ html, body {
 }
 
 .comp-item:hover {
-  background: #f5f4f1;
+  background: #F3F1EC;
   border-color: var(--border);
 }
 
@@ -315,7 +320,7 @@ html, body {
   width: 34px;
   height: 34px;
   border-radius: 6px;
-  background: #f4f3f0;
+  background: #F3F1EC;
   border: 1px solid var(--border);
   display: flex;
   align-items: center;
@@ -390,7 +395,7 @@ kbd {
   padding: 1px 5px;
   font-family: inherit;
   font-size: 10px;
-  background: #f0eeea;
+  background: #EDEAE4;
   border: 1px solid var(--border-dark);
   border-radius: 3px;
   color: var(--text-primary);
@@ -461,29 +466,30 @@ canvas {
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  padding: 5px 13px;
-  background: #16a34a;
+  padding: 5px 14px;
+  background: var(--accent);
   border: none;
-  border-radius: 5px;
-  font-family: inherit;
+  border-radius: 6px;
+  font-family: 'Space Grotesk', sans-serif;
   font-size: 12px;
   font-weight: 600;
   color: #ffffff;
   cursor: pointer;
-  transition: background 0.12s, transform 0.1s;
+  transition: background 0.12s, transform 0.1s, box-shadow 0.15s;
+  box-shadow: 0 1px 2px rgba(0,0,0,0.05);
 }
-.btn-simulate:hover { background: #15803d; }
+.btn-simulate:hover { background: var(--accent-hover); box-shadow: 0 2px 8px rgba(217,119,6,0.25); }
 .btn-simulate:active { transform: scale(0.97); }
 
 .btn-stop {
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  padding: 5px 13px;
+  padding: 5px 14px;
   background: #dc2626;
   border: none;
-  border-radius: 5px;
-  font-family: inherit;
+  border-radius: 6px;
+  font-family: 'Space Grotesk', sans-serif;
   font-size: 12px;
   font-weight: 600;
   color: #ffffff;
