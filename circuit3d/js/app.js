@@ -433,6 +433,9 @@
       state.wires = state.wires.filter(w => w !== item);
     }
     refreshCounts();
+
+    // Re-evaluate simulation with the remaining circuit
+    if (App.simRunning) App.runSimulation();
   };
 
   // ── Save / Load ──────────────────────────────────────────────

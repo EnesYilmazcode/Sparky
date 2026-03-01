@@ -330,6 +330,9 @@
     const isRerun = _btnClickHandler !== null; // already running = button click re-run
     clearSimVisuals(); // preserve button states across re-runs
 
+    // Switch to select mode so user can click components during simulation
+    if (!isRerun && App.setMode) App.setMode('select');
+
     if (!components.length) {
       showResults([{ text: 'No components placed.', cls: 'sim-warn' }]);
       return;
@@ -430,6 +433,7 @@
     });
 
     showResults(lines);
+    App.simRunning = true;
     document.getElementById('sim-run-btn').style.display  = 'none';
     document.getElementById('sim-stop-btn').style.display = 'inline-flex';
     // Only install the click handler on the first run — re-runs from
@@ -454,6 +458,7 @@
         cap.material.emissiveIntensity = 0;
       }
     });
+    App.simRunning = false;
     removeButtonClicks();
     const runBtn  = document.getElementById('sim-run-btn');
     const stopBtn = document.getElementById('sim-stop-btn');
