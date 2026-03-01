@@ -4,7 +4,7 @@ Sparky is a browser-based 3D breadboard circuit designer with an embedded AI tut
 
 ![Sparky Circuit Designer](demo.png)
 
-Built for the **IBM Skills Build Hackathon**.
+**🏆 Won 1st Place Overall at IBM Skills Build Hackathon**
 
 ---
 
