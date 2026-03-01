@@ -307,6 +307,7 @@
 <script>
 // ── Sparky AI chat ──────────────────────────────────────────────
 const SPARKY_API = '/api/ask';
+const chatHistory = [];   // {role:'user'|'model', text} pairs for conversation memory
 
 // ── Chat helpers ─────────────────────────────────────────────────
 
@@ -678,6 +679,7 @@ async function sparkyAsk(overrideMsg) {
 
   sparkyAddMsg(msg, 'user');
   input.value = '';
+  input.style.height = 'auto';
 
   const typingEl = sparkyTyping();
 
@@ -688,12 +690,16 @@ async function sparkyAsk(overrideMsg) {
     const resp = await fetch(SPARKY_API, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ markdown, message: msg, tools_enabled: true }),
+      body: JSON.stringify({ markdown, message: msg, history: chatHistory.slice(-20) }),
     });
 
     const data = await resp.json();
     typingEl.remove();
     sparkyAddMsg(data.reply || '(no reply)', 'ai');
+
+    // Store turn pair for conversation memory
+    chatHistory.push({ role: 'user', text: msg });
+    chatHistory.push({ role: 'model', text: data.reply || '' });
 
     if (data.actions && data.actions.length) {
       sparkyPreviewActions(data.actions);
@@ -701,7 +707,7 @@ async function sparkyAsk(overrideMsg) {
 
   } catch (err) {
     typingEl.remove();
-    sparkyAddMsg('⚠️ Cannot reach Sparky backend. Run: python backend/app.py', 'system');
+    sparkyAddMsg('⚠️ Cannot reach Sparky backend. Run: node backend/server.js', 'system');
   }
 
 }

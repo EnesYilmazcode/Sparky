@@ -353,16 +353,28 @@ function validateActions(actions) {
 }
 
 // ── Call Gemini ──────────────────────────────────────────────
-async function askGemini(markdown, userMsg) {
+async function askGemini(markdown, userMsg, history) {
   const msg = userMsg || 'Analyze my circuit and tell me what to do next.';
   const boardState = markdown || '**Board is EMPTY — no components or wires placed.**';
 
+  // Build multi-turn contents from conversation history
+  const contents = [];
+  if (Array.isArray(history) && history.length) {
+    for (const h of history) {
+      const role = h.role === 'model' ? 'model' : 'user';
+      if (h.text) contents.push({ role, parts: [{ text: h.text }] });
+    }
+  }
+
+  // Current user message with board state
+  contents.push({
+    role: 'user',
+    parts: [{ text: `BOARD STATE:\n${boardState}\n\nQUESTION: ${msg}` }],
+  });
+
   const body = {
     system_instruction: { parts: [{ text: SYSTEM_PROMPT }] },
-    contents: [{
-      role: 'user',
-      parts: [{ text: `BOARD STATE:\n${boardState}\n\nQUESTION: ${msg}` }],
-    }],
+    contents,
     tools: CIRCUIT_TOOLS,
     tool_config: { function_calling_config: { mode: 'AUTO' } },
     generation_config: { temperature: 0.3, max_output_tokens: 2048 },
@@ -458,8 +470,8 @@ const server = http.createServer(async (req, res) => {
     req.on('data', chunk => (body += chunk));
     req.on('end', async () => {
       try {
-        const { markdown = '', message = '' } = JSON.parse(body || '{}');
-        const { reply, actions } = await askGemini(markdown, message);
+        const { markdown = '', message = '', history = [] } = JSON.parse(body || '{}');
+        const { reply, actions } = await askGemini(markdown, message, history);
         console.log(`[ask] "${message.slice(0,60)}" → ${actions.length} action(s)`);
         return sendJSON(res, 200, { reply, actions });
       } catch (e) {
