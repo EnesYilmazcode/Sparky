@@ -2,6 +2,8 @@
 
 Sparky is a browser-based 3D breadboard circuit designer with an embedded AI tutor powered by IBM watsonx. It lets electronics beginners place components, draw wires, run circuit simulations, and get real-time AI guidance — all in a single web page with no installation required.
 
+![Sparky Circuit Designer](demo.png)
+
 Built for the **IBM Skills Build Hackathon**.
 
 ---
