@@ -4,17 +4,16 @@ A 3D circuit designer that runs right in your browser. Drop components onto a br
 
 ![Sparky Circuit Designer](demo.png)
 
-🏆 **1st Place Overall — IBM Skills Build Hackathon**
-
 ---
 
 ## What can it do?
 
-- **Build circuits in 3D** — place resistors, LEDs, batteries, buzzers, and push buttons onto a realistic breadboard
+- **Build circuits in 3D** -- place resistors, LEDs, batteries, buzzers, and push buttons onto a realistic breadboard
 - **Draw wires** between any two holes or pins, pick from 6 colors
-- **Simulate** — hit play and watch LEDs light up, click buttons to open/close the circuit in real time
-- **AI tutor** — ask Sparky a question and it explains what's going on, or tell it to build a circuit and it places the parts for you
-- **Save and load** — export your circuits as `.sparky` files and share them
+- **Simulate** -- hit play and watch LEDs light up, click buttons to open/close the circuit in real time
+- **AI tutor** -- ask Sparky a question and it explains what's going on, or tell it to build a circuit and it places the parts for you
+- **Conversation memory** -- Sparky remembers your conversation within a session so you can build on previous messages
+- **Save and load** -- export your circuits as `.sparky` files and share them
 
 ## Quick start
 
@@ -24,32 +23,34 @@ Open `circuit3d/index.html` in your browser. That's it. No install, no server, n
 
 **With the AI tutor:**
 
-You'll need Node.js 18+ and an IBM watsonx API key.
+You need Node.js 18+ and a Google Gemini API key (free tier available).
 
 ```bash
 cd backend
 
-# Create a .env file with your credentials
-cat > .env << EOF
-WATSONX_APIKEY=your_api_key_here
-WATSONX_PROJECT_ID=your_project_id_here
-WATSONX_URL=https://us-south.ml.cloud.ibm.com
-EOF
+# Create a .env file with your API key
+echo "GEMINI_API_KEY=your_gemini_api_key_here" > .env
 
 node server.js
 ```
 
-Then open the app — the chat panel connects to `localhost:5000` automatically.
+Then open `http://localhost:5001` in your browser. The chat panel on the right connects to the backend automatically.
 
-To get IBM watsonx credentials: sign up at [IBM Cloud](https://cloud.ibm.com), create a Watson Machine Learning instance, grab an API key from **Manage > Access (IAM) > API keys**, and create a project at [watsonx.ai](https://dataplatform.cloud.ibm.com) to get your Project ID.
+**Getting a Gemini API key:**
+
+1. Go to [Google AI Studio](https://aistudio.google.com/apikey)
+2. Click "Create API key"
+3. Copy it into your `.env` file
+
+The free tier gives you plenty of requests per day for personal use.
 
 ## Controls
 
 | Key | What it does |
 | --- | --- |
-| `S` | Select mode — click stuff to select it, then Delete to remove |
-| `P` | Place mode — hover to preview, click to drop |
-| `W` | Wire mode — click two holes/pins to connect them |
+| `S` | Select mode -- click stuff to select it, then Delete to remove |
+| `P` | Place mode -- hover to preview, click to drop |
+| `W` | Wire mode -- click two holes/pins to connect them |
 | `R` | Rotate component before placing |
 | `Esc` | Cancel whatever you're doing |
 
@@ -61,23 +62,25 @@ The simulator models the breadboard as a graph. Holes in the same column on the 
 
 When you hit simulate, it:
 1. Maps every hole and wire into a connectivity graph using Union-Find
-2. Finds **all** paths from battery+ to battery- (not just the first one — this is what makes parallel circuits work)
+2. Finds **all** paths from battery+ to battery- (not just the first one, this is what makes parallel circuits work)
 3. Calculates current through each path: `I = (9V - LED voltage drops) / total resistance`
 4. Lights up any LED getting enough current
 
-Push buttons work during simulation too — click them to toggle the circuit on and off.
+Push buttons work during simulation too -- click them to toggle the circuit on and off.
 
 ## How the AI works
 
-When you send a message, the app snapshots your entire board (components, positions, wires) as a markdown table and sends it to IBM watsonx along with your question. The model can reply with text, or it can reply with a JSON block of actions like "place a resistor at a3-a7" and "wire tp_5 to a3" — the app executes those directly on the 3D board.
+When you send a message, the app snapshots your entire board (components, positions, wires) as a markdown table and sends it to Gemini along with your question and your conversation history.
 
-So you can literally type "build me an LED circuit" and watch it happen.
+Gemini uses **function calling** to interact with the board. Instead of generating raw JSON, it calls structured tools like `place_resistor(holeA="a3", holeB="a7")` and `add_wire(from="tp_3", to="a3", color="red")`. A server-side validation layer catches common mistakes (like forgetting to wire the battery to the rails) and auto-fixes them.
+
+So you can literally type "build me 3 LEDs" and watch it happen.
 
 ## Project structure
 
 ```
 circuit3d/
-  index.html          The app
+  index.html          The app (+ inline chat JS)
   css/                 Styling
   js/
     scene.js           Three.js scene setup
@@ -88,11 +91,11 @@ circuit3d/
     app.js             Ties everything together
 
 backend/
-  server.js            Talks to IBM watsonx (zero npm dependencies)
-  .env                 Your credentials (not committed)
+  server.js            AI backend + static server (zero npm dependencies)
+  .env                 Your API key (not committed)
 ```
 
-Everything is vanilla JS — no build tools, no frameworks, no bundler. The 3D components are all built from basic Three.js shapes (no external model files), so the whole app works offline from the file system.
+Everything is vanilla JS. No build tools, no frameworks, no bundler. The 3D components are all built from basic Three.js shapes, so the whole app works offline from the file system (minus the AI).
 
 ## Tech stack
 
@@ -101,9 +104,23 @@ Everything is vanilla JS — no build tools, no frameworks, no bundler. The 3D c
 | 3D | Three.js r128 from CDN |
 | Frontend | Plain HTML/CSS/JS |
 | AI backend | Node.js http module, zero dependencies |
-| AI model | Llama 3.3 70B on IBM watsonx |
-| Auth | IBM IAM token exchange |
+| AI model | Gemini 2.0 Flash (Google) |
+| AI features | Native function calling, conversation memory, circuit validation |
+
+## .env reference
+
+| Variable | Required | Description |
+| --- | --- | --- |
+| `GEMINI_API_KEY` | Yes | Your Google Gemini API key ([get one here](https://aistudio.google.com/apikey)) |
+| `PORT` | No | Server port (default: 5001) |
+| `APPID_CLIENT_ID` | No | IBM App ID client ID (for Google OAuth login) |
+| `APPID_CLIENT_SECRET` | No | IBM App ID secret |
+| `APPID_OAUTH_URL` | No | IBM App ID OAuth URL |
+| `CLOUDANT_URL` | No | IBM Cloudant URL (for cloud circuit storage) |
+| `CLOUDANT_APIKEY` | No | IBM Cloudant API key |
+
+Only `GEMINI_API_KEY` is needed to get started. The IBM variables are for optional cloud auth and storage features.
 
 ---
 
-*Built for the IBM Skills Build Hackathon*
+*Made by [Enes Yilmaz](https://enes.web.app) and Colin Lee*
