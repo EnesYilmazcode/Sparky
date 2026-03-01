@@ -250,17 +250,3 @@
 
 #sparky-input::placeholder { color: var(--text-sub); }
 
-/* ── IBM badge ────────────────────────────────────────────── */
-
-#sparky-ibm-badge {
-  text-align: center;
-  padding: 4px 0 7px;
-  font-size: 10px;
-  color: var(--text-sub);
-  flex-shrink: 0;
-}
-
-#sparky-ibm-badge span {
-  color: var(--accent);
-  font-weight: 600;
-}

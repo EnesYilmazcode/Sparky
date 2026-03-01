@@ -467,7 +467,7 @@ canvas {
   align-items: center;
   gap: 6px;
   padding: 5px 14px;
-  background: var(--accent);
+  background: #16a34a;
   border: none;
   border-radius: 6px;
   font-family: 'Space Grotesk', sans-serif;
@@ -478,7 +478,7 @@ canvas {
   transition: background 0.12s, transform 0.1s, box-shadow 0.15s;
   box-shadow: 0 1px 2px rgba(0,0,0,0.05);
 }
-.btn-simulate:hover { background: var(--accent-hover); box-shadow: 0 2px 8px rgba(217,119,6,0.25); }
+.btn-simulate:hover { background: #15803d; box-shadow: 0 2px 8px rgba(22,163,74,0.25); }
 .btn-simulate:active { transform: scale(0.97); }
 
 .btn-stop {

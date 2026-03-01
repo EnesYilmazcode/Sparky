@@ -269,8 +269,6 @@
         <textarea id="sparky-input" rows="1" placeholder="Ask Sparky anything…"></textarea>
       </div>
 
-      <div id="sparky-ibm-badge">Powered by <span>IBM watsonx</span></div>
-
     </div>
 
   </div>
@@ -712,9 +710,16 @@ function sparkyQuick(msg) { sparkyAsk(msg); }
 
 document.addEventListener('DOMContentLoaded', () => {
   const inp = document.getElementById('sparky-input');
-  if (inp) inp.addEventListener('keydown', e => {
+  if (!inp) return;
+  inp.addEventListener('keydown', e => {
     if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sparkyAsk(); }
   });
+  // Auto-resize textarea as user types
+  function autoResize() {
+    inp.style.height = 'auto';
+    inp.style.height = Math.min(inp.scrollHeight, 100) + 'px';
+  }
+  inp.addEventListener('input', autoResize);
 });
 </script>
 

@@ -52,10 +52,27 @@
 
   // ── Render Loop ─────────────────────────────────────────────
 
+  const _defaultCamPos = { x: 0, y: 22, z: 30 };
+  const _defaultCamTgt = { x: 0, y: 0, z: 0 };
+  const _camThreshold = 0.5;
+
+  function _isCamDefault() {
+    const p = App.camera.position, t = App.controls.target;
+    return Math.abs(p.x - _defaultCamPos.x) < _camThreshold &&
+           Math.abs(p.y - _defaultCamPos.y) < _camThreshold &&
+           Math.abs(p.z - _defaultCamPos.z) < _camThreshold &&
+           Math.abs(t.x - _defaultCamTgt.x) < _camThreshold &&
+           Math.abs(t.y - _defaultCamTgt.y) < _camThreshold &&
+           Math.abs(t.z - _defaultCamTgt.z) < _camThreshold;
+  }
+
   function animate() {
     requestAnimationFrame(animate);
     App.controls.update();
     App.renderer.render(App.scene, App.camera);
+
+    const resetBtn = document.getElementById('reset-cam-btn');
+    if (resetBtn) resetBtn.style.display = _isCamDefault() ? 'none' : 'flex';
   }
 
   // ── Sidebar ──────────────────────────────────────────────────

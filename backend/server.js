@@ -33,11 +33,10 @@ function loadEnv() {
 }
 loadEnv();
 
-const API_KEY    = process.env.WATSONX_APIKEY;
-const PROJECT_ID = process.env.WATSONX_PROJECT_ID;
-const WX_URL     = process.env.WATSONX_URL || 'https://us-south.ml.cloud.ibm.com';
-const MODEL_ID   = 'meta-llama/llama-3-3-70b-instruct';
-const PORT       = process.env.PORT || 5001;
+const GEMINI_KEY   = process.env.GEMINI_API_KEY;
+const GEMINI_MODEL = 'gemini-2.0-flash';
+const GEMINI_URL   = `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent`;
+const PORT         = process.env.PORT || 5001;
 
 // IBM App ID
 const APPID_CLIENT_ID     = process.env.APPID_CLIENT_ID;
@@ -49,31 +48,14 @@ const CLOUDANT_URL    = process.env.CLOUDANT_URL;
 const CLOUDANT_APIKEY = process.env.CLOUDANT_APIKEY;
 const CLOUDANT_DB     = 'sparky_circuits';
 
-if (!API_KEY || !PROJECT_ID) {
-  console.warn('Warning: WATSONX_APIKEY or WATSONX_PROJECT_ID not set — /api/ask will fail');
+if (!GEMINI_KEY) {
+  console.warn('Warning: GEMINI_API_KEY not set — /api/ask will fail');
 }
 if (!APPID_CLIENT_ID || !APPID_CLIENT_SECRET || !APPID_OAUTH_URL) {
   console.warn('Warning: APPID_CLIENT_ID / APPID_CLIENT_SECRET / APPID_OAUTH_URL not set — auth endpoints will fail');
 }
 if (!CLOUDANT_URL || !CLOUDANT_APIKEY) {
   console.warn('Warning: CLOUDANT_URL / CLOUDANT_APIKEY not set — circuit storage endpoints will fail');
-}
-
-// ── IAM token cache ───────────────────────────────────────────
-let _token = null, _tokenExpiry = 0;
-
-async function getToken() {
-  if (_token && Date.now() < _tokenExpiry) return _token;
-  const res = await fetch('https://iam.cloud.ibm.com/identity/token', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-    body: `grant_type=urn:ibm:params:oauth:grant-type:apikey&apikey=${API_KEY}`,
-  });
-  if (!res.ok) throw new Error(`IAM auth failed: ${res.status}`);
-  const data = await res.json();
-  _token = data.access_token;
-  _tokenExpiry = Date.now() + (data.expires_in - 120) * 1000;
-  return _token;
 }
 
 // ── Cloudant IAM token cache ──────────────────────────────────
@@ -137,171 +119,317 @@ async function authenticateRequest(req) {
   }
 }
 
-// ── Prompts ───────────────────────────────────────────────────
-const BASE_PROMPT =
-`You are Sparky, a friendly AI electronics tutor. You help beginners build circuits on a virtual 830-point breadboard.
-
-You will be shown the current board state as markdown tables, then a question. Answer based on what is actually on the board.
-
-BREADBOARD RULES:
-- Columns 1-29. Rows a/b/c/d/e = top half. Rows f/g/h/i/j = bottom half.
-- Same column + same half = electrically connected (e.g. a14 and e14 share a node).
-- The CENTER CHANNEL separates top from bottom — a14 and f14 are NOT connected unless you add a wire.
-- tp_N = positive power rail at column N (+9V). tn_N = GND rail at column N.
-- Rails are NOT auto-connected to body holes — always add a wire from tp/tn to the body hole.
-- Battery pin0 = positive (+), pin1 = negative (−). Off-board; wire to the rails first.
-- LED holeA = cathode (−) → GND. LED holeB = anode (+) → resistor → power.
-- Every LED needs a resistor in series.
-
-BUILDING BEHAVIOR:
-- When the user asks you to build, fix, or help with a circuit, FIRST look at the current board state and infer what the user is trying to build (e.g. "a simple LED circuit", "an LED with a button", etc.).
-- ALWAYS start your actions with { "tool": "delete_all" } to clear the board, then build the complete working circuit from scratch.
-- Do NOT try to patch or modify the existing circuit — clear it and rebuild it correctly.
-- After building, explain what you built and briefly how it works so the student learns.
-
-Reply style: 2-5 sentences max. Be specific with hole names like "a14" or "tp_10". Be encouraging.`;
-
-// Tools addendum — stored as an array of strings joined to avoid backtick escaping issues
-const TOOLS_ADDENDUM = [
+// ── Gemini system prompt ─────────────────────────────────────
+const SYSTEM_PROMPT = [
+  'You are Sparky, a friendly AI electronics tutor. You help beginners build circuits on a virtual 830-point breadboard.',
   '',
-  'You can modify the circuit by appending an actions JSON block at the very end of your reply.',
-  'Output ONLY a valid JSON array inside the block — no comments, no trailing commas.',
+  'BREADBOARD LAYOUT:',
+  '- Columns 1-29. Rows a/b/c/d/e = top half. Rows f/g/h/i/j = bottom half.',
+  '- Same column + same half = electrically connected (e.g. a14 and e14 share a node).',
+  '- The CENTER CHANNEL separates top from bottom. a14 and f14 are NOT connected unless you wire them.',
+  '- tp_N = positive power rail at column N (+9V). tn_N = GND rail at column N.',
+  '- Rails are NOT auto-connected to body holes. Always wire from tp/tn to body holes.',
   '',
-  '=== SIZING RULES ===',
-  'place_resistor : holeA and holeB exactly 4 columns apart, same row. E.g. a3 and a7.',
-  'place_led      : holeA=cathode(−), holeB=anode(+), exactly 2 columns apart, same row. E.g. a9 and a7 (cathode a9, anode a7).',
-  'place_button   : exactly 3 columns apart, same row. E.g. a12 and a15.',
-  'place_buzzer   : exactly 2 columns apart, same row.',
-  'Components on the same row MUST NOT share any columns — keep ranges non-overlapping.',
+  'BATTERY (CRITICAL):',
+  '- pin0 = positive (+), pin1 = negative (-). The battery sits off-board.',
+  '- EVERY circuit needs a battery with TWO wires:',
+  '  1. add_wire from "battery_0_pin0" to "tp_N" (red wire)',
+  '  2. add_wire from "battery_0_pin1" to "tn_N" (black wire)',
+  '- Without BOTH battery wires the circuit WILL NOT WORK. ALWAYS include them.',
   '',
-  '=== WIRING RECIPE FOR ONE LED (columns C to C+6) ===',
-  'Power flows: tp_C -> resistor(holeA=a{C}, holeB=a{C+4}) -> LED anode(holeB=a{C+4}) -> LED cathode(holeA=a{C+6}) -> tn_{C+6}',
-  'Note: resistor holeB and LED holeB share the same hole a{C+4} = they connect automatically.',
-  'Wires needed: (1) tp_{C} to a{C}  (2) a{C+6} to tn_{C+6}',
-  'For N LEDs in parallel, start each set 8 columns after the previous (C, C+8, C+16 ...).',
+  'COMPONENT RULES:',
+  '- LED: holeA = cathode (-) goes toward GND. holeB = anode (+) goes toward resistor/power.',
+  '- Every LED needs a resistor in series to limit current.',
   '',
-  '=== EXAMPLE: single LED at columns 3-9 ===',
-  '```actions',
-  '[',
-  '  { "tool": "place_battery" },',
-  '  { "tool": "add_wire", "from": "battery_0_pin0", "to": "tp_3",  "color": "red"   },',
-  '  { "tool": "add_wire", "from": "battery_0_pin1", "to": "tn_9",  "color": "black" },',
-  '  { "tool": "place_resistor", "holeA": "a3", "holeB": "a7" },',
-  '  { "tool": "place_led",      "holeA": "a9", "holeB": "a7" },',
-  '  { "tool": "add_wire", "from": "tp_3", "to": "a3",   "color": "red"   },',
-  '  { "tool": "add_wire", "from": "a9",   "to": "tn_9", "color": "black" }',
-  ']',
-  '```',
+  'SIZING (columns apart, same row):',
+  '- place_resistor: exactly 4 columns apart (e.g. a3 and a7)',
+  '- place_led: exactly 2 columns apart (e.g. cathode a9, anode a7)',
+  '- place_button: exactly 3 columns apart (e.g. a12 and a15)',
+  '- place_buzzer: exactly 2 columns apart',
+  '- No column overlap between components on the same row.',
   '',
-  '=== EXAMPLE: three LEDs in parallel (starts at cols 3, 11, 19) ===',
-  '```actions',
-  '[',
-  '  { "tool": "place_battery" },',
-  '  { "tool": "add_wire", "from": "battery_0_pin0", "to": "tp_3",  "color": "red"   },',
-  '  { "tool": "add_wire", "from": "battery_0_pin1", "to": "tn_9",  "color": "black" },',
-  '  { "tool": "place_resistor", "holeA": "a3",  "holeB": "a7"  },',
-  '  { "tool": "place_led",      "holeA": "a9",  "holeB": "a7"  },',
-  '  { "tool": "add_wire", "from": "tp_3",  "to": "a3",   "color": "red"   },',
-  '  { "tool": "add_wire", "from": "a9",    "to": "tn_9", "color": "black" },',
-  '  { "tool": "place_resistor", "holeA": "a11", "holeB": "a15" },',
-  '  { "tool": "place_led",      "holeA": "a17", "holeB": "a15" },',
-  '  { "tool": "add_wire", "from": "tp_11", "to": "a11",  "color": "red"   },',
-  '  { "tool": "add_wire", "from": "a17",   "to": "tn_17","color": "black" },',
-  '  { "tool": "place_resistor", "holeA": "a19", "holeB": "a23" },',
-  '  { "tool": "place_led",      "holeA": "a25", "holeB": "a23" },',
-  '  { "tool": "add_wire", "from": "tp_19", "to": "a19",  "color": "red"   },',
-  '  { "tool": "add_wire", "from": "a25",   "to": "tn_25","color": "black" }',
-  ']',
-  '```',
+  'HOLE NAMES:',
+  '- Body: "a3", "e14", "j22"',
+  '- Rail: "tp_5" (positive col 5), "tn_5" (GND col 5)',
+  '- Battery: "battery_0_pin0" (+), "battery_0_pin1" (-)',
   '',
-  '=== EXAMPLE: LED + push button (button in series on GND side) ===',
-  '```actions',
-  '[',
-  '  { "tool": "place_battery" },',
-  '  { "tool": "add_wire", "from": "battery_0_pin0", "to": "tp_3",  "color": "red"   },',
-  '  { "tool": "add_wire", "from": "battery_0_pin1", "to": "tn_16", "color": "black" },',
-  '  { "tool": "place_resistor", "holeA": "a3",  "holeB": "a7"  },',
-  '  { "tool": "place_led",      "holeA": "a9",  "holeB": "a7"  },',
-  '  { "tool": "place_button",   "holeA": "a12", "holeB": "a15" },',
-  '  { "tool": "add_wire", "from": "tp_3",  "to": "a3",   "color": "red"    },',
-  '  { "tool": "add_wire", "from": "a9",    "to": "a12",  "color": "yellow" },',
-  '  { "tool": "add_wire", "from": "a15",   "to": "tn_15","color": "black"  }',
-  ']',
-  '```',
+  'BUILDING BEHAVIOR:',
+  '- When asked to build, fix, or create a circuit: call delete_all FIRST, then rebuild from scratch.',
+  '- Never patch an existing circuit. Always clear and rebuild the full correct circuit.',
+  '- After building, write 2-3 sentences explaining what you built and how it works.',
   '',
-  '=== TOOLS ===',
-  'place_battery',
-  'place_resistor  holeA holeB   (4 cols apart, same row)',
-  'place_led       holeA holeB   (holeA=cathode−, holeB=anode+, 2 cols apart, same row)',
-  'place_buzzer    holeA holeB   (2 cols apart, same row)',
-  'place_button    holeA holeB   (3 cols apart, same row)',
-  'add_wire        from to color (red|yellow|green|blue|black|white)',
-  'delete_all',
+  'CRITICAL WIRING RULES:',
+  '- Placing a component on the board does NOT connect it to power or ground.',
+  '- You MUST add_wire from a power rail (tp_N) to each component that needs +9V.',
+  '- You MUST add_wire from each component that needs GND to a ground rail (tn_N).',
+  '- Without these rail-to-body wires, the circuit WILL NOT WORK.',
   '',
-  '=== WIRE NAMES ===',
-  'Body hole: "a3", "e14", "j22"',
-  'Rail: "tp_5" (positive col 5), "tn_5" (GND col 5)',
-  'Battery: "battery_0_pin0" (+), "battery_0_pin1" (−)  [use index from board state]',
+  'COMPLETE RECIPE FOR ONE LED (starting at column C):',
+  '  1. delete_all',
+  '  2. place_battery',
+  '  3. add_wire: battery_0_pin0 -> tp_C (red)       ← battery to + rail',
+  '  4. add_wire: battery_0_pin1 -> tn_{C+6} (black) ← battery to - rail',
+  '  5. place_resistor: holeA=a{C}, holeB=a{C+4}',
+  '  6. place_led: holeA=a{C+6} (cathode), holeB=a{C+4} (anode)',
+  '  7. add_wire: tp_{C} -> a{C} (red)               ← rail to resistor (REQUIRED!)',
+  '  8. add_wire: a{C+6} -> tn_{C+6} (black)         ← LED cathode to rail (REQUIRED!)',
+  'Steps 7 and 8 are REQUIRED for EVERY LED group. Without them the LED will not light up.',
   '',
-  'Append an actions block whenever the user asks you to build, place, add, wire, fix, connect, create, or modify the circuit. Do NOT include it for pure analysis questions.',
-  'IMPORTANT: When building or fixing a circuit, ALWAYS begin the actions array with { "tool": "delete_all" }, then build the full correct circuit from scratch. Infer the user\'s intent from what is on the board — e.g. if they have an incomplete LED circuit, rebuild a correct LED circuit. Never try to patch — always clear and rebuild.',
+  'FOR 3 LEDs (at C=2, C=10, C=18):',
+  '  Total calls: 1 delete_all + 1 place_battery + 2 battery wires + 3*(place_resistor + place_led + 2 rail wires) = 16 calls.',
+  '  Every LED group needs its own pair of rail-to-body wires: tp_{C}->a{C} and a{C+6}->tn_{C+6}.',
+  '',
+  'Reply style: 2-5 sentences max. Be specific with hole names. Be encouraging.',
+  'For pure questions (no building), just respond with helpful text. Do not call any tools.',
 ].join('\n');
 
-// ── Clean up model output ─────────────────────────────────────
-function cleanReply(raw) {
-  return raw
-    .replace(/\n?QUESTION:\s*$/, '')
-    .replace(/\n?BOARD STATE:\s*$/, '')
-    .replace(/\n?Sparky:\s*$/, '')
-    .trim();
-}
-
-// ── Parse ```actions or ```json block ─────────────────────────
-function parseActions(text) {
-  const match = text.match(/```(?:actions|json)\s*([\s\S]*?)```/);
-  if (!match) return { reply: cleanReply(text), actions: [] };
-  let actions = [];
-  try { actions = JSON.parse(match[1].trim()); } catch (e) {
-    console.warn('Could not parse actions JSON:', e.message);
-  }
-  return { reply: cleanReply(text.slice(0, match.index)), actions };
-}
-
-// ── Call watsonx ──────────────────────────────────────────────
-async function askWatsonx(markdown, userMsg) {
-  const token = await getToken();
-  const msg   = userMsg || 'Analyze my circuit and tell me what to do next.';
-
-  const prompt = `${BASE_PROMPT}\n${TOOLS_ADDENDUM}\n\nBOARD STATE:\n${markdown || '**Board status: EMPTY — no components or wires placed yet.**'}\n\nQUESTION: ${msg}\n\nANSWER:`;
-
-  const res = await fetch(
-    `${WX_URL}/ml/v1/text/generation?version=2023-05-29`,
+// ── Gemini function declarations ─────────────────────────────
+const CIRCUIT_TOOLS = [{
+  function_declarations: [
     {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${token}`,
-      },
-      body: JSON.stringify({
-        model_id: MODEL_ID,
-        input: prompt,
-        project_id: PROJECT_ID,
-        parameters: {
-          max_new_tokens: 1000,
-          min_new_tokens: 10,
-          temperature: 0.3,
-          repetition_penalty: 1.1,
-          stop_sequences: ['\nQUESTION:', '\nBOARD STATE:'],
+      name: 'delete_all',
+      description: 'Clear all components and wires from the board. Call this FIRST when building or fixing a circuit.',
+    },
+    {
+      name: 'place_battery',
+      description: 'Place a 9V battery off-board. You MUST follow this with add_wire calls to connect battery_0_pin0 to a positive rail (tp_N) and battery_0_pin1 to a negative rail (tn_N).',
+    },
+    {
+      name: 'place_resistor',
+      description: 'Place a resistor. holeA and holeB must be exactly 4 columns apart on the same row.',
+      parameters: {
+        type: 'OBJECT',
+        properties: {
+          holeA: { type: 'STRING', description: 'Start hole, e.g. "a3"' },
+          holeB: { type: 'STRING', description: 'End hole, 4 columns from holeA, e.g. "a7"' },
         },
-      }),
+        required: ['holeA', 'holeB'],
+      },
+    },
+    {
+      name: 'place_led',
+      description: 'Place an LED. holeA = cathode (-), holeB = anode (+). Must be exactly 2 columns apart on the same row.',
+      parameters: {
+        type: 'OBJECT',
+        properties: {
+          holeA: { type: 'STRING', description: 'Cathode (-) hole, e.g. "a9"' },
+          holeB: { type: 'STRING', description: 'Anode (+) hole, e.g. "a7"' },
+        },
+        required: ['holeA', 'holeB'],
+      },
+    },
+    {
+      name: 'place_buzzer',
+      description: 'Place a buzzer. holeA and holeB must be exactly 2 columns apart on the same row.',
+      parameters: {
+        type: 'OBJECT',
+        properties: {
+          holeA: { type: 'STRING', description: 'First hole, e.g. "a3"' },
+          holeB: { type: 'STRING', description: 'Second hole, e.g. "a5"' },
+        },
+        required: ['holeA', 'holeB'],
+      },
+    },
+    {
+      name: 'place_button',
+      description: 'Place a push button. holeA and holeB must be exactly 3 columns apart on the same row.',
+      parameters: {
+        type: 'OBJECT',
+        properties: {
+          holeA: { type: 'STRING', description: 'First hole, e.g. "a12"' },
+          holeB: { type: 'STRING', description: 'Second hole, e.g. "a15"' },
+        },
+        required: ['holeA', 'holeB'],
+      },
+    },
+    {
+      name: 'add_wire',
+      description: 'Add a wire between two points. Points can be body holes (e.g. "a3"), rails (e.g. "tp_5", "tn_5"), or battery pins (e.g. "battery_0_pin0").',
+      parameters: {
+        type: 'OBJECT',
+        properties: {
+          from:  { type: 'STRING', description: 'Start point' },
+          to:    { type: 'STRING', description: 'End point' },
+          color: { type: 'STRING', description: 'Wire color: red, yellow, green, blue, black, or white' },
+        },
+        required: ['from', 'to', 'color'],
+      },
+    },
+  ],
+}];
+
+// ── Validate actions — auto-inject missing wires ─────────────
+function validateActions(actions) {
+  if (!Array.isArray(actions) || actions.length === 0) return actions;
+
+  const result = [...actions];
+
+  // === Pass 1: Battery wire injection ===
+  let batIdx = 0;
+  let offset = 0;
+  for (let i = 0; i < actions.length; i++) {
+    if (actions[i].tool !== 'place_battery') continue;
+
+    const pin0 = `battery_${batIdx}_pin0`;
+    const pin1 = `battery_${batIdx}_pin1`;
+    const hasPos = result.some(a => a.tool === 'add_wire' && (a.from === pin0 || a.to === pin0));
+    const hasNeg = result.some(a => a.tool === 'add_wire' && (a.from === pin1 || a.to === pin1));
+
+    if (!hasPos || !hasNeg) {
+      // Infer rail columns from first resistor / LED
+      let tpCol = null, tnCol = null;
+      for (const a of result) {
+        if (a.tool !== 'add_wire') continue;
+        const tp = (a.from || '').match(/^tp_(\d+)$/) || (a.to || '').match(/^tp_(\d+)$/);
+        const tn = (a.from || '').match(/^tn_(\d+)$/) || (a.to || '').match(/^tn_(\d+)$/);
+        if (tp && !tpCol) tpCol = parseInt(tp[1]);
+        if (tn && !tnCol) tnCol = parseInt(tn[1]);
+      }
+      if (!tpCol) {
+        const r = actions.find(a => a.tool === 'place_resistor');
+        tpCol = r ? parseInt((r.holeA || '').match(/\d+/)?.[0]) || 3 : 3;
+      }
+      if (!tnCol) {
+        const l = actions.find(a => a.tool === 'place_led');
+        tnCol = l ? parseInt((l.holeA || '').match(/\d+/)?.[0]) || 9 : 9;
+      }
+
+      const inject = [];
+      if (!hasPos) inject.push({ tool: 'add_wire', from: pin0, to: `tp_${tpCol}`, color: 'red' });
+      if (!hasNeg) inject.push({ tool: 'add_wire', from: pin1, to: `tn_${tnCol}`, color: 'black' });
+      result.splice(i + 1 + offset, 0, ...inject);
+      offset += inject.length;
+      console.log(`[validate] Injected ${inject.length} battery_${batIdx} wire(s)`);
     }
-  );
+    batIdx++;
+  }
+
+  // === Pass 2: Rail-to-body wires for resistor+LED pairs ===
+  // Build a set of all holes that already have a wire touching them
+  const wiredHoles = new Set();
+  for (const a of result) {
+    if (a.tool !== 'add_wire') continue;
+    if (a.from) wiredHoles.add(a.from);
+    if (a.to)   wiredHoles.add(a.to);
+  }
+
+  const resistors = result.filter(a => a.tool === 'place_resistor');
+  const leds      = result.filter(a => a.tool === 'place_led');
+
+  for (const res of resistors) {
+    // Find an LED that shares a hole with this resistor
+    const led = leds.find(l =>
+      l.holeA === res.holeA || l.holeA === res.holeB ||
+      l.holeB === res.holeA || l.holeB === res.holeB
+    );
+    if (!led) continue;
+
+    // Resistor outer hole = the hole NOT shared with the LED → power side
+    const resSharedB = (res.holeB === led.holeA || res.holeB === led.holeB);
+    const resOuter = resSharedB ? res.holeA : res.holeB;
+
+    // LED outer hole = the hole NOT shared with the resistor → ground side
+    const ledSharedB = (led.holeB === res.holeA || led.holeB === res.holeB);
+    const ledOuter = ledSharedB ? led.holeA : led.holeB;
+
+    // Inject power wire: tp_N → resistor outer hole
+    const resCol = resOuter.match(/(\d+)/)?.[1];
+    if (resCol && !wiredHoles.has(resOuter)) {
+      result.push({ tool: 'add_wire', from: `tp_${resCol}`, to: resOuter, color: 'red' });
+      wiredHoles.add(resOuter);
+      console.log(`[validate] Injected power wire: tp_${resCol} → ${resOuter}`);
+    }
+
+    // Inject ground wire: LED outer hole → tn_N
+    const ledCol = ledOuter.match(/(\d+)/)?.[1];
+    if (ledCol && !wiredHoles.has(ledOuter)) {
+      result.push({ tool: 'add_wire', from: ledOuter, to: `tn_${ledCol}`, color: 'black' });
+      wiredHoles.add(ledOuter);
+      console.log(`[validate] Injected ground wire: ${ledOuter} → tn_${ledCol}`);
+    }
+  }
+
+  return result;
+}
+
+// ── Call Gemini ──────────────────────────────────────────────
+async function askGemini(markdown, userMsg) {
+  const msg = userMsg || 'Analyze my circuit and tell me what to do next.';
+  const boardState = markdown || '**Board is EMPTY — no components or wires placed.**';
+
+  const body = {
+    system_instruction: { parts: [{ text: SYSTEM_PROMPT }] },
+    contents: [{
+      role: 'user',
+      parts: [{ text: `BOARD STATE:\n${boardState}\n\nQUESTION: ${msg}` }],
+    }],
+    tools: CIRCUIT_TOOLS,
+    tool_config: { function_calling_config: { mode: 'AUTO' } },
+    generation_config: { temperature: 0.3, max_output_tokens: 2048 },
+  };
+
+  const res = await fetch(`${GEMINI_URL}?key=${GEMINI_KEY}`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  });
+
   if (!res.ok) {
     const err = await res.text();
-    throw new Error(`watsonx ${res.status}: ${err}`);
+    throw new Error(`Gemini ${res.status}: ${err}`);
   }
+
   const data = await res.json();
-  return data.results?.[0]?.generated_text ?? '(no reply)';
+  const candidate = data.candidates?.[0];
+
+  // Handle blocked / empty responses
+  if (!candidate || candidate.finishReason === 'SAFETY') {
+    return { reply: "I can't help with that request. Try asking about building a circuit!", actions: [] };
+  }
+
+  const parts = candidate.content?.parts || [];
+  let reply = '';
+  let actions = [];
+
+  for (const part of parts) {
+    if (part.text) reply += part.text;
+    if (part.functionCall) {
+      const fc = part.functionCall;
+      actions.push({ tool: fc.name, ...(fc.args || {}) });
+    }
+  }
+
+  reply = reply.trim();
+
+  // If model returned only function calls with no text, provide a default
+  if (!reply && actions.length > 0) {
+    reply = "Here you go! I've built the circuit for you. Hit Run Simulation to test it out!";
+  } else if (!reply) {
+    reply = '(no response)';
+  }
+
+  // Fallback: also check text for JSON actions block (in case model embeds JSON in text)
+  if (actions.length === 0) {
+    const match = reply.match(/```(?:actions|json)\s*([\s\S]*?)```/);
+    if (match) {
+      try {
+        const parsed = JSON.parse(match[1].trim());
+        if (Array.isArray(parsed)) actions = parsed;
+        reply = reply.slice(0, match.index).trim();
+      } catch { /* ignore parse errors */ }
+    }
+  }
+
+  // Filter out malformed actions (missing required fields)
+  actions = actions.filter(a => {
+    if (a.tool === 'add_wire' && (!a.from || !a.to)) return false;
+    if (['place_resistor','place_led','place_buzzer','place_button'].includes(a.tool)
+        && (!a.holeA || !a.holeB)) return false;
+    return true;
+  });
+
+  actions = validateActions(actions);
+  return { reply, actions };
 }
 
 // ── HTTP server ───────────────────────────────────────────────
@@ -322,7 +450,7 @@ const server = http.createServer(async (req, res) => {
   if (req.method === 'OPTIONS') { res.writeHead(204); res.end(); return; }
 
   if (req.method === 'GET' && req.url === '/api/health') {
-    return sendJSON(res, 200, { status: 'ok', model: MODEL_ID });
+    return sendJSON(res, 200, { status: 'ok', model: GEMINI_MODEL });
   }
 
   if (req.method === 'POST' && req.url === '/api/ask') {
@@ -331,8 +459,7 @@ const server = http.createServer(async (req, res) => {
     req.on('end', async () => {
       try {
         const { markdown = '', message = '' } = JSON.parse(body || '{}');
-        const raw = await askWatsonx(markdown, message);
-        const { reply, actions } = parseActions(raw);
+        const { reply, actions } = await askGemini(markdown, message);
         console.log(`[ask] "${message.slice(0,60)}" → ${actions.length} action(s)`);
         return sendJSON(res, 200, { reply, actions });
       } catch (e) {
@@ -516,7 +643,7 @@ const server = http.createServer(async (req, res) => {
 
 server.listen(PORT, () => {
   console.log(`⚡ Sparky AI  →  http://localhost:${PORT}`);
-  console.log(`   Model : ${MODEL_ID}`);
+  console.log(`   Model : ${GEMINI_MODEL}`);
   console.log(`   Health: http://localhost:${PORT}/api/health`);
   if (CLOUDANT_URL && CLOUDANT_APIKEY) ensureCloudantIndex();
 });
