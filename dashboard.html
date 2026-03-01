@@ -6,29 +6,30 @@
   <title>Sparky — Dashboard</title>
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet" />
+  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
   <style>
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
     :root {
-      --bg:        #ffffff;
-      --bg-card:   #fafafa;
-      --bg-hover:  #f4f4f5;
-      --sidebar:   #f7f7f8;
-      --border:    #e4e4e7;
-      --border-lo: #ececee;
-      --text:      #111111;
-      --text-sub:  #666666;
-      --text-dim:  #aaaaaa;
-      --accent:    #2563eb;
-      --accent-hi: #1d4ed8;
-      --white:     #111111;
+      --bg:        #FAF9F6;
+      --bg-card:   #F3F1EC;
+      --bg-hover:  #EDEAE4;
+      --sidebar:   #F3F1EC;
+      --border:    #E0DCD5;
+      --border-lo: #E8E4DE;
+      --text:      #1A1814;
+      --text-sub:  #6B6560;
+      --text-dim:  #9C9690;
+      --accent:    #D97706;
+      --accent-hi: #B45309;
+      --accent-lo: #F59E0B;
+      --white:     #1A1814;
       --danger:    #dc2626;
       --sidebar-w: 220px;
     }
 
     body {
-      font-family: 'Inter', sans-serif;
+      font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
       background: var(--bg);
       color: var(--text);
       line-height: 1.5;
@@ -61,15 +62,16 @@
       display: flex;
       align-items: center;
       gap: 0.5rem;
-      font-size: 0.9375rem;
-      font-weight: 600;
+      font-family: 'Space Grotesk', sans-serif;
+      font-size: 1rem;
+      font-weight: 700;
       color: var(--text);
       text-decoration: none;
       padding: 0.35rem 0.5rem;
       border-radius: 6px;
-      margin-bottom: 0.25rem;
+      letter-spacing: -0.02em;
     }
-    .sidebar-logo .bolt { color: var(--accent-hi); }
+    .sidebar-logo .bolt { color: var(--accent); filter: drop-shadow(0 0 4px rgba(217,119,6,0.3)); }
 
     .sidebar-nav {
       flex: 1;
@@ -118,9 +120,11 @@
       flex-shrink: 0;
     }
     .topbar-title {
-      font-size: 0.9375rem;
-      font-weight: 600;
+      font-family: 'Space Grotesk', sans-serif;
+      font-size: 1rem;
+      font-weight: 700;
       color: var(--white);
+      letter-spacing: -0.02em;
     }
     .topbar-actions {
       display: flex;
@@ -137,7 +141,7 @@
       display: inline-flex;
       align-items: center;
       gap: 0.4rem;
-      font-family: 'Inter', sans-serif;
+      font-family: 'Inter', -apple-system, sans-serif;
       font-size: 0.8125rem;
       font-weight: 500;
       cursor: pointer;
@@ -148,8 +152,8 @@
       transition: background 0.12s, border-color 0.12s, transform 0.1s;
     }
     .btn:active { transform: scale(0.98); }
-    .btn-primary { background: var(--accent); border-color: var(--accent); color: #ffffff; }
-    .btn-primary:hover { background: var(--accent-hi); border-color: var(--accent-hi); }
+    .btn-primary { background: var(--accent); border-color: var(--accent); color: #ffffff; transition: background 0.15s, border-color 0.15s, transform 0.1s, box-shadow 0.15s; }
+    .btn-primary:hover { background: var(--accent-hi); border-color: var(--accent-hi); box-shadow: 0 2px 8px rgba(217,119,6,0.2); }
     .btn-ghost { background: transparent; border-color: var(--border); color: var(--text-sub); }
     .btn-ghost:hover { border-color: #c4c4c8; color: var(--text); background: var(--bg-hover); }
     .btn-danger { background: transparent; border-color: transparent; color: var(--danger); }
@@ -163,6 +167,7 @@
       margin-bottom: 1.25rem;
     }
     .section-head h2 {
+      font-family: 'Space Grotesk', sans-serif;
       font-size: 0.9375rem;
       font-weight: 600;
       color: var(--white);
@@ -219,6 +224,7 @@
       line-height: 1;
     }
     .new-card-label {
+      font-family: 'Space Grotesk', sans-serif;
       font-size: 0.875rem;
       font-weight: 600;
       color: var(--text-sub);
@@ -261,6 +267,7 @@
     .card-thumb-emoji { position: relative; z-index: 1; font-size: 1.75rem; }
 
     .card-name {
+      font-family: 'Space Grotesk', sans-serif;
       font-size: 0.875rem;
       font-weight: 600;
       color: var(--white);
@@ -300,7 +307,7 @@
       position: absolute;
       right: 0;
       top: calc(100% + 4px);
-      background: #ffffff;
+      background: var(--bg);
       border: 1px solid var(--border);
       border-radius: 8px;
       padding: 0.35rem;
@@ -385,6 +392,7 @@
     }
     .spark-thumb-emoji { position: relative; z-index: 1; }
     .spark-card-title {
+      font-family: 'Space Grotesk', sans-serif;
       font-size: 0.9rem;
       font-weight: 600;
       color: var(--white);
@@ -412,7 +420,8 @@
     #publish-modal {
       position: fixed;
       inset: 0;
-      background: rgba(0,0,0,0.45);
+      background: rgba(26,24,20,0.5);
+      backdrop-filter: blur(4px);
       display: flex;
       align-items: center;
       justify-content: center;
@@ -437,6 +446,7 @@
       border-bottom: 1px solid var(--border);
     }
     .publish-title-row {
+      font-family: 'Space Grotesk', sans-serif;
       font-size: 0.9375rem;
       font-weight: 700;
       color: var(--text);
@@ -486,7 +496,7 @@
       outline: none;
       transition: border-color 0.15s;
     }
-    .publish-input:focus { border-color: var(--accent); }
+    .publish-input:focus { border-color: var(--accent); box-shadow: 0 0 0 2px rgba(217,119,6,0.1); }
     .publish-textarea {
       resize: vertical;
       min-height: 72px;
@@ -518,7 +528,7 @@
       outline: none;
       transition: border-color 0.15s;
     }
-    .sparks-search-input:focus { border-color: var(--accent); }
+    .sparks-search-input:focus { border-color: var(--accent); box-shadow: 0 0 0 2px rgba(217,119,6,0.1); }
     .sparks-fav-btn.active { background: #fef9c3; border-color: #fbbf24; color: #92400e; }
     .sparks-fav-btn.active svg { stroke: #f59e0b; }
 
@@ -552,6 +562,23 @@
     }
     .nav-count:empty { display: none; }
 
+    /* ── WIP Banner ────────────────────────────────────────── */
+    .wip-banner {
+      display: flex;
+      align-items: center;
+      gap: 0.75rem;
+      padding: 0.85rem 1.1rem;
+      margin-bottom: 1.25rem;
+      border-radius: 8px;
+      background: #FEF3C7;
+      border: 1px solid #FDE68A;
+      font-size: 0.8125rem;
+      color: #92400E;
+      line-height: 1.5;
+    }
+    .wip-banner svg { flex-shrink: 0; }
+    .wip-banner strong { font-weight: 600; }
+
     /* ── Hidden file input ──────────────────────────────────── */
     #import-input { display: none; }
 
@@ -565,12 +592,12 @@
       bottom: 1.5rem;
       left: 50%;
       transform: translateX(-50%) translateY(8px);
-      background: #111111;
-      border: 1px solid #333;
+      background: #1A1814;
+      border: 1px solid #2A2722;
       border-radius: 8px;
       padding: 0.6rem 1.1rem;
       font-size: 0.8125rem;
-      color: #f5f5f5;
+      color: #E8E4DE;
       box-shadow: 0 8px 24px rgba(0,0,0,0.15);
       opacity: 0;
       pointer-events: none;
@@ -628,6 +655,10 @@
 
       <!-- SPARKS TAB -->
       <div class="tab-panel" id="tab-sparks">
+        <div class="wip-banner">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+          <span><strong>Work in progress.</strong> Sparks is still under development. Sharing is local-only for now and some features may not work as expected.</span>
+        </div>
         <div class="sparks-toolbar">
           <input type="search" id="sparks-search" class="sparks-search-input" placeholder="Search sparks..." oninput="renderSparks()">
           <button class="btn btn-ghost sparks-fav-btn" id="sparks-fav-btn" onclick="toggleFavFilter()">
