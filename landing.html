@@ -592,7 +592,7 @@
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/></svg>
         Sparky
       </div>
-      <div class="footer-credit">Made by <a href="https://enes.web.app" target="_blank">Enes Yilmaz</a> and Colin Lee</div>
+      <div class="footer-credit">Made by <a href="https://enes.web.app" target="_blank">Enes Yilmaz</a> and <a href="https://github.com/ColinL-code" target="_blank">Colin Lee</a></div>
       <div class="footer-links">
         <a href="https://github.com/enesyilmazcode/sparky" target="_blank">GitHub</a>
       </div>
@@ -613,13 +613,20 @@
     </div>
   </div>
 
+  <!-- Firebase SDKs (compat for vanilla JS) -->
+  <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-auth-compat.js"></script>
   <script>
-    const API_BASE = '';
-
-    // ── Token helpers ────────────────────────────────────────
-    function getToken() { return localStorage.getItem('sparky_token'); }
-    function setToken(t) { localStorage.setItem('sparky_token', t); }
-    function clearToken() { localStorage.removeItem('sparky_token'); }
+    const firebaseConfig = {
+      apiKey: "AIzaSyDZDxmH5HHwx8N3U1FVglx6Iubh665t42s",
+      authDomain: "buildwithsparky.firebaseapp.com",
+      projectId: "buildwithsparky",
+      storageBucket: "buildwithsparky.firebasestorage.app",
+      messagingSenderId: "596770160500",
+      appId: "1:596770160500:web:8b3761e163291ab759f621"
+    };
+    firebase.initializeApp(firebaseConfig);
+    const auth = firebase.auth();
 
     // ── Modal ────────────────────────────────────────────────
     function openModal() {
@@ -630,28 +637,18 @@
       document.getElementById('modal-error').textContent = '';
     }
 
-    // ── Google OAuth popup ───────────────────────────────────
+    // ── Firebase Google sign-in ──────────────────────────────
     function signInWithGoogle() {
-      const w = 500, h = 600;
-      const left = (screen.width - w) / 2;
-      const top = (screen.height - h) / 2;
-      window.open(
-        API_BASE + '/api/auth/google',
-        'sparky-auth',
-        `width=${w},height=${h},left=${left},top=${top}`
-      );
+      const provider = new firebase.auth.GoogleAuthProvider();
+      auth.signInWithPopup(provider)
+        .then(() => {
+          closeModal();
+          window.location.href = 'dashboard.html';
+        })
+        .catch(err => {
+          document.getElementById('modal-error').textContent = err.message;
+        });
     }
-
-    // Listen for token from popup callback
-    window.addEventListener('message', function(e) {
-      if (e.data && e.data.access_token) {
-        setToken(e.data.access_token);
-        closeModal();
-        window.location.href = 'dashboard.html';
-      } else if (e.data && e.data.error) {
-        document.getElementById('modal-error').textContent = e.data.error;
-      }
-    });
 
     // ── Close modal on backdrop click ────────────────────────
     document.getElementById('auth-modal').addEventListener('click', function(e) {
@@ -672,30 +669,18 @@
     }
 
     // ── Check auth state on load ─────────────────────────────
-    async function checkAuthState() {
-      const token = getToken();
-      if (!token) return;
-
-      try {
-        const res = await fetch(API_BASE + '/api/auth/me', {
-          headers: { 'Authorization': 'Bearer ' + token },
-        });
-        if (!res.ok) { clearToken(); return; }
-
-        // Update hero CTA
-        document.getElementById('hero-actions').innerHTML =
-          '<a href="dashboard.html" class="btn-primary">Go to Dashboard <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14"/><path d="m12 5 7 7-7 7"/></svg></a>';
-        // Update nav
-        const navCta = document.getElementById('nav-cta');
-        if (navCta) {
-          navCta.textContent = 'Dashboard';
-          navCta.onclick = function() { window.location.href = 'dashboard.html'; };
-        }
-      } catch {
-        clearToken();
+    auth.onAuthStateChanged(user => {
+      if (!user) return;
+      // Update hero CTA
+      document.getElementById('hero-actions').innerHTML =
+        '<a href="dashboard.html" class="btn-primary">Go to Dashboard <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14"/><path d="m12 5 7 7-7 7"/></svg></a>';
+      // Update nav
+      const navCta = document.getElementById('nav-cta');
+      if (navCta) {
+        navCta.textContent = 'Dashboard';
+        navCta.onclick = function() { window.location.href = 'dashboard.html'; };
       }
-    }
-    checkAuthState();
+    });
 
     // ── Scroll reveal ────────────────────────────────────────
     const observer = new IntersectionObserver((entries) => {

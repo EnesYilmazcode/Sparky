@@ -1,0 +1,15 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    match /sparks/{sparkId} {
+      // Anyone signed in can read all sparks
+      allow read: if request.auth != null;
+      // Only signed-in users can create, and uid must match
+      allow create: if request.auth != null
+                    && request.resource.data.uid == request.auth.uid;
+      // Only the owner can update or delete
+      allow update, delete: if request.auth != null
+                            && resource.data.uid == request.auth.uid;
+    }
+  }
+}

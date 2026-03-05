@@ -655,12 +655,8 @@
 
       <!-- SPARKS TAB -->
       <div class="tab-panel" id="tab-sparks">
-        <div class="wip-banner">
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
-          <span><strong>Work in progress.</strong> Sparks is still under development. Sharing is local-only for now and some features may not work as expected.</span>
-        </div>
         <div class="sparks-toolbar">
-          <input type="search" id="sparks-search" class="sparks-search-input" placeholder="Search sparks..." oninput="renderSparks()">
+          <input type="search" id="sparks-search" class="sparks-search-input" placeholder="Search sparks..." oninput="renderSparksFromCache()">
           <button class="btn btn-ghost sparks-fav-btn" id="sparks-fav-btn" onclick="toggleFavFilter()">
             <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>
             Favorites
@@ -705,69 +701,41 @@
   <!-- Toast -->
   <div class="toast" id="toast"></div>
 
+  <!-- Firebase SDKs (compat for vanilla JS) -->
+  <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-auth-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore-compat.js"></script>
   <script>
-    // ── API config ───────────────────────────────────────────────
-    const API_BASE = '';
+    const firebaseConfig = {
+      apiKey: "AIzaSyDZDxmH5HHwx8N3U1FVglx6Iubh665t42s",
+      authDomain: "buildwithsparky.firebaseapp.com",
+      projectId: "buildwithsparky",
+      storageBucket: "buildwithsparky.firebasestorage.app",
+      messagingSenderId: "596770160500",
+      appId: "1:596770160500:web:8b3761e163291ab759f621"
+    };
+    firebase.initializeApp(firebaseConfig);
+    const auth = firebase.auth();
+    const db   = firebase.firestore();
 
-    // ── Token helpers ────────────────────────────────────────────
-    function getToken() { return localStorage.getItem('sparky_token'); }
-    function clearToken() { localStorage.removeItem('sparky_token'); }
-    function authHeaders() {
-      return {
-        'Content-Type': 'application/json',
-        'Authorization': 'Bearer ' + getToken(),
-      };
-    }
+    let _currentUser = null;
+    let _authUsername = null;
 
     function logout() {
-      clearToken();
-      window.location.href = 'landing.html';
-    }
-
-    // ── Auth gate ────────────────────────────────────────────────
-    let _currentUser = null;
-    let _authUsername = null; // set when /api/auth/me succeeds
-
-    async function checkAuth() {
-      const token = getToken();
-      if (!token) { window.location.href = 'landing.html'; return; }
-      try {
-        const res = await fetch(API_BASE + '/api/auth/me', {
-          headers: { 'Authorization': 'Bearer ' + token },
-        });
-        if (!res.ok) { clearToken(); window.location.href = 'landing.html'; return; }
-        const { user } = await res.json();
-        _currentUser = user;
-        document.getElementById('user-info').textContent = user.email || user.name || '';
-      } catch {
-        clearToken();
+      auth.signOut().then(() => {
         window.location.href = 'landing.html';
-      }
+      });
     }
 
-    // Silent auth — try to get logged-in user; never redirects on failure
-    async function tryAuth() {
-      const token = getToken();
-      if (!token) return;
-      try {
-        const res = await fetch(API_BASE + '/api/auth/me', {
-          headers: { 'Authorization': 'Bearer ' + token },
-        });
-        if (!res.ok) return;
-        const data = await res.json();
-        const user = data.user || data;
+    // Firebase auth state listener — populates username
+    auth.onAuthStateChanged(user => {
+      if (user) {
         _currentUser = user;
-        if (user.email) {
-          _authUsername = user.email.split('@')[0];
-          localStorage.setItem('sparky_username', _authUsername);
-          document.getElementById('user-info').textContent = _authUsername;
-        } else if (user.name) {
-          _authUsername = user.name;
-          localStorage.setItem('sparky_username', _authUsername);
-          document.getElementById('user-info').textContent = _authUsername;
-        }
-      } catch { /* offline / no backend — ignore */ }
-    }
+        _authUsername = user.email ? user.email.split('@')[0] : (user.displayName || '');
+        localStorage.setItem('sparky_username', _authUsername);
+        document.getElementById('user-info').textContent = _authUsername;
+      }
+    });
 
     // ── Local project storage ─────────────────────────────────────
     const LS_KEY = 'sparky_local_projects';
@@ -791,22 +759,35 @@
       localStorage.setItem(LS_KEY, JSON.stringify(projects));
     }
 
-    // ── Sparks (user-uploaded) ──────────────────────────────────
-    const SPARKS_KEY = 'sparky_sparks';
+    // ── Sparks (Firestore community collection) ──────────────────
+    let _sparksCache = []; // local cache of fetched sparks
 
-    function loadSparks() {
-      try { return JSON.parse(localStorage.getItem(SPARKS_KEY) || '[]'); } catch { return []; }
+    async function fetchSparks() {
+      try {
+        const snap = await db.collection('sparks').orderBy('sharedAt', 'desc').get();
+        _sparksCache = snap.docs.map(doc => ({ _docId: doc.id, ...doc.data() }));
+      } catch (e) {
+        console.warn('Failed to fetch sparks:', e);
+      }
+      return _sparksCache;
     }
 
-    function saveSpark(entry) {
-      const sparks = loadSparks();
-      if (!sparks.find(s => s.id === entry.id)) sparks.unshift(entry);
-      localStorage.setItem(SPARKS_KEY, JSON.stringify(sparks));
+    async function saveSpark(entry) {
+      try {
+        await db.collection('sparks').doc(entry.id).set(entry);
+      } catch (e) {
+        console.error('Failed to publish spark:', e);
+        showToast('Failed to publish — check your connection.');
+      }
     }
 
-    function removeSpark(id) {
-      const sparks = loadSparks().filter(s => s.id !== id);
-      localStorage.setItem(SPARKS_KEY, JSON.stringify(sparks));
+    async function removeSpark(id) {
+      try {
+        await db.collection('sparks').doc(id).delete();
+      } catch (e) {
+        console.error('Failed to remove spark:', e);
+        showToast('Failed to remove — you may not have permission.');
+      }
     }
 
     // ── Publish modal ──────────────────────────────────────────
@@ -844,9 +825,14 @@
       _publishIdx = null;
     }
 
-    function submitPublish() {
+    async function submitPublish() {
       const c = _circuitsCache[_publishIdx];
       if (!c) return;
+
+      if (!_currentUser) {
+        showToast('You must be signed in to publish.');
+        return;
+      }
 
       const name   = document.getElementById('publish-name').value.trim()   || c.name || 'Untitled';
       const author = document.getElementById('publish-author').value.trim() || 'Anonymous';
@@ -855,8 +841,9 @@
       // Persist username for next time (only if not locked to auth account)
       if (!_authUsername) localStorage.setItem('sparky_username', author);
 
-      saveSpark({
+      await saveSpark({
         id:         c.id,
+        uid:        _currentUser.uid,
         name,
         author,
         desc,
@@ -876,158 +863,6 @@
       if (e.target === this) closePublishModal();
     });
 
-    // COMMUNITY_SPARKS removed — sparks are user-published circuits from localStorage
-    const COMMUNITY_SPARKS_REMOVED = true; // tombstone
-    if (false) { const _unused = [
-      {
-        id: 'spark_blink',
-        title: 'Classic Blink LED',
-        author: '@circuit_rookie',
-        desc: 'The "hello world" of electronics. A single red LED wired in series with a 220Ω resistor, demonstrating basic circuit fundamentals.',
-        emoji: '💡',
-        color: '#1a0a0a',
-        circuit: {
-          components: [
-            { type: 'battery', holeRefs: [] },
-            { type: 'resistor', holeRefs: [{ col: 3, row: 'a' }, { col: 7, row: 'a' }] },
-            { type: 'led', color: 0xff2222, holeRefs: [{ col: 9, row: 'a' }, { col: 7, row: 'a' }] },
-          ],
-          wires: [
-            { from: 'battery_0_pin0', to: 'tp_3', color: 'red' },
-            { from: 'battery_0_pin1', to: 'tn_9', color: 'black' },
-            { from: 'tp_3', to: 'a3', color: 'red' },
-            { from: 'a9', to: 'tn_9', color: 'black' },
-          ]
-        }
-      },
-      {
-        id: 'spark_rgb',
-        title: 'RGB Traffic Light',
-        author: '@ledlover99',
-        desc: 'Three LEDs (red, yellow, green) wired in parallel — each with its own current-limiting resistor. Great for understanding parallel circuits.',
-        emoji: '🚦',
-        color: '#0a0f0a',
-        circuit: {
-          components: [
-            { type: 'battery', holeRefs: [] },
-            { type: 'resistor', holeRefs: [{ col: 3, row: 'a' }, { col: 7, row: 'a' }] },
-            { type: 'led', color: 0xff2222, holeRefs: [{ col: 9, row: 'a' }, { col: 7, row: 'a' }] },
-            { type: 'resistor', holeRefs: [{ col: 11, row: 'a' }, { col: 15, row: 'a' }] },
-            { type: 'led', color: 0xffcc00, holeRefs: [{ col: 17, row: 'a' }, { col: 15, row: 'a' }] },
-            { type: 'resistor', holeRefs: [{ col: 19, row: 'a' }, { col: 23, row: 'a' }] },
-            { type: 'led', color: 0x22ff44, holeRefs: [{ col: 25, row: 'a' }, { col: 23, row: 'a' }] },
-          ],
-          wires: [
-            { from: 'battery_0_pin0', to: 'tp_3', color: 'red' },
-            { from: 'battery_0_pin1', to: 'tn_9', color: 'black' },
-            { from: 'tp_3', to: 'a3', color: 'red' },
-            { from: 'a9', to: 'tn_9', color: 'black' },
-            { from: 'tp_11', to: 'a11', color: 'red' },
-            { from: 'a17', to: 'tn_17', color: 'black' },
-            { from: 'tp_19', to: 'a19', color: 'red' },
-            { from: 'a25', to: 'tn_25', color: 'black' },
-          ]
-        }
-      },
-      {
-        id: 'spark_button',
-        title: 'Push-Button Lamp',
-        author: '@makerspace_mike',
-        desc: 'A tactile push button controls an LED. Press the cap during simulation to complete the circuit and watch the lamp light up.',
-        emoji: '🔘',
-        color: '#0a0a14',
-        circuit: {
-          components: [
-            { type: 'battery', holeRefs: [] },
-            { type: 'resistor', holeRefs: [{ col: 3, row: 'a' }, { col: 7, row: 'a' }] },
-            { type: 'led', color: 0x4499ff, holeRefs: [{ col: 9, row: 'a' }, { col: 7, row: 'a' }] },
-            { type: 'button', holeRefs: [{ col: 12, row: 'a' }, { col: 15, row: 'a' }] },
-          ],
-          wires: [
-            { from: 'battery_0_pin0', to: 'tp_3', color: 'red' },
-            { from: 'battery_0_pin1', to: 'tn_16', color: 'black' },
-            { from: 'tp_3', to: 'a3', color: 'red' },
-            { from: 'a9', to: 'a12', color: 'yellow' },
-            { from: 'a15', to: 'tn_15', color: 'black' },
-          ]
-        }
-      },
-      {
-        id: 'spark_buzzer',
-        title: 'Door Bell Buzzer',
-        author: '@electronicsforall',
-        desc: 'A piezo buzzer paired with a push button — press to buzz. Demonstrates how to switch an audio component with a momentary switch.',
-        emoji: '🔔',
-        color: '#100a00',
-        circuit: {
-          components: [
-            { type: 'battery', holeRefs: [] },
-            { type: 'buzzer', holeRefs: [{ col: 5, row: 'a' }, { col: 7, row: 'a' }] },
-            { type: 'button', holeRefs: [{ col: 10, row: 'a' }, { col: 13, row: 'a' }] },
-          ],
-          wires: [
-            { from: 'battery_0_pin0', to: 'tp_5', color: 'red' },
-            { from: 'battery_0_pin1', to: 'tn_13', color: 'black' },
-            { from: 'tp_5', to: 'a5', color: 'red' },
-            { from: 'a7', to: 'a10', color: 'yellow' },
-            { from: 'a13', to: 'tn_13', color: 'black' },
-          ]
-        }
-      },
-      {
-        id: 'spark_series',
-        title: 'Series Resistors',
-        author: '@ohm_my_god',
-        desc: 'Two resistors wired in series before a single LED. A great way to visualize how resistance adds up and affects brightness.',
-        emoji: '⚡',
-        color: '#0a0a0a',
-        circuit: {
-          components: [
-            { type: 'battery', holeRefs: [] },
-            { type: 'resistor', holeRefs: [{ col: 3, row: 'a' }, { col: 7, row: 'a' }] },
-            { type: 'resistor', holeRefs: [{ col: 7, row: 'e' }, { col: 11, row: 'e' }] },
-            { type: 'led', color: 0xff8800, holeRefs: [{ col: 13, row: 'a' }, { col: 11, row: 'a' }] },
-          ],
-          wires: [
-            { from: 'battery_0_pin0', to: 'tp_3', color: 'red' },
-            { from: 'battery_0_pin1', to: 'tn_13', color: 'black' },
-            { from: 'tp_3', to: 'a3', color: 'red' },
-            { from: 'e7', to: 'a7', color: 'white' },
-            { from: 'e11', to: 'a11', color: 'white' },
-            { from: 'a13', to: 'tn_13', color: 'black' },
-          ]
-        }
-      },
-      {
-        id: 'spark_sos',
-        title: 'SOS Signal LEDs',
-        author: '@morse_maker',
-        desc: 'Five LEDs arranged to spell visual patterns. Explore how many parallel branches one battery can drive before dimming occurs.',
-        emoji: '🆘',
-        color: '#0f0010',
-        circuit: {
-          components: [
-            { type: 'battery', holeRefs: [] },
-            { type: 'resistor', holeRefs: [{ col: 3, row: 'a' }, { col: 7, row: 'a' }] },
-            { type: 'led', color: 0xff00ff, holeRefs: [{ col: 9, row: 'a' }, { col: 7, row: 'a' }] },
-            { type: 'resistor', holeRefs: [{ col: 11, row: 'a' }, { col: 15, row: 'a' }] },
-            { type: 'led', color: 0xff00ff, holeRefs: [{ col: 17, row: 'a' }, { col: 15, row: 'a' }] },
-            { type: 'resistor', holeRefs: [{ col: 19, row: 'a' }, { col: 23, row: 'a' }] },
-            { type: 'led', color: 0xff00ff, holeRefs: [{ col: 25, row: 'a' }, { col: 23, row: 'a' }] },
-          ],
-          wires: [
-            { from: 'battery_0_pin0', to: 'tp_3', color: 'red' },
-            { from: 'battery_0_pin1', to: 'tn_9', color: 'black' },
-            { from: 'tp_3', to: 'a3', color: 'red' },
-            { from: 'a9', to: 'tn_9', color: 'black' },
-            { from: 'tp_11', to: 'a11', color: 'red' },
-            { from: 'a17', to: 'tn_17', color: 'black' },
-            { from: 'tp_19', to: 'a19', color: 'red' },
-            { from: 'a25', to: 'tn_25', color: 'black' },
-          ]
-        }
-      }
-    ]; }
 
     // ── Tab switching ──────────────────────────────────────────
     function switchTab(tab) {
@@ -1225,22 +1060,32 @@
       const starred = getStarred();
       if (starred.has(id)) starred.delete(id); else starred.add(id);
       localStorage.setItem(STARRED_KEY, JSON.stringify([...starred]));
-      renderSparks();
+      renderSparksFromCache();
     }
 
     function toggleFavFilter() {
       _favOnly = !_favOnly;
       const btn = document.getElementById('sparks-fav-btn');
       if (btn) btn.classList.toggle('active', _favOnly);
-      renderSparks();
+      renderSparksFromCache();
     }
 
     // ── Render SPARKS ──────────────────────────────────────────
-    function renderSparks() {
+    async function renderSparks() {
+      const grid = document.getElementById('sparks-grid');
+      if (!_sparksCache.length) {
+        grid.innerHTML = '<div class="empty-state" style="grid-column:1/-1"><div class="empty-state-text">Loading sparks...</div></div>';
+      }
+      await fetchSparks();
+      renderSparksFromCache();
+    }
+
+    function renderSparksFromCache() {
       const grid = document.getElementById('sparks-grid');
       const starred = getStarred();
       const query = (document.getElementById('sparks-search')?.value || '').toLowerCase().trim();
-      let sparks = loadSparks();
+
+      let sparks = [..._sparksCache];
 
       if (query) sparks = sparks.filter(s =>
         (s.name || '').toLowerCase().includes(query) ||
@@ -1255,11 +1100,12 @@
         grid.innerHTML = `
           <div class="empty-state" style="grid-column:1/-1">
             <div class="empty-state-icon" style="font-size:1.5rem;opacity:0.35">✦</div>
-            <div class="empty-state-text">${_favOnly ? 'No starred sparks yet.' : 'No sparks yet.'}<br>${_favOnly ? 'Star a spark to find it here.' : 'Share one of your circuits using the ··· menu.'}</div>
+            <div class="empty-state-text">${_favOnly ? 'No starred sparks yet.' : 'No sparks yet.'}<br>${_favOnly ? 'Star a spark to find it here.' : 'Publish one of your circuits using the ··· menu.'}</div>
           </div>`;
         return;
       }
 
+      const myUid = _currentUser?.uid;
       const BOARD_SVG = `<svg width="40" height="28" viewBox="0 0 36 25" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"><rect x="1" y="4" width="34" height="17" rx="1.5"/><line x1="7" y1="4" x2="7" y2="21"/><line x1="13" y1="4" x2="13" y2="21"/><line x1="18" y1="4" x2="18" y2="21"/><line x1="23" y1="4" x2="23" y2="21"/><line x1="29" y1="4" x2="29" y2="21"/><line x1="4" y1="1.5" x2="4" y2="4"/><line x1="10" y1="1.5" x2="10" y2="4"/><line x1="15" y1="1.5" x2="15" y2="4"/><line x1="20" y1="1.5" x2="20" y2="4"/><line x1="26" y1="1.5" x2="26" y2="4"/><line x1="31" y1="1.5" x2="31" y2="4"/><line x1="4" y1="21" x2="4" y2="23.5"/><line x1="10" y1="21" x2="10" y2="23.5"/><line x1="15" y1="21" x2="15" y2="23.5"/><line x1="20" y1="21" x2="20" y2="23.5"/><line x1="26" y1="21" x2="26" y2="23.5"/><line x1="31" y1="21" x2="31" y2="23.5"/></svg>`;
 
       sparks.forEach((spark) => {
@@ -1269,6 +1115,7 @@
         const thumbHtml = spark.thumbnail
           ? `<img src="${spark.thumbnail}" style="width:100%;height:100%;object-fit:cover;display:block;">`
           : `<span style="color:#555">${BOARD_SVG}</span>`;
+        const isOwn = myUid && spark.uid === myUid;
 
         const card = document.createElement('div');
         card.className = 'spark-card';
@@ -1286,7 +1133,7 @@
           ${spark.desc ? `<div class="spark-card-desc">${escHtml(spark.desc)}</div>` : ''}
           <div class="spark-card-footer">
             <button class="btn btn-ghost" style="font-size:0.75rem;" onclick="forkSpark('${spark.id}')">Fork to My Circuits</button>
-            <button class="btn btn-danger" style="font-size:0.75rem;" onclick="unshareFromSparks('${spark.id}')">Remove</button>
+            ${isOwn ? `<button class="btn btn-danger" style="font-size:0.75rem;" onclick="unshareFromSparks('${spark.id}')">Remove</button>` : ''}
           </div>
         `;
         grid.appendChild(card);
@@ -1294,7 +1141,7 @@
     }
 
     function forkSpark(id) {
-      const spark = loadSparks().find(s => s.id === id);
+      const spark = _sparksCache.find(s => s.id === id);
       if (!spark) return;
       saveCircuitLocal({
         id:        Date.now().toString(36) + Math.random().toString(36).slice(2),
@@ -1309,9 +1156,9 @@
       showToast(`Forked "${spark.name}" to your circuits!`);
     }
 
-    function unshareFromSparks(id) {
-      removeSpark(id);
-      renderSparks();
+    async function unshareFromSparks(id) {
+      await removeSpark(id);
+      await renderSparks();
       showToast('Removed from Sparks.');
     }
 
@@ -1335,7 +1182,6 @@
     }
 
     // ── Init ───────────────────────────────────────────────────
-    tryAuth(); // silently populate username if logged in (non-blocking)
     renderMyCircuits();
   </script>
 </body>

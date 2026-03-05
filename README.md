@@ -113,13 +113,25 @@ Everything is vanilla JS. No build tools, no frameworks, no bundler. The 3D comp
 | --- | --- | --- |
 | `GEMINI_API_KEY` | Yes | Your Google Gemini API key ([get one here](https://aistudio.google.com/apikey)) |
 | `PORT` | No | Server port (default: 5001) |
-| `APPID_CLIENT_ID` | No | IBM App ID client ID (for Google OAuth login) |
-| `APPID_CLIENT_SECRET` | No | IBM App ID secret |
-| `APPID_OAUTH_URL` | No | IBM App ID OAuth URL |
+| `GOOGLE_CLIENT_ID` | No | Google OAuth 2.0 client ID (for login, [setup guide below](#google-oauth-setup)) |
+| `GOOGLE_CLIENT_SECRET` | No | Google OAuth 2.0 client secret |
 | `CLOUDANT_URL` | No | IBM Cloudant URL (for cloud circuit storage) |
 | `CLOUDANT_APIKEY` | No | IBM Cloudant API key |
 
-Only `GEMINI_API_KEY` is needed to get started. The IBM variables are for optional cloud auth and storage features.
+Only `GEMINI_API_KEY` is needed to get started. The Google OAuth and Cloudant variables are for optional cloud login and storage features.
+
+## Google OAuth setup
+
+This is **optional** — only needed if you want the "Sign in with Google" feature for saving circuits to the cloud. It's completely free.
+
+1. Go to [Google Cloud Console](https://console.cloud.google.com/apis/credentials)
+2. Create a new project (or select an existing one)
+3. Click **Create Credentials** → **OAuth 2.0 Client ID**
+4. Set application type to **Web application**
+5. Under **Authorized redirect URIs**, add:
+   - `http://localhost:5001/api/auth/callback` (for local dev)
+   - Your production URL + `/api/auth/callback` (if deploying)
+6. Copy the **Client ID** and **Client Secret** into your `.env` file
 
 ---
 

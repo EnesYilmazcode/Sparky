@@ -1,0 +1,22 @@
+{
+  "firestore": {
+    "rules": "firestore.rules"
+  },
+  "hosting": {
+    "site": "sparkylab",
+    "public": ".",
+    "ignore": [
+      "firebase.json",
+      "**/.*",
+      "**/node_modules/**",
+      "backend/**",
+      "functions/**",
+      "src/**",
+      "out/**",
+      "package.json",
+      "package-lock.json",
+      "tsconfig.json",
+      "*.md"
+    ]
+  }
+}

@@ -38,10 +38,9 @@ const GEMINI_MODEL = 'gemini-2.0-flash';
 const GEMINI_URL   = `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent`;
 const PORT         = process.env.PORT || 5001;
 
-// IBM App ID
-const APPID_CLIENT_ID     = process.env.APPID_CLIENT_ID;
-const APPID_CLIENT_SECRET = process.env.APPID_CLIENT_SECRET;
-const APPID_OAUTH_URL     = process.env.APPID_OAUTH_URL; // e.g. https://us-south.appid.cloud.ibm.com/oauth/v4/<tenantId>
+// Google OAuth 2.0 (free — create credentials at console.cloud.google.com)
+const GOOGLE_CLIENT_ID     = process.env.GOOGLE_CLIENT_ID;
+const GOOGLE_CLIENT_SECRET = process.env.GOOGLE_CLIENT_SECRET;
 
 // IBM Cloudant
 const CLOUDANT_URL    = process.env.CLOUDANT_URL;
@@ -51,8 +50,8 @@ const CLOUDANT_DB     = 'sparky_circuits';
 if (!GEMINI_KEY) {
   console.warn('Warning: GEMINI_API_KEY not set — /api/ask will fail');
 }
-if (!APPID_CLIENT_ID || !APPID_CLIENT_SECRET || !APPID_OAUTH_URL) {
-  console.warn('Warning: APPID_CLIENT_ID / APPID_CLIENT_SECRET / APPID_OAUTH_URL not set — auth endpoints will fail');
+if (!GOOGLE_CLIENT_ID || !GOOGLE_CLIENT_SECRET) {
+  console.warn('Warning: GOOGLE_CLIENT_ID / GOOGLE_CLIENT_SECRET not set — auth endpoints will fail');
 }
 if (!CLOUDANT_URL || !CLOUDANT_APIKEY) {
   console.warn('Warning: CLOUDANT_URL / CLOUDANT_APIKEY not set — circuit storage endpoints will fail');
@@ -102,13 +101,13 @@ async function ensureCloudantIndex() {
   }
 }
 
-// ── App ID auth helper ───────────────────────────────────────
+// ── Google OAuth auth helper ─────────────────────────────────
 async function authenticateRequest(req) {
   const authHeader = req.headers['authorization'];
   if (!authHeader || !authHeader.startsWith('Bearer ')) return null;
   const token = authHeader.slice(7);
   try {
-    const res = await fetch(`${APPID_OAUTH_URL}/userinfo`, {
+    const res = await fetch('https://www.googleapis.com/oauth2/v3/userinfo', {
       headers: { 'Authorization': `Bearer ${token}` },
     });
     if (!res.ok) return null;
@@ -482,18 +481,18 @@ const server = http.createServer(async (req, res) => {
     return;
   }
 
-  // ── Auth: Google OAuth (redirect to App ID) ────────────────
+  // ── Auth: Google OAuth (direct, no IBM) ─────────────────────
   if (req.method === 'GET' && req.url === '/api/auth/google') {
     const proto = req.headers['x-forwarded-proto'] || 'http';
     const host = req.headers['host'] || `localhost:${PORT}`;
     const redirectUri = `${proto}://${host}/api/auth/callback`;
-    const authUrl = `${APPID_OAUTH_URL}/authorization?client_id=${APPID_CLIENT_ID}&response_type=code&redirect_uri=${encodeURIComponent(redirectUri)}&scope=openid+email+profile&idp=google`;
+    const authUrl = `https://accounts.google.com/o/oauth2/v2/auth?client_id=${GOOGLE_CLIENT_ID}&redirect_uri=${encodeURIComponent(redirectUri)}&response_type=code&scope=openid+email+profile&access_type=offline&prompt=consent`;
     res.writeHead(302, { Location: authUrl });
     res.end();
     return;
   }
 
-  // ── Auth: OAuth callback (exchange code for tokens) ────────
+  // ── Auth: Google OAuth callback ────────────────────────────
   if (req.method === 'GET' && req.url.startsWith('/api/auth/callback')) {
     try {
       const cbProto = req.headers['x-forwarded-proto'] || 'http';
@@ -510,13 +509,10 @@ const server = http.createServer(async (req, res) => {
       }
 
       const redirectUri = `${cbProto}://${cbHost}/api/auth/callback`;
-      const tokenRes = await fetch(`${APPID_OAUTH_URL}/token`, {
+      const tokenRes = await fetch('https://oauth2.googleapis.com/token', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/x-www-form-urlencoded',
-          'Authorization': 'Basic ' + Buffer.from(`${APPID_CLIENT_ID}:${APPID_CLIENT_SECRET}`).toString('base64'),
-        },
-        body: `grant_type=authorization_code&code=${code}&redirect_uri=${encodeURIComponent(redirectUri)}`,
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+        body: `code=${code}&client_id=${GOOGLE_CLIENT_ID}&client_secret=${GOOGLE_CLIENT_SECRET}&redirect_uri=${encodeURIComponent(redirectUri)}&grant_type=authorization_code`,
       });
 
       if (!tokenRes.ok) {
