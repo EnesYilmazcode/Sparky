@@ -414,6 +414,8 @@ canvas {
   display: block;
   position: absolute;
   inset: 0;
+  /* Gestures belong to the editor, not to the browser's scroll and zoom */
+  touch-action: none;
 }
 
 /* Contextual hint box */
