@@ -19,6 +19,7 @@
 //  ────────
 //  LEDs are diodes — current may only flow from anode (+) to cathode (−).
 //  If the circuit drives current the wrong way the LED stays off.
+//  LED:     pin 0 = cathode (−), pin 1 = anode (+).
 //  Battery: pin 0 = positive (+) output, pin 1 = negative (−) return.
 //
 //  Exports: App.runSimulation(), App.stopSimulation()
@@ -33,6 +34,9 @@
     led:      { forwardVoltage: 2.0, thresholdCurrent: 0.001 },
     buzzer:   { resistance: 42,      thresholdCurrent: 0.001 },
   };
+
+  // LED lead convention, set in app.js: pin 0 = cathode (−), pin 1 = anode (+)
+  const LED_ANODE_PIN = 1;
 
   // ── Buzzer audio ─────────────────────────────────────────────
   let _audioCtx = null;
@@ -375,9 +379,26 @@
       // Each path is an independent parallel branch — evaluate separately.
       const litLEDs     = new Set();
       const litBuzzers  = new Set();
+      const backwards   = new Set();
       let   shortCircuit = false;
 
       paths.forEach((path, pi) => {
+        // A diode conducts anode → cathode only. findAllPaths records which
+        // pin the current entered by, so a step that enters an LED anywhere
+        // but its anode is reverse biased and this branch carries nothing.
+        const reversed = path.find(step =>
+          step.comp.type === 'led' && step.inPin !== LED_ANODE_PIN);
+        if (reversed) {
+          if (!backwards.has(reversed.comp)) {
+            backwards.add(reversed.comp);
+            lines.push({
+              text: '  ⚠ LED is backwards — current cannot flow from cathode to anode. Flip it around.',
+              cls: 'sim-warn',
+            });
+          }
+          return;
+        }
+
         let totalR  = 0;
         let totalVf = 0;
         path.forEach(step => {
@@ -427,7 +448,8 @@
         });
       });
 
-      if (!shortCircuit && litLEDs.size === 0 && litBuzzers.size === 0 && paths.length > 0) {
+      if (!shortCircuit && !backwards.size &&
+          litLEDs.size === 0 && litBuzzers.size === 0 && paths.length > 0) {
         lines.push({ text: '  No output components in circuit path.', cls: 'sim-info' });
       }
     });
