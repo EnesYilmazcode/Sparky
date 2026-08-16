@@ -92,7 +92,10 @@
     }
     union(a, b) {
       const ra = this.find(a), rb = this.find(b);
-      if (ra !== rb) this._p[rb] = ra;
+      // Smaller id always wins, so a node's root is the same whatever
+      // order the wires were drawn in.
+      if (ra === rb) return;
+      if (ra < rb) this._p[rb] = ra; else this._p[ra] = rb;
     }
   }
 
@@ -168,23 +171,58 @@
   //
   //  Backtracking DFS — finds ALL complete paths from startNode to
   //  endNode so that parallel branches (multiple LEDs) are each
-  //  evaluated independently.  Cap at 30 paths for safety.
+  //  evaluated independently.
   //
+  //  The walk is exponential, so it is bounded twice: by MAX_PATHS
+  //  complete paths, and by wall clock. The clock is the bound that
+  //  matters on an open circuit, where no path is ever completed and
+  //  so nothing ever counts against MAX_PATHS. Hitting either bound
+  //  means the answer is partial, so both are handed back and shown
+  //  to the user instead of dropped in silence.
+  //
+  const MAX_PATHS      = 30;
+  const PATH_BUDGET_MS = 250;
+
+  // Which paths DFS reaches first depends on the order it walks the
+  // components, and with a cap that decides which paths survive. Walk
+  // them in an order derived from the circuit itself rather than from
+  // the order the user placed parts, so the same circuit always gives
+  // the same answer.
+  function traversalOrder(graph) {
+    return graph
+      .map((entry, i) => ({
+        entry, i,
+        key: entry.comp.type + '|' + entry.nodes.slice().sort().join('|'),
+      }))
+      .sort((a, b) => (a.key < b.key ? -1 : a.key > b.key ? 1 : a.i - b.i))
+      .map(o => o.entry);
+  }
+
   function findAllPaths(graph, startNode, endNode, skipComp) {
+    const order    = traversalOrder(graph);
     const allPaths = [];
     const visited  = new Set([startNode]);
+    const onPath   = new Set();  // components already used by this path
     const path     = [];
+    const deadline = Date.now() + PATH_BUDGET_MS;
+    let   steps     = 0;
+    let   truncated = false;
+    let   timedOut  = false;
 
     function dfs(cur) {
-      if (allPaths.length >= 30) return; // safety cap
+      if (allPaths.length >= MAX_PATHS) { truncated = true; return; }
+      if ((++steps & 255) === 0 && Date.now() > deadline) { timedOut = true; return; }
 
       if (cur === endNode) {
         allPaths.push([...path]);
         return; // record path and keep searching (don't stop here)
       }
 
-      for (const entry of graph) {
+      for (const entry of order) {
         if (entry.comp === skipComp) continue;
+        // A component can only appear once in a path — a part with three
+        // or more pins can otherwise be walked in a loop.
+        if (onPath.has(entry.comp)) continue;
         // Open buttons break the circuit
         if (entry.comp.type === 'button' && !entry.comp.pressed) continue;
         const ns = entry.nodes;
@@ -198,17 +236,21 @@
             if (visited.has(next)) continue;
 
             visited.add(next);
+            onPath.add(entry.comp);
             path.push({ comp: entry.comp, inPin, outPin });
             dfs(next);        // don't early-exit; backtrack and keep going
             path.pop();
+            onPath.delete(entry.comp);
             visited.delete(next);
+
+            if (truncated || timedOut) return; // unwind, do not keep walking
           }
         }
       }
     }
 
     dfs(startNode);
-    return allPaths;
+    return { paths: allPaths, truncated, timedOut };
   }
 
   // ── Visual: LED on/off ──────────────────────────────────────
@@ -360,7 +402,20 @@
 
       lines.push({ text: `Battery ${bi + 1}: ${V}V`, cls: 'sim-info' });
 
-      const paths = findAllPaths(graph, posNode, negNode, bat.comp);
+      const { paths, truncated, timedOut } = findAllPaths(graph, posNode, negNode, bat.comp);
+
+      if (timedOut) {
+        lines.push({
+          text: `  ⚠ Too many routes to check — stopped after ${PATH_BUDGET_MS} ms.` +
+                ' Some branches were not evaluated.',
+          cls: 'sim-warn',
+        });
+      } else if (truncated) {
+        lines.push({
+          text: `  ⚠ Only the first ${MAX_PATHS} branches were evaluated — this circuit has more.`,
+          cls: 'sim-warn',
+        });
+      }
 
       if (!paths.length) {
         lines.push({ text: '  Circuit open — no complete path.', cls: 'sim-warn' });
