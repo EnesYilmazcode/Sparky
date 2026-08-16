@@ -638,7 +638,7 @@
   App.exportMarkdown = function () {
     function holeStr(ref) {
       if (!ref) return null;
-      return ref.row + (ref.col + 1);  // e.g. "e14"
+      return App.formatHole(ref);      // e.g. "e14", "tp_14"
     }
 
     const comps = state.components;
@@ -720,7 +720,7 @@
   App.exportState = function () {
     function holeStr(ref) {
       if (!ref) return null;
-      return ref.row + (ref.col + 1);   // e.g. "e14"
+      return App.formatHole(ref);       // e.g. "e14", "tp_14"
     }
 
     const components = state.components.map((c, i) => {
