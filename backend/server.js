@@ -630,7 +630,12 @@ const server = http.createServer(async (req, res) => {
   };
 
   if (req.method === 'GET') {
-    let urlPath = decodeURIComponent(req.url.split('?')[0]);
+    let urlPath;
+    try {
+      urlPath = decodeURIComponent(req.url.split('?')[0]);
+    } catch {
+      return sendJSON(res, 400, { error: 'Bad request path' });
+    }
     if (urlPath === '/') urlPath = '/index.html';
     const filePath = path.join(STATIC_ROOT, urlPath);
     if (!filePath.startsWith(STATIC_ROOT)) return sendJSON(res, 403, { error: 'Forbidden' });
@@ -647,6 +652,20 @@ const server = http.createServer(async (req, res) => {
   }
 
   sendJSON(res, 404, { error: 'Not found' });
+});
+
+// Malformed HTTP from a client must not be fatal.
+server.on('clientError', (err, socket) => {
+  if (socket.writable) socket.end('HTTP/1.1 400 Bad Request\r\n\r\n');
+  else socket.destroy();
+});
+
+// Last resort: log and keep serving rather than exiting on a single bad request.
+process.on('uncaughtException', err => {
+  console.error('Uncaught exception:', err && err.stack ? err.stack : err);
+});
+process.on('unhandledRejection', err => {
+  console.error('Unhandled rejection:', err && err.stack ? err.stack : err);
 });
 
 server.listen(PORT, () => {
