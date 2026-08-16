@@ -27,12 +27,12 @@
 (function (App) {
 
   // ── Electrical properties ───────────────────────────────────
-  const PROPS = {
-    battery:  { voltage: 9.0 },
-    resistor: { resistance: 220 },    // 220 Ω default
-    led:      { forwardVoltage: 2.0, thresholdCurrent: 0.001 },
-    buzzer:   { resistance: 42,      thresholdCurrent: 0.001 },
-  };
+  // Values live on the component instance (set at placement time
+  // from App.componentValues in components.js). The fallback covers
+  // components built before instance values existed.
+  function propsOf(comp) {
+    return comp.values || App.componentValues(comp.type);
+  }
 
   // ── Buzzer audio ─────────────────────────────────────────────
   let _audioCtx = null;
@@ -356,7 +356,7 @@
     bats.forEach((bat, bi) => {
       const posNode = bat.nodes[0];  // + terminal node
       const negNode = bat.nodes[1];  // − terminal node
-      const V       = PROPS.battery.voltage;
+      const V       = propsOf(bat.comp).voltage || 0;
 
       lines.push({ text: `Battery ${bi + 1}: ${V}V`, cls: 'sim-info' });
 
@@ -381,7 +381,7 @@
         let totalR  = 0;
         let totalVf = 0;
         path.forEach(step => {
-          const p = PROPS[step.comp.type] || {};
+          const p = propsOf(step.comp);
           totalR  += p.resistance     || 0;
           totalVf += p.forwardVoltage || 0;
         });
@@ -406,7 +406,7 @@
           if (type === 'led') {
             if (litLEDs.has(step.comp)) return;
             litLEDs.add(step.comp);
-            if (I >= PROPS.led.thresholdCurrent) {
+            if (I >= propsOf(step.comp).thresholdCurrent) {
               lightUpLED(step.comp);
               lines.push({ text: `  💡 LED ON  (${I_mA.toFixed(1)} mA)`, cls: 'sim-on' });
             } else {
@@ -417,7 +417,7 @@
           if (type === 'buzzer') {
             if (litBuzzers.has(step.comp)) return;
             litBuzzers.add(step.comp);
-            if (I >= PROPS.buzzer.thresholdCurrent) {
+            if (I >= propsOf(step.comp).thresholdCurrent) {
               activateBuzzer(step.comp);
               lines.push({ text: `  🔔 BUZZER ON  (${I_mA.toFixed(1)} mA)`, cls: 'sim-on' });
             } else {
