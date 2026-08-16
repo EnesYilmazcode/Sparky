@@ -2,7 +2,7 @@
 
 A 3D circuit designer that runs right in your browser. Drop components onto a breadboard, wire them up, simulate the circuit, and ask the built-in AI tutor for help.
 
-**[Try it live at buildwithsparky.web.app](https://buildwithsparky.web.app)**
+**[Try it live at sparky-na2c.onrender.com](https://sparky-na2c.onrender.com/landing.html)**
 
 ![Sparky Circuit Designer](demo.png)
 
@@ -21,11 +21,11 @@ A 3D circuit designer that runs right in your browser. Drop components onto a br
 
 Open `circuit3d/index.html` in your browser. That's it. No install, no server, no npm.
 
-The AI tutor works from that same plain file open: the chat panel calls the Google Gemini API directly from the browser. The key it sends lives in `circuit3d/index.html` next to `GEMINI_KEY`. If you are running your own copy, replace it with your own key from [Google AI Studio](https://aistudio.google.com/apikey) (free tier, plenty of requests per day for personal use).
+The AI tutor needs the backend, because that is where the Gemini key lives. The browser never holds a key: the chat panel posts to same-origin `/api/ask` and the server calls Google.
 
-**The backend is optional and nothing in the app calls it.**
+**Run the backend if you want the AI tutor.** The 3D designer, wiring and simulation all work without it.
 
-`backend/server.js` is a standalone Node 18+ server with zero npm dependencies. It serves the static files and exposes its own `/api/ask` Gemini endpoint, Google OAuth routes, and Cloudant circuit storage. The shipped frontend does not use any of it -- the chat panel goes straight to Gemini, and sign-in and cloud sharing go through Firebase Auth and Firestore. Run it only if you want that server-side path:
+`backend/server.js` is a standalone Node 18+ server with zero npm dependencies. It serves the static files and exposes `/api/ask`, which is what the chat panel calls. It also carries optional Google OAuth routes and Cloudant storage, which the shipped frontend does not use: sign-in and cloud sharing go through Firebase Auth and Firestore.
 
 ```bash
 cd backend
@@ -72,7 +72,7 @@ Gemini uses **function calling** to interact with the board. Instead of generati
 
 So you can literally type "build me 3 LEDs" and watch it happen.
 
-`backend/server.js` also has a validation pass that auto-injects missing battery and rail wires before returning the tool calls, but that only runs on the backend's own `/api/ask` endpoint, which the frontend never calls.
+Before returning the tool calls, the server checks the proposed circuit for problems it can describe: an unpowered battery, a backwards LED, an LED that is not between power and ground. It reports them alongside the reply rather than silently rewriting your circuit.
 
 ## Project structure
 
@@ -92,7 +92,7 @@ circuit3d/
     app.js             Ties everything together
 
 backend/
-  server.js            Optional standalone server, not called by the frontend
+  server.js            AI backend + static server (zero npm dependencies)
   .env                 Your API key (not committed)
 ```
 
@@ -104,7 +104,7 @@ Everything is vanilla JS. No build tools, no frameworks, no bundler. The 3D comp
 | --- | --- |
 | 3D | Three.js r128 from CDN |
 | Frontend | Plain HTML/CSS/JS |
-| AI model | Gemini 2.0 Flash (Google), called from the browser |
+| AI model | Gemini 2.0 Flash (Google), called server-side |
 | AI features | Native function calling, conversation memory, preview before apply |
 | Auth + cloud storage | Firebase Auth + Firestore |
 | Optional backend | Node.js http module, zero dependencies |
@@ -120,11 +120,11 @@ Everything is vanilla JS. No build tools, no frameworks, no bundler. The 3D comp
 | `CLOUDANT_URL` | No | IBM Cloudant URL (for cloud circuit storage) |
 | `CLOUDANT_APIKEY` | No | IBM Cloudant API key |
 
-These apply to `backend/server.js` only. The app as shipped needs none of them: it reads its Gemini key from `circuit3d/index.html` and uses Firebase for sign-in and cloud storage.
+`GEMINI_API_KEY` is required for the AI tutor. The rest are optional: Google OAuth and Cloudant power the backend's own login and storage routes, while the shipped frontend uses Firebase Auth and Firestore for sign-in and cloud sharing.
 
 ## Google OAuth setup
 
-This is **optional** and applies to the backend only. The shipped app signs in through Firebase instead, so you do not need any of this to use Sparky.
+This is **optional** and applies to the backend's own login route only. The shipped app signs in through Firebase, so you do not need any of this to use Sparky.
 
 1. Go to [Google Cloud Console](https://console.cloud.google.com/apis/credentials)
 2. Create a new project (or select an existing one)
