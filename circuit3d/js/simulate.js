@@ -27,12 +27,33 @@
 (function (App) {
 
   // ── Electrical properties ───────────────────────────────────
+  //  thresholdCurrent = least current that does anything
+  //  maxCurrent       = most the part takes before it cooks
   const PROPS = {
     battery:  { voltage: 9.0 },
-    resistor: { resistance: 220 },    // 220 Ω default
-    led:      { forwardVoltage: 2.0, thresholdCurrent: 0.001 },
-    buzzer:   { resistance: 42,      thresholdCurrent: 0.001 },
+    resistor: { resistance: 470 },    // 470 Ω default — about 15 mA on 9 V with an LED
+    led:      { forwardVoltage: 2.0, thresholdCurrent: 0.001, maxCurrent: 0.020 },
+    buzzer:   { resistance: 42,      thresholdCurrent: 0.001, maxCurrent: 0.030 },
   };
+
+  // Common resistor values, for suggesting one to the user.
+  const STOCK_R = [100, 150, 220, 330, 470, 680, 1000, 1500, 2200, 3300, 4700, 10000];
+
+  function stockResistor(minOhms) {
+    return STOCK_R.find(r => r >= minOhms) || Math.ceil(minOhms / 1000) * 1000;
+  }
+
+  // Current above the part's rating is a real failure, not a success line.
+  function overCurrentLine(label, type, I, netV) {
+    const max = (PROPS[type] || {}).maxCurrent;
+    if (!max || I <= max) return null;
+    const minR = Math.ceil(netV / max);
+    return {
+      text: `  ⚠ ${label} is over its ${(max * 1000).toFixed(0)} mA rating at ${(I * 1000).toFixed(1)} mA` +
+            ` — needs at least ${minR} Ω in series, use ${stockResistor(minR)} Ω.`,
+      cls: 'sim-err',
+    };
+  }
 
   // ── Buzzer audio ─────────────────────────────────────────────
   let _audioCtx = null;
@@ -388,7 +409,24 @@
 
         if (totalR === 0) {
           if (!shortCircuit) {
-            lines.push({ text: '  ⚠ Short circuit — no resistance in path!', cls: 'sim-err' });
+            const part = path.find(step => PROPS[step.comp.type]?.maxCurrent);
+            if (part) {
+              const type = part.comp.type;
+              const max  = PROPS[type].maxCurrent;
+              const minR = Math.ceil((V - totalVf) / max);
+              lines.push({
+                text: `  ⚠ Short circuit — the ${type.toUpperCase()} sits straight across the battery` +
+                      ' with no current-limiting resistor.',
+                cls: 'sim-err',
+              });
+              lines.push({
+                text: `  A series resistor sets the current: (${V}V − ${totalVf}V) ÷ ${(max * 1000).toFixed(0)} mA` +
+                      ` = ${minR} Ω minimum, so use a ${stockResistor(minR)} Ω.`,
+                cls: 'sim-info',
+              });
+            } else {
+              lines.push({ text: '  ⚠ Short circuit — no resistance in path!', cls: 'sim-err' });
+            }
             shortCircuit = true;
           }
           return;
@@ -409,6 +447,8 @@
             if (I >= PROPS.led.thresholdCurrent) {
               lightUpLED(step.comp);
               lines.push({ text: `  💡 LED ON  (${I_mA.toFixed(1)} mA)`, cls: 'sim-on' });
+              const over = overCurrentLine('LED', 'led', I, netV);
+              if (over) lines.push(over);
             } else {
               lines.push({ text: '  LED: current too low.', cls: 'sim-warn' });
             }
@@ -420,6 +460,8 @@
             if (I >= PROPS.buzzer.thresholdCurrent) {
               activateBuzzer(step.comp);
               lines.push({ text: `  🔔 BUZZER ON  (${I_mA.toFixed(1)} mA)`, cls: 'sim-on' });
+              const over = overCurrentLine('BUZZER', 'buzzer', I, netV);
+              if (over) lines.push(over);
             } else {
               lines.push({ text: '  Buzzer: current too low.', cls: 'sim-warn' });
             }
