@@ -2,6 +2,8 @@
 
 A 3D circuit designer that runs right in your browser. Drop components onto a breadboard, wire them up, simulate the circuit, and ask the built-in AI tutor for help.
 
+**[Try it live at sparkylab.web.app](https://sparkylab.web.app)**
+
 ![Sparky Circuit Designer](demo.png)
 
 ---
@@ -17,13 +19,13 @@ A 3D circuit designer that runs right in your browser. Drop components onto a br
 
 ## Quick start
 
-**Just the 3D designer (no AI):**
-
 Open `circuit3d/index.html` in your browser. That's it. No install, no server, no npm.
 
-**With the AI tutor:**
+The AI tutor works from that same plain file open: the chat panel calls the Google Gemini API directly from the browser. The key it sends lives in `circuit3d/index.html` next to `GEMINI_KEY`. If you are running your own copy, replace it with your own key from [Google AI Studio](https://aistudio.google.com/apikey) (free tier, plenty of requests per day for personal use).
 
-You need Node.js 18+ and a Google Gemini API key (free tier available).
+**The backend is optional and nothing in the app calls it.**
+
+`backend/server.js` is a standalone Node 18+ server with zero npm dependencies. It serves the static files and exposes its own `/api/ask` Gemini endpoint, Google OAuth routes, and Cloudant circuit storage. The shipped frontend does not use any of it -- the chat panel goes straight to Gemini, and sign-in and cloud sharing go through Firebase Auth and Firestore. Run it only if you want that server-side path:
 
 ```bash
 cd backend
@@ -34,15 +36,7 @@ echo "GEMINI_API_KEY=your_gemini_api_key_here" > .env
 node server.js
 ```
 
-Then open `http://localhost:5001` in your browser. The chat panel on the right connects to the backend automatically.
-
-**Getting a Gemini API key:**
-
-1. Go to [Google AI Studio](https://aistudio.google.com/apikey)
-2. Click "Create API key"
-3. Copy it into your `.env` file
-
-The free tier gives you plenty of requests per day for personal use.
+Then open `http://localhost:5001`.
 
 ## Controls
 
@@ -53,6 +47,8 @@ The free tier gives you plenty of requests per day for personal use.
 | `W` | Wire mode -- click two holes/pins to connect them |
 | `R` | Rotate component before placing |
 | `Esc` | Cancel whatever you're doing |
+| `Ctrl+Z` | Undo the last placement, wire, delete, Clear All, or file open |
+| `Ctrl+Shift+Z` | Redo |
 
 You can also just click components in the sidebar to start placing them.
 
@@ -72,15 +68,20 @@ Push buttons work during simulation too -- click them to toggle the circuit on a
 
 When you send a message, the app snapshots your entire board (components, positions, wires) as a markdown table and sends it to Gemini along with your question and your conversation history.
 
-Gemini uses **function calling** to interact with the board. Instead of generating raw JSON, it calls structured tools like `place_resistor(holeA="a3", holeB="a7")` and `add_wire(from="tp_3", to="a3", color="red")`. A server-side validation layer catches common mistakes (like forgetting to wire the battery to the rails) and auto-fixes them.
+Gemini uses **function calling** to interact with the board. Instead of generating raw JSON, it calls structured tools like `place_resistor(holeA="a3", holeB="a7")` and `add_wire(from="tp_3", to="a3", color="red")`. The returned tool calls are shown as a ghost preview first, and only get applied to the board when you accept them.
 
 So you can literally type "build me 3 LEDs" and watch it happen.
+
+`backend/server.js` also has a validation pass that auto-injects missing battery and rail wires before returning the tool calls, but that only runs on the backend's own `/api/ask` endpoint, which the frontend never calls.
 
 ## Project structure
 
 ```
+landing.html          Marketing page + Firebase sign-in
+dashboard.html        Saved circuits, shared "sparks" (Firestore)
+
 circuit3d/
-  index.html          The app (+ inline chat JS)
+  index.html          The app (+ inline chat JS and Gemini calls)
   css/                 Styling
   js/
     scene.js           Three.js scene setup
@@ -91,7 +92,7 @@ circuit3d/
     app.js             Ties everything together
 
 backend/
-  server.js            AI backend + static server (zero npm dependencies)
+  server.js            Optional standalone server, not called by the frontend
   .env                 Your API key (not committed)
 ```
 
@@ -103,9 +104,10 @@ Everything is vanilla JS. No build tools, no frameworks, no bundler. The 3D comp
 | --- | --- |
 | 3D | Three.js r128 from CDN |
 | Frontend | Plain HTML/CSS/JS |
-| AI backend | Node.js http module, zero dependencies |
-| AI model | Gemini 2.0 Flash (Google) |
-| AI features | Native function calling, conversation memory, circuit validation |
+| AI model | Gemini 2.0 Flash (Google), called from the browser |
+| AI features | Native function calling, conversation memory, preview before apply |
+| Auth + cloud storage | Firebase Auth + Firestore |
+| Optional backend | Node.js http module, zero dependencies |
 
 ## .env reference
 
@@ -118,11 +120,11 @@ Everything is vanilla JS. No build tools, no frameworks, no bundler. The 3D comp
 | `CLOUDANT_URL` | No | IBM Cloudant URL (for cloud circuit storage) |
 | `CLOUDANT_APIKEY` | No | IBM Cloudant API key |
 
-Only `GEMINI_API_KEY` is needed to get started. The Google OAuth and Cloudant variables are for optional cloud login and storage features.
+These apply to `backend/server.js` only. The app as shipped needs none of them: it reads its Gemini key from `circuit3d/index.html` and uses Firebase for sign-in and cloud storage.
 
 ## Google OAuth setup
 
-This is **optional** — only needed if you want the "Sign in with Google" feature for saving circuits to the cloud. It's completely free.
+This is **optional** and applies to the backend only. The shipped app signs in through Firebase instead, so you do not need any of this to use Sparky.
 
 1. Go to [Google Cloud Console](https://console.cloud.google.com/apis/credentials)
 2. Create a new project (or select an existing one)

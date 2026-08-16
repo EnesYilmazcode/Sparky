@@ -405,6 +405,13 @@
       const el = document.activeElement;
       if (el?.tagName === 'INPUT' || el?.tagName === 'TEXTAREA' || el?.isContentEditable) return;
 
+      if ((e.ctrlKey || e.metaKey) && (e.key === 'z' || e.key === 'Z')) {
+        e.preventDefault();
+        if (e.shiftKey) App.redo(); else App.undo();
+        return;
+      }
+      if (e.ctrlKey || e.metaKey) return;   // leave browser shortcuts alone
+
       if (e.key === 'r' || e.key === 'R') {
         // Toggle rotation (0 ↔ 1)
         state.placementRotation = state.placementRotation === 0 ? 1 : 0;
