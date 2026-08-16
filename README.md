@@ -2,7 +2,7 @@
 
 A 3D circuit designer that runs right in your browser. Drop components onto a breadboard, wire them up, simulate the circuit, and ask the built-in AI tutor for help.
 
-**[Try it live at sparkylab.web.app](https://sparkylab.web.app)**
+**[Try it live at buildwithsparky.web.app](https://buildwithsparky.web.app)**
 
 ![Sparky Circuit Designer](demo.png)
 
