@@ -456,6 +456,27 @@ function sendJSON(res, status, obj) {
   res.end(JSON.stringify(obj));
 }
 
+// The OAuth popup hands its result to the opener. Payload values come from the
+// callback query string, so they are carried in a JSON block and read with
+// textContent. Interpolating them into the script itself is a reflected XSS.
+// `<` is escaped because JSON.stringify would otherwise let a value close the
+// block early with a literal </script>.
+function oauthPopupPage(payload) {
+  const json = JSON.stringify(payload).replace(/</g, '\\u003c');
+  return '<!doctype html><html><body>'
+    + '<script type="application/json" id="oauth-result">' + json + '</' + 'script>'
+    + '<script>(function(){'
+    + 'var d=JSON.parse(document.getElementById("oauth-result").textContent);'
+    + 'if(window.opener)window.opener.postMessage(d,"*");'
+    + 'window.close();})();</' + 'script>'
+    + '</body></html>';
+}
+
+function sendOAuthPopup(res, payload) {
+  res.writeHead(200, { 'Content-Type': 'text/html' });
+  res.end(oauthPopupPage(payload));
+}
+
 const server = http.createServer(async (req, res) => {
   setCORS(res);
   if (req.method === 'OPTIONS') { res.writeHead(204); res.end(); return; }
@@ -502,9 +523,7 @@ const server = http.createServer(async (req, res) => {
       const error = urlObj.searchParams.get('error');
 
       if (error || !code) {
-        const html = `<html><body><script>window.opener.postMessage({error:"${error || 'No code received'}"},"*");window.close();</script></body></html>`;
-        res.writeHead(200, { 'Content-Type': 'text/html' });
-        res.end(html);
+        sendOAuthPopup(res, { error: error || 'No code received' });
         return;
       }
 
@@ -518,22 +537,16 @@ const server = http.createServer(async (req, res) => {
       if (!tokenRes.ok) {
         const err = await tokenRes.text();
         console.error('Token exchange failed:', err);
-        const html = `<html><body><script>window.opener.postMessage({error:"Login failed"},"*");window.close();</script></body></html>`;
-        res.writeHead(200, { 'Content-Type': 'text/html' });
-        res.end(html);
+        sendOAuthPopup(res, { error: 'Login failed' });
         return;
       }
 
       const tokens = await tokenRes.json();
       console.log('[auth] Google login successful');
-      const html = `<html><body><script>window.opener.postMessage({access_token:"${tokens.access_token}"},"*");window.close();</script></body></html>`;
-      res.writeHead(200, { 'Content-Type': 'text/html' });
-      res.end(html);
+      sendOAuthPopup(res, { access_token: tokens.access_token });
     } catch (e) {
       console.error('Callback error:', e.message);
-      const html = `<html><body><script>window.opener.postMessage({error:"${e.message}"},"*");window.close();</script></body></html>`;
-      res.writeHead(200, { 'Content-Type': 'text/html' });
-      res.end(html);
+      sendOAuthPopup(res, { error: 'Login failed' });
     }
     return;
   }
