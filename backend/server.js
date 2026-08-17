@@ -456,6 +456,21 @@ function sendJSON(res, status, obj) {
   res.end(JSON.stringify(obj));
 }
 
+// /api/ask spends the Gemini key, so cap it per IP or it is an open proxy.
+const ASK_WINDOW_MS = 60000;
+const ASK_MAX_PER_WINDOW = 20;
+const askHits = new Map();
+
+function askRateLimited(req) {
+  const ip = req.socket.remoteAddress || 'unknown';
+  const now = Date.now();
+  if (askHits.size > 5000) askHits.clear();
+  const hits = (askHits.get(ip) || []).filter(t => now - t < ASK_WINDOW_MS);
+  hits.push(now);
+  askHits.set(ip, hits);
+  return hits.length > ASK_MAX_PER_WINDOW;
+}
+
 // The OAuth popup hands its result to the opener. Payload values come from the
 // callback query string, so they are carried in a JSON block and read with
 // textContent. Interpolating them into the script itself is a reflected XSS.
@@ -486,6 +501,9 @@ const server = http.createServer(async (req, res) => {
   }
 
   if (req.method === 'POST' && req.url === '/api/ask') {
+    if (askRateLimited(req)) {
+      return sendJSON(res, 429, { reply: 'Too many requests. Give Sparky a moment and try again.', actions: [] });
+    }
     let body = '';
     req.on('data', chunk => (body += chunk));
     req.on('end', async () => {
@@ -495,8 +513,9 @@ const server = http.createServer(async (req, res) => {
         console.log(`[ask] "${message.slice(0,60)}" → ${actions.length} action(s)`);
         return sendJSON(res, 200, { reply, actions });
       } catch (e) {
-        console.error('Error:', e.message);
-        return sendJSON(res, 200, { reply: `⚠️ ${e.message}`, actions: [] });
+        // Upstream body can contain key/quota detail, so it stays in the log.
+        console.error('[ask] failed:', e.message);
+        return sendJSON(res, 502, { reply: 'Sparky could not reach the AI service. Please try again in a moment.', actions: [] });
       }
     });
     return;
