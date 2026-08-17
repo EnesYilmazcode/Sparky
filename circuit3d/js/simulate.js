@@ -47,6 +47,9 @@
     buzzer:   { resistance: 42,      thresholdCurrent: 0.001 },
   };
 
+  // app.js places LEDs pin 0 = cathode, pin 1 = anode.
+  const LED_ANODE_PIN = 1;
+
   // ── Union-Find ──────────────────────────────────────────────
   class UnionFind {
     constructor() { this._p = {}; }
@@ -238,9 +241,16 @@
       // Each path is an independent parallel branch — evaluate separately.
       const litLEDs     = new Set();
       const litBuzzers  = new Set();
+      const backwards   = new Set();
       let   shortCircuit = false;
 
       paths.forEach((path, pi) => {
+        // A diode conducts anode to cathode only, so a branch that enters an
+        // LED by any other pin carries nothing.
+        const reversed = path.find(step =>
+          step.comp.type === 'led' && step.inPin !== LED_ANODE_PIN);
+        if (reversed) { backwards.add(reversed.comp); return; }
+
         let totalR  = 0;
         let totalVf = 0;
         path.forEach(step => {
@@ -295,7 +305,14 @@
         });
       });
 
-      if (!shortCircuit && litLEDs.size === 0 && litBuzzers.size === 0 && paths.length > 0) {
+      // Announced after every branch, so an LED a second branch lights stays quiet.
+      backwards.forEach(led => {
+        if (litLEDs.has(led)) return;
+        lines.push({ text: '  LED is backwards. Current cannot flow from cathode to anode. Flip it around.', cls: 'sim-warn' });
+      });
+
+      if (!shortCircuit && !backwards.size &&
+          litLEDs.size === 0 && litBuzzers.size === 0 && paths.length > 0) {
         lines.push({ text: '  No output components in circuit path.', cls: 'sim-info' });
       }
     });

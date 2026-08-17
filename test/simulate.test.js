@@ -139,15 +139,7 @@ function reversedLED() {
   return { components: [bat, res, led], wires };
 }
 
-test('reversed LED: WRONG TODAY, lights at full brightness (#10)', () => {
-  const { components, wires } = reversedLED();
-  const r = Sim.analyze(components, wires);
-
-  assert.equal(r.ledsOn.length, 1, 'polarity is recorded but never read');
-  assert.ok(Math.abs(mA(r.branches[0].current) - 31.818) < 0.01);
-});
-
-test('reversed LED: stays dark and says so (#10)', { skip: 'fixed by issue #10' }, () => {
+test('reversed LED: stays dark and says so (#10)', () => {
   const { components, wires } = reversedLED();
   const r = Sim.analyze(components, wires);
 
