@@ -17,6 +17,7 @@
 const http = require('http');
 const fs   = require('fs');
 const path = require('path');
+const { makeAsk } = require('./ai-providers');
 
 // ── Load .env ─────────────────────────────────────────────────
 function loadEnv() {
@@ -352,6 +353,11 @@ function validateActions(actions) {
 }
 
 // ── Call Gemini ──────────────────────────────────────────────
+const ask = makeAsk(
+  (markdown, userMsg, history) => askGemini(markdown, userMsg, history),
+  { SYSTEM_PROMPT, CIRCUIT_TOOLS }
+);
+
 async function askGemini(markdown, userMsg, history) {
   const msg = userMsg || 'Analyze my circuit and tell me what to do next.';
   const boardState = markdown || '**Board is EMPTY — no components or wires placed.**';
@@ -509,7 +515,7 @@ const server = http.createServer(async (req, res) => {
     req.on('end', async () => {
       try {
         const { markdown = '', message = '', history = [] } = JSON.parse(body || '{}');
-        const { reply, actions } = await askGemini(markdown, message, history);
+        const { reply, actions } = await ask(markdown, message, history);
         console.log(`[ask] "${message.slice(0,60)}" → ${actions.length} action(s)`);
         return sendJSON(res, 200, { reply, actions });
       } catch (e) {
@@ -702,6 +708,7 @@ process.on('unhandledRejection', err => {
 
 server.listen(PORT, () => {
   console.log(`⚡ Sparky AI  →  http://localhost:${PORT}`);
+  console.log(`   AI    : ${process.env.AI_PROVIDER || 'gemini'}`);
   console.log(`   Model : ${GEMINI_MODEL}`);
   console.log(`   Health: http://localhost:${PORT}/api/health`);
   if (CLOUDANT_URL && CLOUDANT_APIKEY) ensureCloudantIndex();
