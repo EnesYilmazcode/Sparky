@@ -121,10 +121,10 @@ async function authenticateRequest(req) {
 
 // ── Gemini system prompt ─────────────────────────────────────
 const SYSTEM_PROMPT = [
-  'You are Sparky, a friendly AI electronics tutor. You help beginners build circuits on a virtual 830-point breadboard.',
+  'You are Sparky, a friendly AI electronics tutor. You help beginners build circuits on a virtual 700-point breadboard.',
   '',
   'BREADBOARD LAYOUT:',
-  '- Columns 1-29. Rows a/b/c/d/e = top half. Rows f/g/h/i/j = bottom half.',
+  '- Columns 1-50. Rows a/b/c/d/e = top half. Rows f/g/h/i/j = bottom half.',
   '- Same column + same half = electrically connected (e.g. a14 and e14 share a node).',
   '- The CENTER CHANNEL separates top from bottom. a14 and f14 are NOT connected unless you wire them.',
   '- tp_N = positive power rail at column N (+9V). tn_N = GND rail at column N.',
