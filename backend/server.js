@@ -687,7 +687,7 @@ const server = http.createServer(async (req, res) => {
     const segments = rel.split(path.sep);
     const ext = path.extname(filePath).toLowerCase();
     const servable = MIME[ext] &&
-      !DENY_DIRS.has(segments[0]) &&
+      !DENY_DIRS.has(segments[0].toLowerCase()) &&
       !segments.some(seg => seg.startsWith('.'));
     if (servable) {
       try {
