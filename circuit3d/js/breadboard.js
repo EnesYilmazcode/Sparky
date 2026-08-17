@@ -9,10 +9,9 @@
 (function (App) {
 
   // ── Board geometry — the single source of truth ────────────────
-  //  Every dimension of the physical board is defined here and nowhere else.
-  //  Exported as App.BOARD_GEOMETRY so app.js and the AI prompt read the same
-  //  numbers.  src/constants.ts holds the Remotion copy: the two runtimes have
-  //  no shared module (no build step in circuit3d), so it must be kept in sync.
+  //  Exported as App.BOARD_GEOMETRY so app.js and the board text handed to the
+  //  model read the same numbers. src/constants.ts is a second copy for Remotion:
+  //  the two runtimes share no module, so it has to be kept in step by hand.
   const GEOMETRY = {
     COLS:        50,
     HS:          0.40,   // hole pitch  (world units)
@@ -44,10 +43,8 @@
 
   const { COLS, HS, BOARD_THICK, MARGIN_X, ROW_Z, RAIL_IS_POS,
           ALL_ROWS, BODY_ROWS, RAIL_ROWS, BOARD_W, BOARD_D } = GEOMETRY;
-  const BODY_ROWS_ORDERED = BODY_ROWS;
 
-  // Board description handed to the model.  Generated from GEOMETRY so the AI
-  // can never be told a column count the board does not have.
+  // Board description handed to the model, generated from GEOMETRY.
   App.boardTopologyText = function () {
     const half = BODY_ROWS.length / 2;
     const t0 = BODY_ROWS[0], t1 = BODY_ROWS[half - 1];
@@ -375,9 +372,9 @@
       if (rotation === 0) {
         return getHole(startHole.col + span, startHole.row);
       }
-      const ri = BODY_ROWS_ORDERED.indexOf(startHole.row);
+      const ri = BODY_ROWS.indexOf(startHole.row);
       if (ri < 0) return null;
-      const newRow = BODY_ROWS_ORDERED[ri + span];
+      const newRow = BODY_ROWS[ri + span];
       return newRow ? getHole(startHole.col, newRow) : null;
     }
 
@@ -391,7 +388,7 @@
       COLS, HS, ROW_Z,
       BOARD_W, BOARD_D,
       BODY_ROWS, RAIL_ROWS,
-      BODY_ROWS_ORDERED,
+      BODY_ROWS,
     };
   }
 
