@@ -609,9 +609,24 @@
       opacity: 1;
       transform: translateX(-50%) translateY(0);
     }
+
+    /* Covers the page until Firebase reports an auth state */
+    .auth-gate {
+      position: fixed;
+      inset: 0;
+      z-index: 1000;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background: var(--bg);
+      color: var(--text-dim);
+      font-size: 0.8125rem;
+    }
   </style>
 </head>
 <body>
+
+  <div class="auth-gate" id="auth-gate">Checking sign-in…</div>
 
   <!-- Sidebar -->
   <aside class="sidebar">
@@ -721,20 +736,37 @@
     let _currentUser = null;
     let _authUsername = null;
 
+    // Circuits live in localStorage, so a sign-out has to wipe them or the next
+    // person on this browser opens the previous user's work.
+    function clearAppStorage() {
+      [LS_KEY, STARRED_KEY, 'sparky_username'].forEach(k => localStorage.removeItem(k));
+      sessionStorage.removeItem('sparky_load_circuit');
+      _circuitsCache = [];
+      _sparksCache   = [];
+    }
+
     function logout() {
       auth.signOut().then(() => {
+        clearAppStorage();
         window.location.href = 'landing.html';
+      }).catch(e => {
+        console.error('Sign out failed:', e);
+        showToast('Sign out failed — check your connection.');
       });
     }
 
-    // Firebase auth state listener — populates username
+    // Auth gate — the page stays covered until Firebase confirms a session,
+    // and visitors without one go back to the landing page.
     auth.onAuthStateChanged(user => {
-      if (user) {
-        _currentUser = user;
-        _authUsername = user.email ? user.email.split('@')[0] : (user.displayName || '');
-        localStorage.setItem('sparky_username', _authUsername);
-        document.getElementById('user-info').textContent = _authUsername;
+      if (!user) {
+        window.location.replace('landing.html');
+        return;
       }
+      _currentUser = user;
+      _authUsername = user.email ? user.email.split('@')[0] : (user.displayName || '');
+      localStorage.setItem('sparky_username', _authUsername);
+      document.getElementById('user-info').textContent = _authUsername;
+      document.getElementById('auth-gate').style.display = 'none';
     });
 
     // ── Local project storage ─────────────────────────────────────
@@ -761,13 +793,27 @@
 
     // ── Sparks (Firestore community collection) ──────────────────
     let _sparksCache = []; // local cache of fetched sparks
+    let _sparksError = null; // last fetch failure, null when the fetch worked
+
+    // A denied read, an offline read and an empty collection all used to look
+    // the same to the user, so keep the reason and say which one it was.
+    function firestoreErrorText(e, action) {
+      const code = (e && e.code) || '';
+      if (code === 'permission-denied' || code === 'unauthenticated')
+        return `Not allowed to ${action} — try signing out and back in.`;
+      if (code === 'unavailable' || code === 'deadline-exceeded')
+        return `Could not ${action} — check your connection.`;
+      return `Could not ${action} — ${escHtml(code || 'unexpected error')}.`;
+    }
 
     async function fetchSparks() {
       try {
         const snap = await db.collection('sparks').orderBy('sharedAt', 'desc').get();
         _sparksCache = snap.docs.map(doc => ({ _docId: doc.id, ...doc.data() }));
+        _sparksError = null;
       } catch (e) {
         console.warn('Failed to fetch sparks:', e);
+        _sparksError = e;
       }
       return _sparksCache;
     }
@@ -775,18 +821,22 @@
     async function saveSpark(entry) {
       try {
         await db.collection('sparks').doc(entry.id).set(entry);
+        return true;
       } catch (e) {
         console.error('Failed to publish spark:', e);
-        showToast('Failed to publish — check your connection.');
+        showToast(firestoreErrorText(e, 'publish'));
+        return false;
       }
     }
 
     async function removeSpark(id) {
       try {
         await db.collection('sparks').doc(id).delete();
+        return true;
       } catch (e) {
         console.error('Failed to remove spark:', e);
-        showToast('Failed to remove — you may not have permission.');
+        showToast(firestoreErrorText(e, 'remove that spark'));
+        return false;
       }
     }
 
@@ -812,9 +862,9 @@
 
       // Thumbnail preview
       const th = document.getElementById('publish-thumb');
-      th.innerHTML = c.thumbnail
-        ? `<img src="${c.thumbnail}">`
-        : '';
+      th.innerHTML = '';
+      const thumbImg = makeThumbImg(c.thumbnail);
+      if (thumbImg) th.appendChild(thumbImg);
 
       document.getElementById('publish-modal').style.display = 'flex';
       document.getElementById('publish-name').focus();
@@ -841,7 +891,7 @@
       // Persist username for next time (only if not locked to auth account)
       if (!_authUsername) localStorage.setItem('sparky_username', author);
 
-      await saveSpark({
+      const published = await saveSpark({
         id:         c.id,
         uid:        _currentUser.uid,
         name,
@@ -852,6 +902,8 @@
         components: c.components || [],
         wires:      c.wires      || [],
       });
+
+      if (!published) return; // saveSpark already said why
 
       closePublishModal();
       showToast(`"${name}" published to Sparks!`);
@@ -930,8 +982,9 @@
       const wireCount = (c.wires     ?? c.circuit?.wires    )?.length ?? 0;
       const saved = c.updatedAt ? new Date(c.updatedAt).toLocaleDateString() : '';
 
-      const thumbHtml = c.thumbnail
-        ? `<img src="${c.thumbnail}" style="width:100%;height:100%;object-fit:cover;display:block;">`
+      const thumbImg  = makeThumbImg(c.thumbnail, 'width:100%;height:100%;object-fit:cover;display:block;');
+      const thumbHtml = thumbImg
+        ? ''
         : `<div class="card-thumb-grid"><span class="card-thumb-emoji" style="color:var(--text-dim)"><svg width="36" height="25" viewBox="0 0 36 25" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"><rect x="1" y="4" width="34" height="17" rx="1.5"/><line x1="7" y1="4" x2="7" y2="21"/><line x1="13" y1="4" x2="13" y2="21"/><line x1="18" y1="4" x2="18" y2="21"/><line x1="23" y1="4" x2="23" y2="21"/><line x1="29" y1="4" x2="29" y2="21"/><line x1="4" y1="1.5" x2="4" y2="4"/><line x1="10" y1="1.5" x2="10" y2="4"/><line x1="15" y1="1.5" x2="15" y2="4"/><line x1="20" y1="1.5" x2="20" y2="4"/><line x1="26" y1="1.5" x2="26" y2="4"/><line x1="31" y1="1.5" x2="31" y2="4"/><line x1="4" y1="21" x2="4" y2="23.5"/><line x1="10" y1="21" x2="10" y2="23.5"/><line x1="15" y1="21" x2="15" y2="23.5"/><line x1="20" y1="21" x2="20" y2="23.5"/><line x1="26" y1="21" x2="26" y2="23.5"/><line x1="31" y1="21" x2="31" y2="23.5"/></svg></span></div>`;
 
       card.innerHTML = `
@@ -953,6 +1006,8 @@
           </div>
         </div>
       `;
+
+      if (thumbImg) card.querySelector('.card-thumb').appendChild(thumbImg);
 
       card.addEventListener('click', e => {
         if (e.target.closest('.card-menu-wrap')) return;
@@ -1097,10 +1152,20 @@
       grid.innerHTML = '';
 
       if (!sparks.length) {
+        let icon = '✦';
+        let text;
+        if (_sparksError && !_sparksCache.length) {
+          icon = '⚠';
+          text = firestoreErrorText(_sparksError, 'load Sparks');
+        } else if (_favOnly) {
+          text = 'No starred sparks yet.<br>Star a spark to find it here.';
+        } else {
+          text = 'No sparks yet.<br>Publish one of your circuits using the ··· menu.';
+        }
         grid.innerHTML = `
           <div class="empty-state" style="grid-column:1/-1">
-            <div class="empty-state-icon" style="font-size:1.5rem;opacity:0.35">✦</div>
-            <div class="empty-state-text">${_favOnly ? 'No starred sparks yet.' : 'No sparks yet.'}<br>${_favOnly ? 'Star a spark to find it here.' : 'Publish one of your circuits using the ··· menu.'}</div>
+            <div class="empty-state-icon" style="font-size:1.5rem;opacity:0.35">${icon}</div>
+            <div class="empty-state-text">${text}</div>
           </div>`;
         return;
       }
@@ -1112,9 +1177,8 @@
         const isStarred = starred.has(spark.id);
         const starFill   = isStarred ? '#f59e0b' : 'none';
         const starStroke = isStarred ? '#f59e0b' : 'currentColor';
-        const thumbHtml = spark.thumbnail
-          ? `<img src="${spark.thumbnail}" style="width:100%;height:100%;object-fit:cover;display:block;">`
-          : `<span style="color:#555">${BOARD_SVG}</span>`;
+        const thumbImg  = makeThumbImg(spark.thumbnail, 'width:100%;height:100%;object-fit:cover;display:block;');
+        const thumbHtml = thumbImg ? '' : `<span style="color:#555">${BOARD_SVG}</span>`;
         const isOwn = myUid && spark.uid === myUid;
 
         const card = document.createElement('div');
@@ -1126,16 +1190,23 @@
               <div class="spark-card-title">${escHtml(spark.name || 'Untitled')}</div>
               <div class="spark-card-author">${spark.author ? escHtml(spark.author) : ''}${spark.sharedAt ? ' · ' + new Date(spark.sharedAt).toLocaleDateString() : ''}</div>
             </div>
-            <button class="star-btn ${isStarred ? 'starred' : ''}" onclick="toggleStar('${spark.id}', event)" title="${isStarred ? 'Unstar' : 'Star'}">
+            <button class="star-btn ${isStarred ? 'starred' : ''}" title="${isStarred ? 'Unstar' : 'Star'}">
               <svg width="15" height="15" viewBox="0 0 24 24" fill="${starFill}" stroke="${starStroke}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>
             </button>
           </div>
           ${spark.desc ? `<div class="spark-card-desc">${escHtml(spark.desc)}</div>` : ''}
           <div class="spark-card-footer">
-            <button class="btn btn-ghost" style="font-size:0.75rem;" onclick="forkSpark('${spark.id}')">Fork to My Circuits</button>
-            ${isOwn ? `<button class="btn btn-danger" style="font-size:0.75rem;" onclick="unshareFromSparks('${spark.id}')">Remove</button>` : ''}
+            <button class="btn btn-ghost spark-fork-btn" style="font-size:0.75rem;">Fork to My Circuits</button>
+            ${isOwn ? '<button class="btn btn-danger spark-remove-btn" style="font-size:0.75rem;">Remove</button>' : ''}
           </div>
         `;
+
+        if (thumbImg) card.querySelector('.spark-thumb').appendChild(thumbImg);
+        card.querySelector('.star-btn').addEventListener('click', e => toggleStar(spark.id, e));
+        card.querySelector('.spark-fork-btn').addEventListener('click', () => forkSpark(spark.id));
+        const removeBtn = card.querySelector('.spark-remove-btn');
+        if (removeBtn) removeBtn.addEventListener('click', () => unshareFromSparks(spark.id));
+
         grid.appendChild(card);
       });
     }
@@ -1157,9 +1228,9 @@
     }
 
     async function unshareFromSparks(id) {
-      await removeSpark(id);
+      const removed = await removeSpark(id);
       await renderSparks();
-      showToast('Removed from Sparks.');
+      if (removed) showToast('Removed from Sparks.');
     }
 
     // ── Toast ──────────────────────────────────────────────────
@@ -1170,6 +1241,17 @@
       t.classList.add('show');
       clearTimeout(_toastTimer);
       _toastTimer = setTimeout(() => t.classList.remove('show'), 2400);
+    }
+
+    // ── Safe thumbnail image ────────────────────────────────────────────
+    // Thumbnails can come from another user's spark, so build the node and set
+    // src as a property instead of interpolating it into markup.
+    function makeThumbImg(src, style) {
+      if (!src || !/^(data:image\/|https?:\/\/)/i.test(String(src))) return null;
+      const img = document.createElement('img');
+      img.src = src;
+      if (style) img.style.cssText = style;
+      return img;
     }
 
     // ── Escape HTML ────────────────────────────────────────────

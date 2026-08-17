@@ -21,10 +21,23 @@
 //  If the circuit drives current the wrong way the LED stays off.
 //  Battery: pin 0 = positive (+) output, pin 1 = negative (−) return.
 //
-//  Exports: App.runSimulation(), App.stopSimulation()
+//  EXPORTS
+//  ───────
+//  Browser: window.App.runSimulation() / App.stopSimulation(), unchanged.
+//  Node:    module.exports = the pure solver (PROPS, buildGraph,
+//           findAllPaths, analyze) so a test runner can call it.
+//  Everything above the "Presentation" divider is pure: no document,
+//  no THREE, no AudioContext.
 // ─────────────────────────────────────────────────────────────
 
-(function (App) {
+(function (root, factory) {
+  const Sim = factory();
+  if (typeof module === 'object' && module.exports) module.exports = Sim;
+  if (root) Sim.install(root.App = root.App || {});
+})(typeof window !== 'undefined' ? window : null, function () {
+
+  // Browser App namespace, set by install(). Stays null under node.
+  let App = null;
 
   // ── Electrical properties ───────────────────────────────────
   const PROPS = {
@@ -34,52 +47,8 @@
     buzzer:   { resistance: 42,      thresholdCurrent: 0.001 },
   };
 
-  // ── Buzzer audio ─────────────────────────────────────────────
-  let _audioCtx = null;
-  const _buzzerNodes = new Map(); // comp → { osc, gain }
-
-  function _getAudioCtx() {
-    if (!_audioCtx) _audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-    return _audioCtx;
-  }
-
-  function activateBuzzer(comp) {
-    if (_buzzerNodes.has(comp)) return;
-    try {
-      const ctx  = _getAudioCtx();
-      const osc  = ctx.createOscillator();
-      const gain = ctx.createGain();
-      osc.type = 'square';
-      osc.frequency.value = 220;   // low, buzzy tone
-      gain.gain.value = 0.12;
-      osc.connect(gain);
-      gain.connect(ctx.destination);
-      osc.start();
-      _buzzerNodes.set(comp, { osc, gain });
-    } catch {}
-  }
-
-  function deactivateBuzzer(comp) {
-    const node = _buzzerNodes.get(comp);
-    if (!node) return;
-    try {
-      const ctx = _getAudioCtx();
-      node.gain.gain.setTargetAtTime(0, ctx.currentTime, 0.02);
-      setTimeout(() => { try { node.osc.stop(); } catch {} }, 80);
-    } catch {}
-    _buzzerNodes.delete(comp);
-  }
-
-  function stopAllBuzzers() {
-    _buzzerNodes.forEach((node) => {
-      try {
-        const ctx = _getAudioCtx();
-        node.gain.gain.setTargetAtTime(0, ctx.currentTime, 0.02);
-        setTimeout(() => { try { node.osc.stop(); } catch {} }, 80);
-      } catch {}
-    });
-    _buzzerNodes.clear();
-  }
+  // app.js places LEDs pin 0 = cathode, pin 1 = anode.
+  const LED_ANODE_PIN = 1;
 
   // ── Union-Find ──────────────────────────────────────────────
   class UnionFind {
@@ -92,9 +61,8 @@
     }
     union(a, b) {
       const ra = this.find(a), rb = this.find(b);
-      // Smaller id always wins, so a node's root is the same whatever
-      // order the wires were drawn in.
       if (ra === rb) return;
+      // Smaller id always wins, so a root does not depend on wire order.
       if (ra < rb) this._p[rb] = ra; else this._p[ra] = rb;
     }
   }
@@ -171,86 +139,280 @@
   //
   //  Backtracking DFS — finds ALL complete paths from startNode to
   //  endNode so that parallel branches (multiple LEDs) are each
-  //  evaluated independently.
+  //  evaluated independently.  Cap at 30 paths for safety.
   //
-  //  The walk is exponential, so it is bounded twice: by MAX_PATHS
-  //  complete paths, and by wall clock. The clock is the bound that
-  //  matters on an open circuit, where no path is ever completed and
-  //  so nothing ever counts against MAX_PATHS. Hitting either bound
-  //  means the answer is partial, so both are handed back and shown
-  //  to the user instead of dropped in silence.
-  //
-  const MAX_PATHS      = 30;
-  const PATH_BUDGET_MS = 250;
+  // The walk is exponential, so it is bounded two ways: by completed paths and
+  // by steps taken. The step budget is what saves an open circuit, where no path
+  // is ever completed. It counts work rather than milliseconds so the same
+  // circuit always returns the same answer.
+  const MAX_PATHS = 30;
+  const MAX_STEPS = 200000;
 
-  // Which paths DFS reaches first depends on the order it walks the
-  // components, and with a cap that decides which paths survive. Walk
-  // them in an order derived from the circuit itself rather than from
-  // the order the user placed parts, so the same circuit always gives
-  // the same answer.
+  // A cap only means something if the paths it keeps are always the same ones,
+  // so walk the components in an order derived from the circuit rather than
+  // from the order the user happened to place them.
   function traversalOrder(graph) {
     return graph
-      .map((entry, i) => ({
-        entry, i,
-        key: entry.comp.type + '|' + entry.nodes.slice().sort().join('|'),
-      }))
+      .map((entry, i) => ({ entry, i, key: entry.comp.type + nodeSig(entry) }))
       .sort((a, b) => (a.key < b.key ? -1 : a.key > b.key ? 1 : a.i - b.i))
       .map(o => o.entry);
   }
+  function nodeSig(entry) { return entry.nodes.slice().sort().join("|"); }
 
   function findAllPaths(graph, startNode, endNode, skipComp) {
-    const order    = traversalOrder(graph);
-    const allPaths = [];
-    const visited  = new Set([startNode]);
-    const onPath   = new Set();  // components already used by this path
-    const path     = [];
-    const deadline = Date.now() + PATH_BUDGET_MS;
+    const order = traversalOrder(graph);
+    const index = new Map(order.map((e, i) => [e.comp, i]));
+    const found = new Map();
     let   steps     = 0;
     let   truncated = false;
-    let   timedOut  = false;
+    let   cutShort  = false;
 
-    function dfs(cur) {
-      if (allPaths.length >= MAX_PATHS) { truncated = true; return; }
-      if ((++steps & 255) === 0 && Date.now() > deadline) { timedOut = true; return; }
+    // Deepen one level at a time. Real circuits are short and traps are deep,
+    // so a working two-part branch is found before the budget goes on a mesh.
+    for (let limit = 1; limit <= order.length && !truncated && !cutShort; limit++) {
+      const visited = new Set([startNode]);
+      const path    = [];
 
-      if (cur === endNode) {
-        allPaths.push([...path]);
-        return; // record path and keep searching (don't stop here)
-      }
+      const dfs = (cur, depth) => {
+        if (found.size >= MAX_PATHS) { truncated = true; return; }
+        if (++steps > MAX_STEPS)     { cutShort  = true; return; }
 
-      for (const entry of order) {
-        if (entry.comp === skipComp) continue;
-        // A component can only appear once in a path — a part with three
-        // or more pins can otherwise be walked in a loop.
-        if (onPath.has(entry.comp)) continue;
-        // Open buttons break the circuit
-        if (entry.comp.type === 'button' && !entry.comp.pressed) continue;
-        const ns = entry.nodes;
+        if (cur === endNode) {
+          const sig = path.map(st => index.get(st.comp) + ":" + st.inPin).join(",");
+          if (!found.has(sig)) found.set(sig, path.slice());
+          return;
+        }
+        if (depth >= limit) return;
 
-        for (let inPin = 0; inPin < ns.length; inPin++) {
-          if (ns[inPin] !== cur) continue;
+        for (const entry of order) {
+          if (entry.comp === skipComp) continue;
+          if (entry.comp.type === "button" && !entry.comp.pressed) continue;
+          const ns = entry.nodes;
 
-          for (let outPin = 0; outPin < ns.length; outPin++) {
-            if (outPin === inPin) continue;
-            const next = ns[outPin];
-            if (visited.has(next)) continue;
+          for (let inPin = 0; inPin < ns.length; inPin++) {
+            if (ns[inPin] !== cur) continue;
 
-            visited.add(next);
-            onPath.add(entry.comp);
-            path.push({ comp: entry.comp, inPin, outPin });
-            dfs(next);        // don't early-exit; backtrack and keep going
-            path.pop();
-            onPath.delete(entry.comp);
-            visited.delete(next);
+            for (let outPin = 0; outPin < ns.length; outPin++) {
+              if (outPin === inPin) continue;
+              const next = ns[outPin];
+              if (visited.has(next)) continue;
 
-            if (truncated || timedOut) return; // unwind, do not keep walking
+              visited.add(next);
+              path.push({ comp: entry.comp, inPin, outPin });
+              dfs(next, depth + 1);
+              path.pop();
+              visited.delete(next);
+
+              // Stop expanding, but keep every path already found.
+              if (truncated || cutShort) return;
+            }
           }
         }
-      }
+      };
+
+      dfs(startNode, 0);
     }
 
-    dfs(startNode);
-    return { paths: allPaths, truncated, timedOut };
+    return { paths: [...found.values()], truncated, cutShort };
+  }
+
+  // ── Pure: analyze ────────────────────────────────────────────
+  //
+  //  components + wires in, numbers and report lines out. Returns:
+  //    status    'empty' | 'no-battery' | 'ok'
+  //    lines     [{ text, cls }] for the results panel
+  //    ledsOn    components the caller should light
+  //    buzzersOn components the caller should sound
+  //    branches  one record per enumerated path, with its current
+  //
+  function analyze(components, wires) {
+    const blank = { lines: [], ledsOn: [], buzzersOn: [], branches: [] };
+
+    if (!components.length) {
+      return Object.assign({}, blank, {
+        status: 'empty',
+        lines: [{ text: 'No components placed.', cls: 'sim-warn' }],
+      });
+    }
+
+    const graph     = buildGraph(components, wires);
+    const lines     = [];
+    const branches  = [];
+    const ledsOn    = [];
+    const buzzersOn = [];
+    const bats      = graph.filter(g => g.comp.type === 'battery');
+    const buttons   = components.filter(c => c.type === 'button');
+
+    buttons.forEach((btn, i) => {
+      const state = btn.pressed ? '🟢 CLOSED (current flowing)' : '⭕ OPEN — click to press';
+      lines.push({ text: `Button ${i + 1}: ${state}`, cls: btn.pressed ? 'sim-on' : 'sim-info' });
+    });
+
+    if (!bats.length) {
+      return Object.assign({}, blank, {
+        status: 'no-battery',
+        lines: [{ text: 'No battery in circuit.', cls: 'sim-warn' }],
+      });
+    }
+
+    bats.forEach((bat, bi) => {
+      const posNode = bat.nodes[0];  // + terminal node
+      const negNode = bat.nodes[1];  // − terminal node
+      const V       = PROPS.battery.voltage;
+
+      lines.push({ text: `Battery ${bi + 1}: ${V}V`, cls: 'sim-info' });
+
+      const walk  = findAllPaths(graph, posNode, negNode, bat.comp);
+      const paths = walk.paths;
+
+      if (walk.truncated) {
+        lines.push({ text: '  Only the first ' + MAX_PATHS + ' branches were checked. This circuit has more.', cls: 'sim-warn' });
+      } else if (walk.cutShort) {
+        lines.push({ text: '  This circuit has too many routes to check them all, so the result is partial.', cls: 'sim-warn' });
+      }
+
+      if (!paths.length) {
+        if (!walk.cutShort && !walk.truncated) {
+          lines.push({ text: '  Circuit open — no complete path.', cls: 'sim-warn' });
+        }
+        const hasBatConn = graph.some(g =>
+          g.comp !== bat.comp && g.nodes.some(n => n === posNode || n === negNode));
+        if (!hasBatConn) {
+          lines.push({ text: '  ⚠ Battery terminals not connected to anything.', cls: 'sim-warn' });
+        }
+        return;
+      }
+
+      // Each path is an independent parallel branch — evaluate separately.
+      const litLEDs     = new Set();
+      const litBuzzers  = new Set();
+      const backwards   = new Set();
+      let   shortCircuit = false;
+
+      paths.forEach((path, pi) => {
+        // A diode conducts anode to cathode only, so a branch that enters an
+        // LED by any other pin carries nothing.
+        const reversed = path.find(step =>
+          step.comp.type === 'led' && step.inPin !== LED_ANODE_PIN);
+        if (reversed) { backwards.add(reversed.comp); return; }
+
+        let totalR  = 0;
+        let totalVf = 0;
+        path.forEach(step => {
+          const p = PROPS[step.comp.type] || {};
+          totalR  += p.resistance     || 0;
+          totalVf += p.forwardVoltage || 0;
+        });
+
+        const branch = { battery: bi, path, totalR, totalVf, current: 0, shorted: false };
+        branches.push(branch);
+
+        if (totalR === 0) {
+          branch.shorted = true;
+          if (!shortCircuit) {
+            lines.push({ text: '  ⚠ Short circuit — no resistance in path!', cls: 'sim-err' });
+            shortCircuit = true;
+          }
+          return;
+        }
+
+        const netV = V - totalVf;
+        if (netV <= 0) return; // not enough voltage for this branch
+
+        const I    = netV / totalR;
+        const I_mA = I * 1000;
+        branch.current = I;
+
+        path.forEach(step => {
+          const type = step.comp.type;
+
+          if (type === 'led') {
+            if (litLEDs.has(step.comp)) return;
+            litLEDs.add(step.comp);
+            if (I >= PROPS.led.thresholdCurrent) {
+              ledsOn.push(step.comp);
+              lines.push({ text: `  💡 LED ON  (${I_mA.toFixed(1)} mA)`, cls: 'sim-on' });
+            } else {
+              lines.push({ text: '  LED: current too low.', cls: 'sim-warn' });
+            }
+          }
+
+          if (type === 'buzzer') {
+            if (litBuzzers.has(step.comp)) return;
+            litBuzzers.add(step.comp);
+            if (I >= PROPS.buzzer.thresholdCurrent) {
+              buzzersOn.push(step.comp);
+              lines.push({ text: `  🔔 BUZZER ON  (${I_mA.toFixed(1)} mA)`, cls: 'sim-on' });
+            } else {
+              lines.push({ text: '  Buzzer: current too low.', cls: 'sim-warn' });
+            }
+          }
+        });
+      });
+
+      // Announced after every branch, so an LED a second branch lights stays quiet.
+      backwards.forEach(led => {
+        if (litLEDs.has(led)) return;
+        lines.push({ text: '  LED is backwards. Current cannot flow from cathode to anode. Flip it around.', cls: 'sim-warn' });
+      });
+
+      if (!shortCircuit && !backwards.size &&
+          litLEDs.size === 0 && litBuzzers.size === 0 && paths.length > 0) {
+        lines.push({ text: '  No output components in circuit path.', cls: 'sim-info' });
+      }
+    });
+
+    return { status: 'ok', lines, ledsOn, buzzersOn, branches };
+  }
+
+  // ── Presentation ─────────────────────────────────────────────
+  //  DOM, THREE and audio live below this line.
+
+  // ── Buzzer audio ─────────────────────────────────────────────
+  let _audioCtx = null;
+  const _buzzerNodes = new Map(); // comp → { osc, gain }
+
+  function _getAudioCtx() {
+    if (!_audioCtx) _audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    return _audioCtx;
+  }
+
+  function activateBuzzer(comp) {
+    if (_buzzerNodes.has(comp)) return;
+    try {
+      const ctx  = _getAudioCtx();
+      const osc  = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.type = 'square';
+      osc.frequency.value = 220;   // low, buzzy tone
+      gain.gain.value = 0.12;
+      osc.connect(gain);
+      gain.connect(ctx.destination);
+      osc.start();
+      _buzzerNodes.set(comp, { osc, gain });
+    } catch {}
+  }
+
+  function deactivateBuzzer(comp) {
+    const node = _buzzerNodes.get(comp);
+    if (!node) return;
+    try {
+      const ctx = _getAudioCtx();
+      node.gain.gain.setTargetAtTime(0, ctx.currentTime, 0.02);
+      setTimeout(() => { try { node.osc.stop(); } catch {} }, 80);
+    } catch {}
+    _buzzerNodes.delete(comp);
+  }
+
+  function stopAllBuzzers() {
+    _buzzerNodes.forEach((node) => {
+      try {
+        const ctx = _getAudioCtx();
+        node.gain.gain.setTargetAtTime(0, ctx.currentTime, 0.02);
+        setTimeout(() => { try { node.osc.stop(); } catch {} }, 80);
+      } catch {}
+    });
+    _buzzerNodes.clear();
   }
 
   // ── Visual: LED on/off ──────────────────────────────────────
@@ -366,8 +528,9 @@
     hideResults();
   }
 
-  // ── Public: runSimulation ───────────────────────────────────
-  App.runSimulation = function () {
+  // ── Public: runSimulation ────────────────────────────────────
+  //  Solve with analyze(), then render the result.
+  function runSimulation() {
     const { components, wires } = App.state;
     const isRerun = _btnClickHandler !== null; // already running = button click re-run
     clearSimVisuals(); // preserve button states across re-runs
@@ -375,129 +538,25 @@
     // Switch to select mode so user can click components during simulation
     if (!isRerun && App.setMode) App.setMode('select');
 
-    if (!components.length) {
-      showResults([{ text: 'No components placed.', cls: 'sim-warn' }]);
-      return;
+    const result = analyze(components, wires);
+    showResults(result.lines);
+    if (result.status === 'empty') return;
+
+    result.ledsOn.forEach(lightUpLED);
+    result.buzzersOn.forEach(activateBuzzer);
+
+    if (result.status === 'ok') {
+      App.simRunning = true;
+      document.getElementById('sim-run-btn').style.display  = 'none';
+      document.getElementById('sim-stop-btn').style.display = 'inline-flex';
     }
-
-    const graph   = buildGraph(components, wires);
-    const lines   = [];
-    const bats    = graph.filter(g => g.comp.type === 'battery');
-    const buttons = components.filter(c => c.type === 'button');
-    buttons.forEach((btn, i) => {
-      const state = btn.pressed ? '🟢 CLOSED (current flowing)' : '⭕ OPEN — click to press';
-      lines.push({ text: `Button ${i + 1}: ${state}`, cls: btn.pressed ? 'sim-on' : 'sim-info' });
-    });
-
-    if (!bats.length) {
-      showResults([{ text: 'No battery in circuit.', cls: 'sim-warn' }]);
-      if (!isRerun) installButtonClicks();
-      return;
-    }
-
-    bats.forEach((bat, bi) => {
-      const posNode = bat.nodes[0];  // + terminal node
-      const negNode = bat.nodes[1];  // − terminal node
-      const V       = PROPS.battery.voltage;
-
-      lines.push({ text: `Battery ${bi + 1}: ${V}V`, cls: 'sim-info' });
-
-      const { paths, truncated, timedOut } = findAllPaths(graph, posNode, negNode, bat.comp);
-
-      if (timedOut) {
-        lines.push({
-          text: `  ⚠ Too many routes to check — stopped after ${PATH_BUDGET_MS} ms.` +
-                ' Some branches were not evaluated.',
-          cls: 'sim-warn',
-        });
-      } else if (truncated) {
-        lines.push({
-          text: `  ⚠ Only the first ${MAX_PATHS} branches were evaluated — this circuit has more.`,
-          cls: 'sim-warn',
-        });
-      }
-
-      if (!paths.length) {
-        lines.push({ text: '  Circuit open — no complete path.', cls: 'sim-warn' });
-        const hasBatConn = graph.some(g =>
-          g.comp !== bat.comp && g.nodes.some(n => n === posNode || n === negNode));
-        if (!hasBatConn) {
-          lines.push({ text: '  ⚠ Battery terminals not connected to anything.', cls: 'sim-warn' });
-        }
-        return;
-      }
-
-      // Each path is an independent parallel branch — evaluate separately.
-      const litLEDs     = new Set();
-      const litBuzzers  = new Set();
-      let   shortCircuit = false;
-
-      paths.forEach((path, pi) => {
-        let totalR  = 0;
-        let totalVf = 0;
-        path.forEach(step => {
-          const p = PROPS[step.comp.type] || {};
-          totalR  += p.resistance     || 0;
-          totalVf += p.forwardVoltage || 0;
-        });
-
-        if (totalR === 0) {
-          if (!shortCircuit) {
-            lines.push({ text: '  ⚠ Short circuit — no resistance in path!', cls: 'sim-err' });
-            shortCircuit = true;
-          }
-          return;
-        }
-
-        const netV = V - totalVf;
-        if (netV <= 0) return; // not enough voltage for this branch
-
-        const I    = netV / totalR;
-        const I_mA = I * 1000;
-
-        path.forEach(step => {
-          const type = step.comp.type;
-
-          if (type === 'led') {
-            if (litLEDs.has(step.comp)) return;
-            litLEDs.add(step.comp);
-            if (I >= PROPS.led.thresholdCurrent) {
-              lightUpLED(step.comp);
-              lines.push({ text: `  💡 LED ON  (${I_mA.toFixed(1)} mA)`, cls: 'sim-on' });
-            } else {
-              lines.push({ text: '  LED: current too low.', cls: 'sim-warn' });
-            }
-          }
-
-          if (type === 'buzzer') {
-            if (litBuzzers.has(step.comp)) return;
-            litBuzzers.add(step.comp);
-            if (I >= PROPS.buzzer.thresholdCurrent) {
-              activateBuzzer(step.comp);
-              lines.push({ text: `  🔔 BUZZER ON  (${I_mA.toFixed(1)} mA)`, cls: 'sim-on' });
-            } else {
-              lines.push({ text: '  Buzzer: current too low.', cls: 'sim-warn' });
-            }
-          }
-        });
-      });
-
-      if (!shortCircuit && litLEDs.size === 0 && litBuzzers.size === 0 && paths.length > 0) {
-        lines.push({ text: '  No output components in circuit path.', cls: 'sim-info' });
-      }
-    });
-
-    showResults(lines);
-    App.simRunning = true;
-    document.getElementById('sim-run-btn').style.display  = 'none';
-    document.getElementById('sim-stop-btn').style.display = 'inline-flex';
     // Only install the click handler on the first run — re-runs from
     // the button handler itself keep the same handler alive.
     if (!isRerun) installButtonClicks();
-  };
+  }
 
   // ── Public: stopSimulation ──────────────────────────────────
-  App.stopSimulation = function () {
+  function stopSimulation() {
     clearSimVisuals();
     // Reset all buttons directly — no toggleButton call to avoid re-entrancy
     App.state.components.forEach(c => {
@@ -519,6 +578,14 @@
     const stopBtn = document.getElementById('sim-stop-btn');
     if (runBtn)  runBtn.style.display  = 'inline-flex';
     if (stopBtn) stopBtn.style.display = 'none';
-  };
+  }
 
-})(window.App = window.App || {});
+  // ── Wiring ───────────────────────────────────────────────────
+  function install(app) {
+    App = app;
+    App.runSimulation  = runSimulation;
+    App.stopSimulation = stopSimulation;
+  }
+
+  return { PROPS, UnionFind, bbNodeId, buildGraph, findAllPaths, analyze, install };
+});

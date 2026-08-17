@@ -17,6 +17,7 @@
 const http = require('http');
 const fs   = require('fs');
 const path = require('path');
+const { makeAsk } = require('./ai-providers');
 
 // ── Load .env ─────────────────────────────────────────────────
 function loadEnv() {
@@ -34,7 +35,7 @@ function loadEnv() {
 loadEnv();
 
 const GEMINI_KEY   = process.env.GEMINI_API_KEY;
-const GEMINI_MODEL = 'gemini-2.0-flash';
+const GEMINI_MODEL = process.env.GEMINI_MODEL || 'gemini-flash-latest';
 const GEMINI_URL   = `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent`;
 const PORT         = process.env.PORT || 5001;
 
@@ -257,101 +258,87 @@ const CIRCUIT_TOOLS = [{
   ],
 }];
 
-// ── Validate actions — auto-inject missing wires ─────────────
-function validateActions(actions) {
-  if (!Array.isArray(actions) || actions.length === 0) return actions;
+// ── Validate actions ─ report problems, never rewrite ────────
+// Reports what is wrong with the proposed circuit and returns the actions
+// untouched. Patching them silently hides the model's mistake and can turn a
+// backwards LED into a guaranteed-dead one, or short past a component the
+// model deliberately put in series.
 
-  const result = [...actions];
+// Holes in the same column and same half share a node. Each power rail is one
+// node along its whole length.
+function nodeKey(hole) {
+  if (!hole) return null;
+  const rail = /^(tp|tn|bp|bn)_\d+$/.exec(hole);
+  if (rail) return rail[1];
+  const body = /^([a-j])(\d+)$/i.exec(hole);
+  if (body) return (body[1].toLowerCase() <= 'e' ? 'top' : 'bot') + body[2];
+  return hole;   // battery pins and anything unrecognised stay as themselves
+}
 
-  // === Pass 1: Battery wire injection ===
+// LEDs are left out of the graph below: they only conduct one way, so
+// treating one as a plain connection would bridge power to ground.
+const CONDUCTORS = ['place_resistor', 'place_button', 'place_buzzer'];
+
+function findCircuitProblems(actions) {
+  if (!Array.isArray(actions) || actions.length === 0) return [];
+  const problems = [];
+  const wires = actions.filter(a => a.tool === 'add_wire');
+  const wired = pin => wires.some(w => w.from === pin || w.to === pin);
+
   let batIdx = 0;
-  let offset = 0;
-  for (let i = 0; i < actions.length; i++) {
-    if (actions[i].tool !== 'place_battery') continue;
-
-    const pin0 = `battery_${batIdx}_pin0`;
-    const pin1 = `battery_${batIdx}_pin1`;
-    const hasPos = result.some(a => a.tool === 'add_wire' && (a.from === pin0 || a.to === pin0));
-    const hasNeg = result.some(a => a.tool === 'add_wire' && (a.from === pin1 || a.to === pin1));
-
-    if (!hasPos || !hasNeg) {
-      // Infer rail columns from first resistor / LED
-      let tpCol = null, tnCol = null;
-      for (const a of result) {
-        if (a.tool !== 'add_wire') continue;
-        const tp = (a.from || '').match(/^tp_(\d+)$/) || (a.to || '').match(/^tp_(\d+)$/);
-        const tn = (a.from || '').match(/^tn_(\d+)$/) || (a.to || '').match(/^tn_(\d+)$/);
-        if (tp && !tpCol) tpCol = parseInt(tp[1]);
-        if (tn && !tnCol) tnCol = parseInt(tn[1]);
-      }
-      if (!tpCol) {
-        const r = actions.find(a => a.tool === 'place_resistor');
-        tpCol = r ? parseInt((r.holeA || '').match(/\d+/)?.[0]) || 3 : 3;
-      }
-      if (!tnCol) {
-        const l = actions.find(a => a.tool === 'place_led');
-        tnCol = l ? parseInt((l.holeA || '').match(/\d+/)?.[0]) || 9 : 9;
-      }
-
-      const inject = [];
-      if (!hasPos) inject.push({ tool: 'add_wire', from: pin0, to: `tp_${tpCol}`, color: 'red' });
-      if (!hasNeg) inject.push({ tool: 'add_wire', from: pin1, to: `tn_${tnCol}`, color: 'black' });
-      result.splice(i + 1 + offset, 0, ...inject);
-      offset += inject.length;
-      console.log(`[validate] Injected ${inject.length} battery_${batIdx} wire(s)`);
-    }
+  for (const a of actions) {
+    if (a.tool !== 'place_battery') continue;
+    const pin0 = `battery_${batIdx}_pin0`, pin1 = `battery_${batIdx}_pin1`;
+    if (!wired(pin0)) problems.push(`${pin0} is not wired to a positive rail (tp_N), so nothing on the board is powered.`);
+    if (!wired(pin1)) problems.push(`${pin1} is not wired to a ground rail (tn_N), so the circuit has no return path.`);
     batIdx++;
   }
 
-  // === Pass 2: Rail-to-body wires for resistor+LED pairs ===
-  // Build a set of all holes that already have a wire touching them
-  const wiredHoles = new Set();
-  for (const a of result) {
-    if (a.tool !== 'add_wire') continue;
-    if (a.from) wiredHoles.add(a.from);
-    if (a.to)   wiredHoles.add(a.to);
+  const edges = [];
+  for (const w of wires) edges.push([nodeKey(w.from), nodeKey(w.to)]);
+  for (const c of actions) {
+    if (CONDUCTORS.includes(c.tool)) edges.push([nodeKey(c.holeA), nodeKey(c.holeB)]);
   }
 
-  const resistors = result.filter(a => a.tool === 'place_resistor');
-  const leds      = result.filter(a => a.tool === 'place_led');
-
-  for (const res of resistors) {
-    // Find an LED that shares a hole with this resistor
-    const led = leds.find(l =>
-      l.holeA === res.holeA || l.holeA === res.holeB ||
-      l.holeB === res.holeA || l.holeB === res.holeB
-    );
-    if (!led) continue;
-
-    // Resistor outer hole = the hole NOT shared with the LED → power side
-    const resSharedB = (res.holeB === led.holeA || res.holeB === led.holeB);
-    const resOuter = resSharedB ? res.holeA : res.holeB;
-
-    // LED outer hole = the hole NOT shared with the resistor → ground side
-    const ledSharedB = (led.holeB === res.holeA || led.holeB === res.holeB);
-    const ledOuter = ledSharedB ? led.holeA : led.holeB;
-
-    // Inject power wire: tp_N → resistor outer hole
-    const resCol = resOuter.match(/(\d+)/)?.[1];
-    if (resCol && !wiredHoles.has(resOuter)) {
-      result.push({ tool: 'add_wire', from: `tp_${resCol}`, to: resOuter, color: 'red' });
-      wiredHoles.add(resOuter);
-      console.log(`[validate] Injected power wire: tp_${resCol} → ${resOuter}`);
+  function reach(seed) {
+    const seen = new Set([seed]), queue = [seed];
+    while (queue.length) {
+      const at = queue.shift();
+      for (const [x, y] of edges) {
+        if (!x || !y) continue;
+        const next = x === at ? y : (y === at ? x : null);
+        if (next && !seen.has(next)) { seen.add(next); queue.push(next); }
+      }
     }
+    return seen;
+  }
 
-    // Inject ground wire: LED outer hole → tn_N
-    const ledCol = ledOuter.match(/(\d+)/)?.[1];
-    if (ledCol && !wiredHoles.has(ledOuter)) {
-      result.push({ tool: 'add_wire', from: ledOuter, to: `tn_${ledCol}`, color: 'black' });
-      wiredHoles.add(ledOuter);
-      console.log(`[validate] Injected ground wire: ${ledOuter} → tn_${ledCol}`);
+  const pos = reach('battery_0_pin0'), neg = reach('battery_0_pin1');
+
+  // holeA is the cathode (-), holeB is the anode (+).
+  for (const led of actions.filter(a => a.tool === 'place_led')) {
+    const cathode = nodeKey(led.holeA), anode = nodeKey(led.holeB);
+    const forward  = pos.has(anode) && neg.has(cathode);
+    const reversed = pos.has(cathode) && neg.has(anode);
+    // Any other complete branch makes every node reachable from both terminals,
+    // so orientation is undecidable there. Prefer saying nothing over accusing a
+    // correctly wired LED of being backwards.
+    if (!forward && reversed) {
+      problems.push(`The LED at ${led.holeA}/${led.holeB} is backwards: its cathode ${led.holeA} is on the power side and its anode ${led.holeB} is on the ground side. Swap holeA and holeB.`);
+    } else if (!forward) {
+      problems.push(`The LED at ${led.holeA}/${led.holeB} is not connected between power and ground, so it cannot light.`);
     }
   }
 
-  return result;
+  return problems;
 }
 
 // ── Call Gemini ──────────────────────────────────────────────
+const ask = makeAsk(
+  (markdown, userMsg, history) => askGemini(markdown, userMsg, history),
+  { SYSTEM_PROMPT, CIRCUIT_TOOLS }
+);
+
 async function askGemini(markdown, userMsg, history) {
   const msg = userMsg || 'Analyze my circuit and tell me what to do next.';
   const boardState = markdown || '**Board is EMPTY — no components or wires placed.**';
@@ -439,7 +426,14 @@ async function askGemini(markdown, userMsg, history) {
     return true;
   });
 
-  actions = validateActions(actions);
+  // Report problems instead of patching them, so a wrong circuit is visible
+  // rather than rewritten into a different one.
+  const problems = findCircuitProblems(actions);
+  if (problems.length) {
+    console.warn('[validate] ' + problems.join(' | '));
+    reply += `\n\nHeads up, this build has a problem:\n- ${problems.join('\n- ')}\n\nAsk me to fix it and I will rebuild the circuit.`;
+  }
+
   return { reply, actions };
 }
 
@@ -456,6 +450,42 @@ function sendJSON(res, status, obj) {
   res.end(JSON.stringify(obj));
 }
 
+// /api/ask spends the Gemini key, so cap it per IP or it is an open proxy.
+const ASK_WINDOW_MS = 60000;
+const ASK_MAX_PER_WINDOW = 20;
+const askHits = new Map();
+
+function askRateLimited(req) {
+  const ip = req.socket.remoteAddress || 'unknown';
+  const now = Date.now();
+  if (askHits.size > 5000) askHits.clear();
+  const hits = (askHits.get(ip) || []).filter(t => now - t < ASK_WINDOW_MS);
+  hits.push(now);
+  askHits.set(ip, hits);
+  return hits.length > ASK_MAX_PER_WINDOW;
+}
+
+// The OAuth popup hands its result to the opener. Payload values come from the
+// callback query string, so they are carried in a JSON block and read with
+// textContent. Interpolating them into the script itself is a reflected XSS.
+// `<` is escaped because JSON.stringify would otherwise let a value close the
+// block early with a literal </script>.
+function oauthPopupPage(payload) {
+  const json = JSON.stringify(payload).replace(/</g, '\\u003c');
+  return '<!doctype html><html><body>'
+    + '<script type="application/json" id="oauth-result">' + json + '</' + 'script>'
+    + '<script>(function(){'
+    + 'var d=JSON.parse(document.getElementById("oauth-result").textContent);'
+    + 'if(window.opener)window.opener.postMessage(d,"*");'
+    + 'window.close();})();</' + 'script>'
+    + '</body></html>';
+}
+
+function sendOAuthPopup(res, payload) {
+  res.writeHead(200, { 'Content-Type': 'text/html' });
+  res.end(oauthPopupPage(payload));
+}
+
 const server = http.createServer(async (req, res) => {
   setCORS(res);
   if (req.method === 'OPTIONS') { res.writeHead(204); res.end(); return; }
@@ -465,17 +495,21 @@ const server = http.createServer(async (req, res) => {
   }
 
   if (req.method === 'POST' && req.url === '/api/ask') {
+    if (askRateLimited(req)) {
+      return sendJSON(res, 429, { reply: 'Too many requests. Give Sparky a moment and try again.', actions: [] });
+    }
     let body = '';
     req.on('data', chunk => (body += chunk));
     req.on('end', async () => {
       try {
         const { markdown = '', message = '', history = [] } = JSON.parse(body || '{}');
-        const { reply, actions } = await askGemini(markdown, message, history);
+        const { reply, actions } = await ask(markdown, message, history);
         console.log(`[ask] "${message.slice(0,60)}" → ${actions.length} action(s)`);
         return sendJSON(res, 200, { reply, actions });
       } catch (e) {
-        console.error('Error:', e.message);
-        return sendJSON(res, 200, { reply: `⚠️ ${e.message}`, actions: [] });
+        // Upstream body can contain key/quota detail, so it stays in the log.
+        console.error('[ask] failed:', e.message);
+        return sendJSON(res, 502, { reply: 'Sparky could not reach the AI service. Please try again in a moment.', actions: [] });
       }
     });
     return;
@@ -502,9 +536,7 @@ const server = http.createServer(async (req, res) => {
       const error = urlObj.searchParams.get('error');
 
       if (error || !code) {
-        const html = `<html><body><script>window.opener.postMessage({error:"${error || 'No code received'}"},"*");window.close();</script></body></html>`;
-        res.writeHead(200, { 'Content-Type': 'text/html' });
-        res.end(html);
+        sendOAuthPopup(res, { error: error || 'No code received' });
         return;
       }
 
@@ -518,22 +550,16 @@ const server = http.createServer(async (req, res) => {
       if (!tokenRes.ok) {
         const err = await tokenRes.text();
         console.error('Token exchange failed:', err);
-        const html = `<html><body><script>window.opener.postMessage({error:"Login failed"},"*");window.close();</script></body></html>`;
-        res.writeHead(200, { 'Content-Type': 'text/html' });
-        res.end(html);
+        sendOAuthPopup(res, { error: 'Login failed' });
         return;
       }
 
       const tokens = await tokenRes.json();
       console.log('[auth] Google login successful');
-      const html = `<html><body><script>window.opener.postMessage({access_token:"${tokens.access_token}"},"*");window.close();</script></body></html>`;
-      res.writeHead(200, { 'Content-Type': 'text/html' });
-      res.end(html);
+      sendOAuthPopup(res, { access_token: tokens.access_token });
     } catch (e) {
       console.error('Callback error:', e.message);
-      const html = `<html><body><script>window.opener.postMessage({error:"${e.message}"},"*");window.close();</script></body></html>`;
-      res.writeHead(200, { 'Content-Type': 'text/html' });
-      res.end(html);
+      sendOAuthPopup(res, { error: 'Login failed' });
     }
     return;
   }
@@ -621,36 +647,68 @@ const server = http.createServer(async (req, res) => {
 
   // ── Static file serving ───────────────────────────────────
   const STATIC_ROOT = path.join(__dirname, '..');
+  // Doubles as the extension allowlist: anything not listed here is never served.
+  // .json is deliberately absent, every .json in this repo is build config.
   const MIME = {
     '.html': 'text/html', '.css': 'text/css', '.js': 'application/javascript',
-    '.json': 'application/json', '.png': 'image/png', '.jpg': 'image/jpeg',
+    '.png': 'image/png', '.jpg': 'image/jpeg',
     '.jpeg': 'image/jpeg', '.gif': 'image/gif', '.svg': 'image/svg+xml',
     '.ico': 'image/x-icon', '.woff': 'font/woff', '.woff2': 'font/woff2',
     '.glb': 'model/gltf-binary', '.sparky': 'application/octet-stream',
   };
+  // Server code, build sources and tooling. Mirrors the ignore list in firebase.json.
+  const DENY_DIRS = new Set(['backend', 'src', 'out', 'functions', 'node_modules']);
 
   if (req.method === 'GET') {
-    let urlPath = decodeURIComponent(req.url.split('?')[0]);
+    let urlPath;
+    try {
+      urlPath = decodeURIComponent(req.url.split('?')[0]);
+    } catch {
+      return sendJSON(res, 400, { error: 'Bad request path' });
+    }
     if (urlPath === '/') urlPath = '/index.html';
     const filePath = path.join(STATIC_ROOT, urlPath);
-    if (!filePath.startsWith(STATIC_ROOT)) return sendJSON(res, 403, { error: 'Forbidden' });
-    try {
-      const stat = fs.statSync(filePath);
-      if (stat.isFile()) {
-        const ext = path.extname(filePath).toLowerCase();
-        const contentType = MIME[ext] || 'application/octet-stream';
-        res.writeHead(200, { 'Content-Type': contentType });
-        fs.createReadStream(filePath).pipe(res);
-        return;
-      }
-    } catch { /* file not found — fall through to 404 */ }
+    const rel = path.relative(STATIC_ROOT, filePath);
+    if (rel === '' || rel.startsWith('..') || path.isAbsolute(rel)) {
+      return sendJSON(res, 403, { error: 'Forbidden' });
+    }
+    const segments = rel.split(path.sep);
+    const ext = path.extname(filePath).toLowerCase();
+    const servable = MIME[ext] &&
+      !DENY_DIRS.has(segments[0].toLowerCase()) &&
+      !segments.some(seg => seg.startsWith('.'));
+    if (servable) {
+      try {
+        const stat = fs.statSync(filePath);
+        if (stat.isFile()) {
+          res.writeHead(200, { 'Content-Type': MIME[ext] });
+          fs.createReadStream(filePath).pipe(res);
+          return;
+        }
+      } catch { /* file not found — fall through to 404 */ }
+    }
   }
 
   sendJSON(res, 404, { error: 'Not found' });
 });
 
+// Malformed HTTP from a client must not be fatal.
+server.on('clientError', (err, socket) => {
+  if (socket.writable) socket.end('HTTP/1.1 400 Bad Request\r\n\r\n');
+  else socket.destroy();
+});
+
+// Last resort: log and keep serving rather than exiting on a single bad request.
+process.on('uncaughtException', err => {
+  console.error('Uncaught exception:', err && err.stack ? err.stack : err);
+});
+process.on('unhandledRejection', err => {
+  console.error('Unhandled rejection:', err && err.stack ? err.stack : err);
+});
+
 server.listen(PORT, () => {
   console.log(`⚡ Sparky AI  →  http://localhost:${PORT}`);
+  console.log(`   AI    : ${process.env.AI_PROVIDER || 'gemini'}`);
   console.log(`   Model : ${GEMINI_MODEL}`);
   console.log(`   Health: http://localhost:${PORT}/api/health`);
   if (CLOUDANT_URL && CLOUDANT_APIKEY) ensureCloudantIndex();
