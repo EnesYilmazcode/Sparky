@@ -57,7 +57,7 @@ export const Closing: React.FC = () => {
             color: COLORS.textLight, letterSpacing: '-0.02em',
           }}
         >
-          sparky.web.app
+          sparky-na2c.onrender.com
         </span>
       </div>
 
