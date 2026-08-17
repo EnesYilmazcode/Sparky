@@ -659,13 +659,17 @@ const server = http.createServer(async (req, res) => {
 
   // ── Static file serving ───────────────────────────────────
   const STATIC_ROOT = path.join(__dirname, '..');
+  // Doubles as the extension allowlist: anything not listed here is never served.
+  // .json is deliberately absent, every .json in this repo is build config.
   const MIME = {
     '.html': 'text/html', '.css': 'text/css', '.js': 'application/javascript',
-    '.json': 'application/json', '.png': 'image/png', '.jpg': 'image/jpeg',
+    '.png': 'image/png', '.jpg': 'image/jpeg',
     '.jpeg': 'image/jpeg', '.gif': 'image/gif', '.svg': 'image/svg+xml',
     '.ico': 'image/x-icon', '.woff': 'font/woff', '.woff2': 'font/woff2',
     '.glb': 'model/gltf-binary', '.sparky': 'application/octet-stream',
   };
+  // Server code, build sources and tooling. Mirrors the ignore list in firebase.json.
+  const DENY_DIRS = new Set(['backend', 'src', 'out', 'functions', 'node_modules']);
 
   if (req.method === 'GET') {
     let urlPath;
@@ -676,17 +680,25 @@ const server = http.createServer(async (req, res) => {
     }
     if (urlPath === '/') urlPath = '/index.html';
     const filePath = path.join(STATIC_ROOT, urlPath);
-    if (!filePath.startsWith(STATIC_ROOT)) return sendJSON(res, 403, { error: 'Forbidden' });
-    try {
-      const stat = fs.statSync(filePath);
-      if (stat.isFile()) {
-        const ext = path.extname(filePath).toLowerCase();
-        const contentType = MIME[ext] || 'application/octet-stream';
-        res.writeHead(200, { 'Content-Type': contentType });
-        fs.createReadStream(filePath).pipe(res);
-        return;
-      }
-    } catch { /* file not found — fall through to 404 */ }
+    const rel = path.relative(STATIC_ROOT, filePath);
+    if (rel === '' || rel.startsWith('..') || path.isAbsolute(rel)) {
+      return sendJSON(res, 403, { error: 'Forbidden' });
+    }
+    const segments = rel.split(path.sep);
+    const ext = path.extname(filePath).toLowerCase();
+    const servable = MIME[ext] &&
+      !DENY_DIRS.has(segments[0].toLowerCase()) &&
+      !segments.some(seg => seg.startsWith('.'));
+    if (servable) {
+      try {
+        const stat = fs.statSync(filePath);
+        if (stat.isFile()) {
+          res.writeHead(200, { 'Content-Type': MIME[ext] });
+          fs.createReadStream(filePath).pipe(res);
+          return;
+        }
+      } catch { /* file not found — fall through to 404 */ }
+    }
   }
 
   sendJSON(res, 404, { error: 'Not found' });
