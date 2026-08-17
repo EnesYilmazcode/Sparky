@@ -255,7 +255,7 @@
 
 /* Stacked under the canvas rather than beside it, and capped so the canvas
    keeps the majority of the screen. */
-@media (max-width: 1024px) {
+@media (max-width: 1024px) and (min-height: 600px) {
   #sparky-panel {
     width: 100%;
     height: 30vh;

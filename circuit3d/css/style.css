@@ -597,7 +597,7 @@ canvas {
 /* Below this width the two side panels no longer fit beside the canvas and
    squeeze it to nothing, so stack them under it instead. The canvas is the
    product, so it takes whatever height the stacked panels do not need. */
-@media (max-width: 1024px) {
+@media (max-width: 1024px) and (min-height: 600px) {
   #body {
     flex-direction: column;
   }
