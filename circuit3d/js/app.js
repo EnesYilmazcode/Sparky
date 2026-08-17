@@ -150,6 +150,7 @@
   // (already resolved by interaction.js hover logic).
 
   App.placeResistor = function (holeA, holeB, values) {
+    pushHistory();
     const vals = App.componentValues('resistor', values);
     const { group, pins } = App.buildResistor(holeA, holeB, vals.resistance);
     App.scene.add(group);
@@ -164,6 +165,7 @@
   };
 
   App.placeLED = function (holeA, holeB, values) {
+    pushHistory();
     const vals = App.componentValues('led', values);
     const { group, pins } = App.buildLED(holeA, holeB, vals.color);
     App.scene.add(group);
@@ -179,6 +181,7 @@
   };
 
   App.placeBuzzer = function (holeA, holeB, values) {
+    pushHistory();
     const { group, pins } = App.buildBuzzer(holeA, holeB);
     App.scene.add(group);
     const record = {
@@ -193,6 +196,7 @@
   };
 
   App.placeButton = function (holeA, holeB, values) {
+    pushHistory();
     const { group, pins, capMesh } = App.buildButton(holeA, holeB);
     App.scene.add(group);
     const record = {
@@ -266,6 +270,7 @@
   };
 
   App.placeBattery = function (wx, wz, values) {
+    pushHistory();
     const margin = state.breadboard.BOARD_W / 2 + 2.5;
     const placedX = wx >= 0 ? Math.max(wx, margin) : Math.min(wx, -margin);
     const { group, pins } = App.buildBattery(placedX, wz);
@@ -305,6 +310,7 @@
 
   App.finishWire = function (endPin) {
     if (!state.wireStart) return;
+    pushHistory();
 
     const startWorld  = state.wireStart.world;
     const endWorld    = endPin.world;
@@ -432,12 +438,20 @@
   App.deleteSelected = function () {
     if (!state.selected) return;
     const { item, kind } = state.selected;
+    pushHistory();
     App.deselect();
 
     if (kind === 'component') {
       (item.pinMeshes || []).forEach(pm => App.scene.remove(pm));
       App.scene.remove(item.group);
       state.components = state.components.filter(c => c !== item);
+      // Wires anchored to this component's pins would keep pointing at the
+      // deleted record, so take them with it.
+      state.wires = state.wires.filter(w => {
+        if (w.startComp !== item && w.endComp !== item) return true;
+        App.scene.remove(w.group);
+        return false;
+      });
     } else if (kind === 'wire') {
       App.scene.remove(item.group);
       state.wires = state.wires.filter(w => w !== item);
@@ -525,6 +539,28 @@
   // ── Internal: load a parsed circuit data object onto the board ─
   App.loadCircuitData = function (data) {
     App.clearAll();
+    restoreBoard(data);
+
+    // Sync circuit name + ID
+    if (data.name) {
+      state.circuitName = data.name;
+      const nf = document.getElementById('circuit-name-field');
+      if (nf) nf.textContent = data.name;
+    }
+    if (data.id) state.circuitId = data.id;
+
+    App.setHint(`Loaded "${data.name || 'circuit'}" — ${data.components?.length ?? 0} components`, 3000);
+  };
+
+  // Replaying a board re-runs the place/wire helpers, which would each record
+  // an undo entry of their own. The caller records one entry for the replay.
+  function restoreBoard(data) {
+    _historyMuted = true;
+    try { rebuildBoard(data); } finally { _historyMuted = false; }
+  }
+
+  // Rebuild components and wires from serialized data onto a cleared board.
+  function rebuildBoard(data) {
     const bb = state.breadboard;
 
     // Rebuild components
@@ -584,17 +620,7 @@
       }
     }
     state.wireColor = savedColor;
-
-    // Sync circuit name + ID
-    if (data.name) {
-      state.circuitName = data.name;
-      const nf = document.getElementById('circuit-name-field');
-      if (nf) nf.textContent = data.name;
-    }
-    if (data.id) state.circuitId = data.id;
-
-    App.setHint(`Loaded "${data.name || 'circuit'}" — ${data.components?.length ?? 0} components`, 3000);
-  };
+  }
 
   App.loadCircuit = function () {
     const inp = document.createElement('input');
@@ -763,7 +789,8 @@
 
   // ── Clear All ─────────────────────────────────────────────────
 
-  App.clearAll = function () {
+  // Tear down every scene object, leaving the circuit's name and ID alone.
+  function clearBoard() {
     App.stopSimulation?.();
     App.deselect();
     App.cancelWire();
@@ -774,6 +801,11 @@
     state.wires.forEach(w => App.scene.remove(w.group));
     state.components = [];
     state.wires      = [];
+  }
+
+  App.clearAll = function () {
+    pushHistory();
+    clearBoard();
     // New blank circuit — get a fresh ID and name
     state.circuitId   = null;
     const newName = nextUntitledName();
@@ -781,6 +813,88 @@
     const nf = document.getElementById('circuit-name-field');
     if (nf) nf.textContent = newName;
     refreshCounts();
+  };
+
+  // ── Undo / Redo ───────────────────────────────────────────────
+  // Every board-changing command snapshots the board before it runs, and undo
+  // replays a snapshot rather than inverting the command. Replaying rebuilds
+  // the wire-to-component references from scratch, which inverting cannot do
+  // once a component record has been thrown away.
+
+  const HISTORY_LIMIT = 60;
+  const undoStack = [];
+  const redoStack = [];
+  let _historyMuted = false;
+
+  function serializeBoard() {
+    return {
+      components: state.components.map(c => ({
+        type:     c.type,
+        values:   c.values,
+        holeRefs: c.holeRefs,
+        position: c.group ? { x: +c.group.position.x.toFixed(3), z: +c.group.position.z.toFixed(3) } : null,
+      })),
+      wires: state.wires.map(w => ({
+        startHole:    w.startHole,
+        endHole:      w.endHole,
+        startCompIdx: w.startComp ? state.components.indexOf(w.startComp) : -1,
+        startPinIdx:  w.startPinIdx,
+        endCompIdx:   w.endComp   ? state.components.indexOf(w.endComp)   : -1,
+        endPinIdx:    w.endPinIdx,
+        color:        w.group?.children?.[0]?.material?.color?.getHex?.() ?? state.wireColor,
+      })),
+    };
+  }
+
+  function newCircuitId() {
+    return Date.now().toString(36) + Math.random().toString(36).slice(2);
+  }
+
+  function snapshot() {
+    // Mint the id now if the autosave has not yet. A snapshot carrying a null
+    // id would, once undone, make the next autosave file a second project row
+    // for the same circuit.
+    if (!state.circuitId) state.circuitId = newCircuitId();
+    const snap = serializeBoard();
+    snap.id   = state.circuitId;
+    snap.name = state.circuitName;
+    return snap;
+  }
+
+  function pushHistory() {
+    if (_historyMuted) return;
+    undoStack.push(snapshot());
+    if (undoStack.length > HISTORY_LIMIT) undoStack.shift();
+    redoStack.length = 0;
+  }
+
+  function clearHistory() {
+    undoStack.length = 0;
+    redoStack.length = 0;
+  }
+
+  function applySnapshot(snap) {
+    clearBoard();
+    restoreBoard(snap);
+    state.circuitId   = snap.id;
+    state.circuitName = snap.name;
+    const nf = document.getElementById('circuit-name-field');
+    if (nf) nf.textContent = snap.name;
+    refreshCounts();
+  }
+
+  App.undo = function () {
+    if (!undoStack.length) { App.setHint('Nothing to undo', 1500); return; }
+    redoStack.push(snapshot());
+    applySnapshot(undoStack.pop());
+    App.setHint('Undo · Ctrl+Shift+Z to redo', 1800);
+  };
+
+  App.redo = function () {
+    if (!redoStack.length) { App.setHint('Nothing to redo', 1500); return; }
+    undoStack.push(snapshot());
+    applySnapshot(redoStack.pop());
+    App.setHint('Redo', 1800);
   };
 
   // ── Helpers ───────────────────────────────────────────────────
@@ -797,7 +911,7 @@
     if (!state.components.length && !state.wires.length) return; // nothing to save
 
     if (!state.circuitId) {
-      state.circuitId = Date.now().toString(36) + Math.random().toString(36).slice(2);
+      state.circuitId = newCircuitId();
     }
 
     // Lightweight thumbnail for auto-save (smaller than download)
@@ -820,26 +934,14 @@
       App.controls.update();
     } catch {}
 
+    const board = serializeBoard();
     const entry = {
       id:         state.circuitId,
       name:       state.circuitName,
       thumbnail:  thumb,
       updatedAt:  new Date().toISOString(),
-      components: state.components.map((c, i) => ({
-        type:     c.type,
-        values:   c.values,
-        holeRefs: c.holeRefs,
-        position: c.group ? { x: +c.group.position.x.toFixed(3), z: +c.group.position.z.toFixed(3) } : null,
-      })),
-      wires: state.wires.map(w => ({
-        startHole:    w.startHole,
-        endHole:      w.endHole,
-        startCompIdx: w.startComp ? state.components.indexOf(w.startComp) : -1,
-        startPinIdx:  w.startPinIdx,
-        endCompIdx:   w.endComp   ? state.components.indexOf(w.endComp)   : -1,
-        endPinIdx:    w.endPinIdx,
-        color:        w.group?.children?.[0]?.material?.color?.getHex?.() ?? state.wireColor,
-      })),
+      components: board.components,
+      wires:      board.wires,
     };
 
     const projects = lsProjects();
@@ -879,6 +981,7 @@
       // Restore project ID so auto-save updates the same entry
       if (loaded.id) state.circuitId = loaded.id;
       App.loadCircuitData(loaded);
+      clearHistory();   // the opened circuit is the starting point, not an edit
     } catch (e) { console.warn('Auto-load failed', e); }
   } else {
     // New circuit — pick an auto-incremented untitled name

@@ -2,6 +2,8 @@
 
 A 3D circuit designer that runs right in your browser. Drop components onto a breadboard, wire them up, simulate the circuit, and ask the built-in AI tutor for help.
 
+**[Try it live at sparky-na2c.onrender.com](https://sparky-na2c.onrender.com/landing.html)**
+
 ![Sparky Circuit Designer](demo.png)
 
 ---
@@ -17,13 +19,13 @@ A 3D circuit designer that runs right in your browser. Drop components onto a br
 
 ## Quick start
 
-**Just the 3D designer (no AI):**
-
 Open `circuit3d/index.html` in your browser. That's it. No install, no server, no npm.
 
-**With the AI tutor:**
+The AI tutor needs the backend, because that is where the Gemini key lives. The browser never holds a key: the chat panel posts to same-origin `/api/ask` and the server calls Google.
 
-You need Node.js 18+ and a Google Gemini API key (free tier available).
+**Run the backend if you want the AI tutor.** The 3D designer, wiring and simulation all work without it.
+
+`backend/server.js` is a standalone Node 18+ server with zero npm dependencies. It serves the static files and exposes `/api/ask`, which is what the chat panel calls. It also carries optional Google OAuth routes and Cloudant storage, which the shipped frontend does not use: sign-in and cloud sharing go through Firebase Auth and Firestore.
 
 ```bash
 cd backend
@@ -34,15 +36,7 @@ echo "GEMINI_API_KEY=your_gemini_api_key_here" > .env
 node server.js
 ```
 
-Then open `http://localhost:5001` in your browser. The chat panel on the right connects to the backend automatically.
-
-**Getting a Gemini API key:**
-
-1. Go to [Google AI Studio](https://aistudio.google.com/apikey)
-2. Click "Create API key"
-3. Copy it into your `.env` file
-
-The free tier gives you plenty of requests per day for personal use.
+Then open `http://localhost:5001`.
 
 ## Controls
 
@@ -53,6 +47,8 @@ The free tier gives you plenty of requests per day for personal use.
 | `W` | Wire mode -- click two holes/pins to connect them |
 | `R` | Rotate component before placing |
 | `Esc` | Cancel whatever you're doing |
+| `Ctrl+Z` | Undo the last placement, wire, delete, Clear All, or file open |
+| `Ctrl+Shift+Z` | Redo |
 
 You can also just click components in the sidebar to start placing them.
 
@@ -72,15 +68,20 @@ Push buttons work during simulation too -- click them to toggle the circuit on a
 
 When you send a message, the app snapshots your entire board (components, positions, wires) as a markdown table and sends it to Gemini along with your question and your conversation history.
 
-Gemini uses **function calling** to interact with the board. Instead of generating raw JSON, it calls structured tools like `place_resistor(holeA="a3", holeB="a7")` and `add_wire(from="tp_3", to="a3", color="red")`. A server-side validation layer catches common mistakes (like forgetting to wire the battery to the rails) and auto-fixes them.
+Gemini uses **function calling** to interact with the board. Instead of generating raw JSON, it calls structured tools like `place_resistor(holeA="a3", holeB="a7")` and `add_wire(from="tp_3", to="a3", color="red")`. The returned tool calls are shown as a ghost preview first, and only get applied to the board when you accept them.
 
 So you can literally type "build me 3 LEDs" and watch it happen.
+
+Before returning the tool calls, the server checks the proposed circuit for problems it can describe: an unpowered battery, a backwards LED, an LED that is not between power and ground. It reports them alongside the reply rather than silently rewriting your circuit.
 
 ## Project structure
 
 ```
+landing.html          Marketing page + Firebase sign-in
+dashboard.html        Saved circuits, shared "sparks" (Firestore)
+
 circuit3d/
-  index.html          The app (+ inline chat JS)
+  index.html          The app (+ inline chat JS and Gemini calls)
   css/                 Styling
   js/
     scene.js           Three.js scene setup
@@ -103,26 +104,29 @@ Everything is vanilla JS. No build tools, no frameworks, no bundler. The 3D comp
 | --- | --- |
 | 3D | Three.js r128 from CDN |
 | Frontend | Plain HTML/CSS/JS |
-| AI backend | Node.js http module, zero dependencies |
-| AI model | Gemini 2.0 Flash (Google) |
-| AI features | Native function calling, conversation memory, circuit validation |
+| AI model | Gemini, called server-side. Defaults to `gemini-flash-latest`, set `GEMINI_MODEL` to pin one |
+| AI features | Native function calling, conversation memory, preview before apply |
+| Auth + cloud storage | Firebase Auth + Firestore |
+| Optional backend | Node.js http module, zero dependencies |
 
 ## .env reference
 
 | Variable | Required | Description |
 | --- | --- | --- |
 | `GEMINI_API_KEY` | Yes | Your Google Gemini API key ([get one here](https://aistudio.google.com/apikey)) |
+| `GEMINI_MODEL` | No | Gemini model id (default: `gemini-flash-latest`) |
+| `AI_PROVIDER` | No | `gemini`, `claude` for the local Claude Code CLI, or `fixture` to replay recorded responses with no key |
 | `PORT` | No | Server port (default: 5001) |
 | `GOOGLE_CLIENT_ID` | No | Google OAuth 2.0 client ID (for login, [setup guide below](#google-oauth-setup)) |
 | `GOOGLE_CLIENT_SECRET` | No | Google OAuth 2.0 client secret |
 | `CLOUDANT_URL` | No | IBM Cloudant URL (for cloud circuit storage) |
 | `CLOUDANT_APIKEY` | No | IBM Cloudant API key |
 
-Only `GEMINI_API_KEY` is needed to get started. The Google OAuth and Cloudant variables are for optional cloud login and storage features.
+`GEMINI_API_KEY` is required for the AI tutor unless you set `AI_PROVIDER` to `claude` or `fixture`, which need no key at all. The rest are optional: Google OAuth and Cloudant power the backend's own login and storage routes, while the shipped frontend uses Firebase Auth and Firestore for sign-in and cloud sharing.
 
 ## Google OAuth setup
 
-This is **optional** — only needed if you want the "Sign in with Google" feature for saving circuits to the cloud. It's completely free.
+This is **optional** and applies to the backend's own login route only. The shipped app signs in through Firebase, so you do not need any of this to use Sparky.
 
 1. Go to [Google Cloud Console](https://console.cloud.google.com/apis/credentials)
 2. Create a new project (or select an existing one)
