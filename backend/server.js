@@ -318,9 +318,14 @@ function findCircuitProblems(actions) {
   // holeA is the cathode (-), holeB is the anode (+).
   for (const led of actions.filter(a => a.tool === 'place_led')) {
     const cathode = nodeKey(led.holeA), anode = nodeKey(led.holeB);
-    if (pos.has(cathode) && neg.has(anode)) {
+    const forward  = pos.has(anode) && neg.has(cathode);
+    const reversed = pos.has(cathode) && neg.has(anode);
+    // Any other complete branch makes every node reachable from both terminals,
+    // so orientation is undecidable there. Prefer saying nothing over accusing a
+    // correctly wired LED of being backwards.
+    if (!forward && reversed) {
       problems.push(`The LED at ${led.holeA}/${led.holeB} is backwards: its cathode ${led.holeA} is on the power side and its anode ${led.holeB} is on the ground side. Swap holeA and holeB.`);
-    } else if (!(pos.has(anode) && neg.has(cathode))) {
+    } else if (!forward) {
       problems.push(`The LED at ${led.holeA}/${led.holeB} is not connected between power and ground, so it cannot light.`);
     }
   }
