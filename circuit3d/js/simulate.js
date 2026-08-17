@@ -47,18 +47,25 @@
     buzzer:   { resistance: 42,      thresholdCurrent: 0.001 },
   };
 
+  // A placed component carries its own values. PROPS is the default for parts
+  // built before instance values existed, and is what keeps this module
+  // loadable without a browser.
+  function propsOf(comp) {
+    return comp.values || PROPS[comp.type] || {};
+  }
+
   const STOCK_R = [100, 150, 220, 330, 470, 680, 1000, 1500, 2200, 3300, 4700, 10000];
 
   function stockResistor(minOhms) {
     return STOCK_R.find(r => r >= minOhms) || Math.ceil(minOhms / 1000) * 1000;
   }
 
-  function overCurrentLine(type, I, netV) {
-    const max = PROPS[type].maxCurrent;
+  function overCurrentLine(comp, I, netV) {
+    const max = propsOf(comp).maxCurrent;
     if (!max || I <= max) return null;
     const minR = Math.ceil(netV / max);
     return {
-      text: "  " + type.toUpperCase() + " is over its " + (max * 1000).toFixed(0) +
+      text: "  " + comp.type.toUpperCase() + " is over its " + (max * 1000).toFixed(0) +
             " mA rating at " + (I * 1000).toFixed(1) + " mA. Needs at least " + minR +
             " ohm in series, so use " + stockResistor(minR) + " ohm.",
       cls: "sim-err",
@@ -276,7 +283,7 @@
     bats.forEach((bat, bi) => {
       const posNode = bat.nodes[0];  // + terminal node
       const negNode = bat.nodes[1];  // − terminal node
-      const V       = PROPS.battery.voltage;
+      const V       = propsOf(bat.comp).voltage || 0;
 
       lines.push({ text: `Battery ${bi + 1}: ${V}V`, cls: 'sim-info' });
 
@@ -317,7 +324,7 @@
         let totalR  = 0;
         let totalVf = 0;
         path.forEach(step => {
-          const p = PROPS[step.comp.type] || {};
+          const p = propsOf(step.comp);
           totalR  += p.resistance     || 0;
           totalVf += p.forwardVoltage || 0;
         });
@@ -328,9 +335,9 @@
         if (totalR === 0) {
           branch.shorted = true;
           if (!shortCircuit) {
-            const part = path.find(step => PROPS[step.comp.type].maxCurrent);
+            const part = path.find(step => propsOf(step.comp).maxCurrent);
             if (part) {
-              const max  = PROPS[part.comp.type].maxCurrent;
+              const max  = propsOf(part.comp).maxCurrent;
               const minR = Math.ceil((V - totalVf) / max);
               lines.push({
                 text: "  Short circuit. The " + part.comp.type.toUpperCase() +
@@ -364,10 +371,10 @@
           if (type === 'led') {
             if (litLEDs.has(step.comp)) return;
             litLEDs.add(step.comp);
-            if (I >= PROPS.led.thresholdCurrent) {
+            if (I >= propsOf(step.comp).thresholdCurrent) {
               ledsOn.push(step.comp);
               lines.push({ text: `  💡 LED ON  (${I_mA.toFixed(1)} mA)`, cls: 'sim-on' });
-              const over = overCurrentLine("led", I, netV);
+              const over = overCurrentLine(step.comp, I, netV);
               if (over) lines.push(over);
             } else {
               lines.push({ text: '  LED: current too low.', cls: 'sim-warn' });
@@ -377,7 +384,7 @@
           if (type === 'buzzer') {
             if (litBuzzers.has(step.comp)) return;
             litBuzzers.add(step.comp);
-            if (I >= PROPS.buzzer.thresholdCurrent) {
+            if (I >= propsOf(step.comp).thresholdCurrent) {
               buzzersOn.push(step.comp);
               lines.push({ text: `  🔔 BUZZER ON  (${I_mA.toFixed(1)} mA)`, cls: 'sim-on' });
             } else {
@@ -620,6 +627,7 @@
   // ── Wiring ───────────────────────────────────────────────────
   function install(app) {
     App = app;
+    App.PROPS          = PROPS;
     App.runSimulation  = runSimulation;
     App.stopSimulation = stopSimulation;
   }
