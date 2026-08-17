@@ -1,5 +1,5 @@
 // ─────────────────────────────────────────────────────────────
-//  interaction.js — Mouse events, raycasting, ghost preview,
+//  interaction.js — Pointer events, raycasting, ghost preview,
 //                   rotation, hole-based wire placement
 //
 //  KEY BEHAVIOURS
@@ -72,6 +72,24 @@
       ghostType = ghostRot = null;
     }
 
+    // Holes under the current ray: the anchor hole and the far end of the
+    // component footprint. Hover and click both resolve through this, so a tap
+    // that never produced a hover still commits the hole it landed on.
+    function holesUnderRay(type) {
+      const bbBody = scene.getObjectByName('bb-body');
+      if (!bbBody) return null;
+      const hits = raycaster.intersectObject(bbBody, false);
+      if (!hits.length) return null;
+
+      const pt    = hits[0].point;
+      const holeA = state.breadboard.getNearestHole(pt.x, pt.z, null);
+      if (!holeA) return null;
+
+      const SPANS = { led: App.LED_SPAN, resistor: App.RESISTOR_SPAN, buzzer: App.BUZZER_SPAN, button: App.BUTTON_SPAN };
+      const span  = SPANS[type] || App.RESISTOR_SPAN;
+      return { holeA, holeB: state.breadboard.getSpanHole(holeA, span, state.placementRotation) };
+    }
+
     function positionGhost(holeA, holeB) {
       if (!ghostGroup || !holeA) { if (ghostGroup) ghostGroup.visible = false; return; }
       if (!holeB) { ghostGroup.visible = false; return; }
@@ -83,16 +101,27 @@
     }
 
     // ── Drag detection ──────────────────────────────────────
-    let mouseDownPos = null;
-    let wasDragged   = false;
+    // Pointer events, not mouse events: they cover mouse, touch and pen, and
+    // OrbitControls calls preventDefault() on pointerdown, which suppresses the
+    // compatibility mousedown entirely — so the old mousedown guard never ran
+    // and every orbit ended in a placement.
+    let downPos       = null;
+    let downPointerId = null;
+    let wasDragged    = false;
     const DRAG_THRESH = 8;  // px — must exceed this to be treated as orbit, not click
 
-    canvas.addEventListener('mousedown', e => {
-      mouseDownPos = { x: e.clientX, y: e.clientY };
-      wasDragged   = false;
+    canvas.addEventListener('pointerdown', e => {
+      if (!e.isPrimary || e.button !== 0) return;
+      downPointerId = e.pointerId;
+      downPos       = { x: e.clientX, y: e.clientY };
+      wasDragged    = false;
     });
-    // Note: we intentionally do NOT clear mouseDownPos on mouseup so the
-    // click handler can do a final distance check before acting.
+
+    canvas.addEventListener('pointercancel', e => {
+      if (e.pointerId !== downPointerId) return;
+      downPointerId = null;
+      downPos       = null;
+    });
 
     // ── Hover indicator spheres (show both pin snap positions) ─
     const hoverSphere = new THREE.Mesh(
@@ -113,11 +142,11 @@
     // Highlighted wire-start pin (stored so we can reset it)
     let wireStartPinMesh = null;
 
-    // ── mousemove ───────────────────────────────────────────
-    canvas.addEventListener('mousemove', e => {
-      if (mouseDownPos) {
-        const dx = e.clientX - mouseDownPos.x;
-        const dy = e.clientY - mouseDownPos.y;
+    // ── pointermove ─────────────────────────────────────────
+    canvas.addEventListener('pointermove', e => {
+      if (downPos && e.pointerId === downPointerId) {
+        const dx = e.clientX - downPos.x;
+        const dy = e.clientY - downPos.y;
         if (dx * dx + dy * dy > DRAG_THRESH * DRAG_THRESH) wasDragged = true;
       }
       handleHover(e);
@@ -150,12 +179,8 @@
           return;
         }
 
-        // Raycast against board body
-        const bbBody = scene.getObjectByName('bb-body');
-        if (!bbBody) return;
-        const hits = raycaster.intersectObject(bbBody, false);
-
-        if (!hits.length) {
+        const holes = holesUnderRay(type);
+        if (!holes) {
           hoverSphere.visible  = false;
           hoverSphereB.visible = false;
           holeLabel.style.display = 'none';
@@ -163,20 +188,8 @@
           return;
         }
 
-        const pt    = hits[0].point;
-        const holeA = state.breadboard.getNearestHole(pt.x, pt.z, null);
-
-        if (!holeA) {
-          hoverSphere.visible  = false;
-          hoverSphereB.visible = false;
-          holeLabel.style.display = 'none';
-          if (ghostGroup) ghostGroup.visible = false;
-          return;
-        }
-
-        const SPANS = { led: App.LED_SPAN, resistor: App.RESISTOR_SPAN, buzzer: App.BUZZER_SPAN, button: App.BUTTON_SPAN };
-        const span  = SPANS[type] || App.RESISTOR_SPAN;
-        const holeB = state.breadboard.getSpanHole(holeA, span, state.placementRotation);
+        const holeA = holes.holeA;
+        const holeB = holes.holeB;
 
         // Update hover spheres on holeA and holeB
         hoverSphere.position.set(holeA.x, 0.12, holeA.z);
@@ -199,10 +212,6 @@
         holeLabel.style.display = 'block';
         holeLabel.textContent   = `Col ${holeA.col + 1}  Row ${holeA.row.toUpperCase()}` +
           (holeB ? `  →  Col ${holeB.col + 1}  Row ${holeB.row.toUpperCase()}` : '  (no room)');
-
-        // Store for click
-        state._hoverHoleA = holeA;
-        state._hoverHoleB = holeB;
         return;
       }
 
@@ -278,15 +287,17 @@
       state.tempWire = line;
     }
 
-    // ── click ────────────────────────────────────────────────
-    canvas.addEventListener('click', e => {
-      // Final distance check — catches orbit gestures mousemove may have missed
-      if (mouseDownPos) {
-        const dx = e.clientX - mouseDownPos.x;
-        const dy = e.clientY - mouseDownPos.y;
+    // ── pointerup ────────────────────────────────────────────
+    canvas.addEventListener('pointerup', e => {
+      if (e.pointerId !== downPointerId) return;
+      // Final distance check — catches drags pointermove may have missed
+      if (downPos) {
+        const dx = e.clientX - downPos.x;
+        const dy = e.clientY - downPos.y;
         if (dx * dx + dy * dy > DRAG_THRESH * DRAG_THRESH) wasDragged = true;
       }
-      mouseDownPos = null;
+      downPointerId = null;
+      downPos       = null;
       if (wasDragged) return;
       updateRay(e);
       handleClick(e);
@@ -306,9 +317,10 @@
           return;
         }
 
-        const hA = state._hoverHoleA;
-        const hB = state._hoverHoleB;
-        if (!hA || !hB) return;
+        const holes = holesUnderRay(type);
+        if (!holes || !holes.holeB) return;
+        const hA = holes.holeA;
+        const hB = holes.holeB;
 
         if (type === 'resistor') App.placeResistor(hA, hB);
         if (type === 'led')      App.placeLED(hA, hB);
@@ -436,6 +448,20 @@
           break;
       }
     });
+
+    // ── Clear All guard ──────────────────────────────────────
+    // The button calls App.clearAll() from an inline onclick and there is no
+    // undo, so confirm here in the capture phase, before the event reaches it.
+    // App.clearAll itself stays silent: loading and AI actions call it too.
+    document.addEventListener('click', e => {
+      if (!e.target.closest?.('#clear-all-btn')) return;
+      const n = state.components.length + state.wires.length;
+      if (!n) return;
+      if (!confirm(`Delete all ${n} item${n === 1 ? '' : 's'} on the board? This cannot be undone.`)) {
+        e.preventDefault();
+        e.stopPropagation();
+      }
+    }, true);
 
     // Clean up ghost when mode changes
     const _origSetMode = App.setMode.bind(App);

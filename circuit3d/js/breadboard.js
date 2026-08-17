@@ -8,32 +8,83 @@
 
 (function (App) {
 
-  const COLS        = 50;
-  const HS          = 0.40;    // hole pitch  (world units)
-  const BOARD_THICK = 0.38;
-  const MARGIN_X    = 0.90;    // space left/right of first/last column
+  // ── Board geometry — the single source of truth ────────────────
+  //  Exported as App.BOARD_GEOMETRY so app.js and the board text handed to the
+  //  model read the same numbers. src/constants.ts is a second copy for Remotion:
+  //  the two runtimes share no module, so it has to be kept in step by hand.
+  const GEOMETRY = {
+    COLS:        50,
+    HS:          0.40,   // hole pitch  (world units)
+    BOARD_THICK: 0.38,
+    MARGIN_X:    0.90,   // space left/right of first/last column
+    BOARD_D:     7.9,
 
-  // World-Z of every row centre.
-  // Positive Z = near the viewer.  Negative Z = far side.
-  // tp/tn live on the far side; bn/bp on the near side.
-  const ROW_Z = {
-    tp: -3.35, tn: -2.95,                                      // top rails
-    a : -2.15, b : -1.75, c : -1.35, d : -0.95, e : -0.55,   // top body
-    // ── centre channel (no holes) ──
-    f :  0.55, g :  0.95, h :  1.35, i :  1.75, j :  2.15,   // bottom body
-    bn:  2.95, bp:  3.35,                                      // bottom rails
+    // World-Z of every row centre.
+    // Positive Z = near the viewer.  Negative Z = far side.
+    // tp/tn live on the far side; bn/bp on the near side.
+    ROW_Z: {
+      tp: -3.35, tn: -2.95,                                    // top rails
+      a : -2.15, b : -1.75, c : -1.35, d : -0.95, e : -0.55,   // top body
+      // ── centre channel (no holes) ──
+      f :  0.55, g :  0.95, h :  1.35, i :  1.75, j :  2.15,   // bottom body
+      bn:  2.95, bp:  3.35,                                    // bottom rails
+    },
+
+    // + − + −  (near-to-far):  tp=+  tn=−  bn=+  bp=−
+    RAIL_IS_POS: { tp: true, tn: false, bn: true, bp: false },
+
+    ALL_ROWS:  ['tp','tn','a','b','c','d','e','f','g','h','i','j','bn','bp'],
+    BODY_ROWS: ['a','b','c','d','e','f','g','h','i','j'],
+    RAIL_ROWS: ['tp','tn','bn','bp'],
+  };
+  GEOMETRY.BOARD_W     = (GEOMETRY.COLS - 1) * GEOMETRY.HS + 2 * GEOMETRY.MARGIN_X;
+  GEOMETRY.TOTAL_HOLES = GEOMETRY.COLS * GEOMETRY.ALL_ROWS.length;
+  App.BOARD_GEOMETRY   = GEOMETRY;
+
+  const { COLS, HS, BOARD_THICK, MARGIN_X, ROW_Z, RAIL_IS_POS,
+          ALL_ROWS, BODY_ROWS, RAIL_ROWS, BOARD_W, BOARD_D } = GEOMETRY;
+
+  // Board description handed to the model, generated from GEOMETRY.
+  App.boardTopologyText = function () {
+    const half = BODY_ROWS.length / 2;
+    const t0 = BODY_ROWS[0], t1 = BODY_ROWS[half - 1];
+    const b0 = BODY_ROWS[half], b1 = BODY_ROWS[BODY_ROWS.length - 1];
+    return `## Breadboard topology (always true)
+- Columns 1-${COLS}. Holes ${t0}1-${t1}1 share one node; ${b0}1-${b1}1 share another node (center channel divides them).
+- Same rule for every column: ${t0}-${t1} connected together, ${b0}-${b1} connected together.
+- To connect top half (${t0}-${t1}) to bottom half (${b0}-${b1}) of the SAME column, you MUST add a wire.
+- tp = positive top rail (+9V), tn = negative top rail (GND).
+- bn = positive bottom rail (+9V), bp = negative bottom rail (GND).
+- Rails are NOT connected to body rows — you must wire from rail to a body hole explicitly.
+- ${GEOMETRY.TOTAL_HOLES} holes total: ${COLS} columns × ${ALL_ROWS.length} rows.`;
   };
 
-  // + − + −  (near-to-far):  tp=+  tn=−  bn=+  bp=−
-  const RAIL_IS_POS = { tp: true, tn: false, bn: true, bp: false };
+  // ── Hole addresses ────────────────────────────────────────────
+  //  One format, used by the exporter and by the action parser: body holes
+  //  are "<row><col>" (e14), rails take an underscore ("tp_14") so the
+  //  two-letter row name stays readable.  Columns are 1-based in an address
+  //  and 0-based in holeData.
+  const HOLE_ADDRESS_RE = /^(tp|tn|bn|bp)_(\d+)$|^([a-j])(\d+)$/i;
 
-  const ALL_ROWS          = ['tp','tn','a','b','c','d','e','f','g','h','i','j','bn','bp'];
-  const BODY_ROWS         = ['a','b','c','d','e','f','g','h','i','j'];
-  const RAIL_ROWS         = ['tp','tn','bn','bp'];
-  const BODY_ROWS_ORDERED = ['a','b','c','d','e','f','g','h','i','j'];
+  function formatHole(ref) {
+    if (!ref || !ALL_ROWS.includes(ref.row) || !(ref.col >= 0 && ref.col < COLS)) {
+      throw new Error('formatHole: not a board hole: ' + JSON.stringify(ref));
+    }
+    return ref.row + (RAIL_ROWS.includes(ref.row) ? '_' : '') + (ref.col + 1);
+  }
 
-  const BOARD_W = (COLS - 1) * HS + 2 * MARGIN_X;   // ≈ 21.4
-  const BOARD_D = 7.9;
+  function parseHole(str) {
+    const m = HOLE_ADDRESS_RE.exec(String(str));
+    if (!m) throw new Error('parseHole: unrecognised hole address: ' + str);
+    const col = parseInt(m[2] || m[4], 10) - 1;
+    if (col < 0 || col >= COLS) {
+      throw new Error('parseHole: column out of range 1-' + COLS + ': ' + str);
+    }
+    return { col, row: (m[1] || m[3]).toLowerCase() };
+  }
+
+  App.formatHole = formatHole;   // { col, row } -> "e14" / "tp_14"
+  App.parseHole  = parseHole;    // "tp_14" -> { col, row }, throws if it cannot
 
   // ─────────────────────────────────────────────────────────────
   //  Canvas texture — all visual labelling lives here
@@ -321,9 +372,9 @@
       if (rotation === 0) {
         return getHole(startHole.col + span, startHole.row);
       }
-      const ri = BODY_ROWS_ORDERED.indexOf(startHole.row);
+      const ri = BODY_ROWS.indexOf(startHole.row);
       if (ri < 0) return null;
-      const newRow = BODY_ROWS_ORDERED[ri + span];
+      const newRow = BODY_ROWS[ri + span];
       return newRow ? getHole(startHole.col, newRow) : null;
     }
 
@@ -337,7 +388,7 @@
       COLS, HS, ROW_Z,
       BOARD_W, BOARD_D,
       BODY_ROWS, RAIL_ROWS,
-      BODY_ROWS_ORDERED,
+      BODY_ROWS,
     };
   }
 

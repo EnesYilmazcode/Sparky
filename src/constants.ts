@@ -53,18 +53,27 @@ export const SCENES = {
   closing:  { from: 429, duration: 171 },   // 14.3-20s
 } as const;
 
-// 3D board dimensions (matches circuit3d/js/breadboard.js)
+// 3D board dimensions.  Canonical definition: App.BOARD_GEOMETRY in
+// circuit3d/js/breadboard.js.  That file is a plain <script> with no build step
+// and this one is bundled by Remotion, so the two cannot share a module: these
+// numbers mirror it and must be changed together.
+const COLS = 50;
+const HS = 0.40;
+const MARGIN_X = 0.90;
+
+const ROW_Z: Record<string, number> = {
+  tp: -3.35, tn: -2.95,
+  a: -2.15, b: -1.75, c: -1.35, d: -0.95, e: -0.55,
+  f:  0.55, g:  0.95, h:  1.35, i:  1.75, j:  2.15,
+  bn: 2.95, bp: 3.35,
+};
+
 export const BOARD3D = {
-  COLS: 50,
-  HS: 0.40,
-  MARGIN_X: 0.90,
-  BOARD_W: 21.4,
+  COLS,
+  HS,
+  MARGIN_X,
+  BOARD_W: (COLS - 1) * HS + 2 * MARGIN_X,
   BOARD_D: 7.9,
   BOARD_THICK: 0.38,
-  ROW_Z: {
-    tp: -3.35, tn: -2.95,
-    a: -2.15, b: -1.75, c: -1.35, d: -0.95, e: -0.55,
-    f:  0.55, g:  0.95, h:  1.35, i:  1.75, j:  2.15,
-    bn: 2.95, bp: 3.35,
-  } as Record<string, number>,
+  ROW_Z,
 } as const;

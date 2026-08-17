@@ -149,12 +149,13 @@
   // Both placeResistor and placeLED now receive hole objects directly
   // (already resolved by interaction.js hover logic).
 
-  App.placeResistor = function (holeA, holeB) {
+  App.placeResistor = function (holeA, holeB, values) {
     pushHistory();
-    const { group, pins } = App.buildResistor(holeA, holeB);
+    const vals = App.componentValues('resistor', values);
+    const { group, pins } = App.buildResistor(holeA, holeB, vals.resistance);
     App.scene.add(group);
     const record = {
-      type: 'resistor', group, pins, pinMeshes: [],
+      type: 'resistor', group, pins, pinMeshes: [], values: vals,
       holeRefs: [{ col: holeA.col, row: holeA.row },
                  { col: holeB.col, row: holeB.row }],
     };
@@ -163,12 +164,13 @@
     refreshCounts();
   };
 
-  App.placeLED = function (holeA, holeB) {
+  App.placeLED = function (holeA, holeB, values) {
     pushHistory();
-    const { group, pins } = App.buildLED(holeA, holeB);
+    const vals = App.componentValues('led', values);
+    const { group, pins } = App.buildLED(holeA, holeB, vals.color);
     App.scene.add(group);
     const record = {
-      type: 'led', group, pins, pinMeshes: [],
+      type: 'led', group, pins, pinMeshes: [], values: vals,
       // pin 0 = cathode (−), pin 1 = anode (+)
       holeRefs: [{ col: holeA.col, row: holeA.row },   // cathode
                  { col: holeB.col, row: holeB.row }],   // anode
@@ -178,12 +180,13 @@
     refreshCounts();
   };
 
-  App.placeBuzzer = function (holeA, holeB) {
+  App.placeBuzzer = function (holeA, holeB, values) {
     pushHistory();
     const { group, pins } = App.buildBuzzer(holeA, holeB);
     App.scene.add(group);
     const record = {
       type: 'buzzer', group, pins, pinMeshes: [],
+      values: App.componentValues('buzzer', values),
       holeRefs: [{ col: holeA.col, row: holeA.row },
                  { col: holeB.col, row: holeB.row }],
     };
@@ -192,12 +195,13 @@
     refreshCounts();
   };
 
-  App.placeButton = function (holeA, holeB) {
+  App.placeButton = function (holeA, holeB, values) {
     pushHistory();
     const { group, pins, capMesh } = App.buildButton(holeA, holeB);
     App.scene.add(group);
     const record = {
       type: 'button', group, pins, pinMeshes: [],
+      values: App.componentValues('button', values),
       holeRefs: [{ col: holeA.col, row: holeA.row },
                  { col: holeB.col, row: holeB.row }],
       pressed: false,
@@ -265,7 +269,7 @@
 
   };
 
-  App.placeBattery = function (wx, wz) {
+  App.placeBattery = function (wx, wz, values) {
     pushHistory();
     const margin = state.breadboard.BOARD_W / 2 + 2.5;
     const placedX = wx >= 0 ? Math.max(wx, margin) : Math.min(wx, -margin);
@@ -273,6 +277,7 @@
     App.scene.add(group);
     const record = {
       type: 'battery', group, pins, pinMeshes: [],
+      values: App.componentValues('battery', values),
       holeRefs: null, // not on breadboard
     };
     addPinMarkers(record);
@@ -398,6 +403,11 @@
     App.deselect();
     state.selected = { item, kind };
 
+    if (kind === 'component') {
+      const label = App.formatValue(item);
+      App.setHint(label ? `${item.type} · ${label}` : item.type, 4000);
+    }
+
     const root = kind === 'component' ? item.group : item.group;
     if (!root) return;
     root.traverse(obj => {
@@ -495,6 +505,7 @@
       components: state.components.map((c, i) => ({
         type:     c.type,
         id:       c.type + '_' + i,
+        values:   c.values,
         holeRefs: c.holeRefs,          // null for battery
         position: c.group
           ? { x: +c.group.position.x.toFixed(3), z: +c.group.position.z.toFixed(3) }
@@ -558,21 +569,21 @@
       if (c.type === 'resistor' && c.holeRefs?.length === 2) {
         const hA = bb.getHole(c.holeRefs[0].col, c.holeRefs[0].row);
         const hB = bb.getHole(c.holeRefs[1].col, c.holeRefs[1].row);
-        if (hA && hB) App.placeResistor(hA, hB);
+        if (hA && hB) App.placeResistor(hA, hB, c.values);
       } else if (c.type === 'led' && c.holeRefs?.length === 2) {
         const hA = bb.getHole(c.holeRefs[0].col, c.holeRefs[0].row);
         const hB = bb.getHole(c.holeRefs[1].col, c.holeRefs[1].row);
-        if (hA && hB) App.placeLED(hA, hB);
+        if (hA && hB) App.placeLED(hA, hB, c.values);
       } else if (c.type === 'buzzer' && c.holeRefs?.length === 2) {
         const hA = bb.getHole(c.holeRefs[0].col, c.holeRefs[0].row);
         const hB = bb.getHole(c.holeRefs[1].col, c.holeRefs[1].row);
-        if (hA && hB) App.placeBuzzer(hA, hB);
+        if (hA && hB) App.placeBuzzer(hA, hB, c.values);
       } else if (c.type === 'button' && c.holeRefs?.length === 2) {
         const hA = bb.getHole(c.holeRefs[0].col, c.holeRefs[0].row);
         const hB = bb.getHole(c.holeRefs[1].col, c.holeRefs[1].row);
-        if (hA && hB) App.placeButton(hA, hB);
+        if (hA && hB) App.placeButton(hA, hB, c.values);
       } else if (c.type === 'battery' && c.position) {
-        App.placeBattery(c.position.x, c.position.z);
+        App.placeBattery(c.position.x, c.position.z, c.values);
       }
       rebuilt.push(state.components[state.components.length - 1]);
     }
@@ -664,7 +675,7 @@
   App.exportMarkdown = function () {
     function holeStr(ref) {
       if (!ref) return null;
-      return ref.row + (ref.col + 1);  // e.g. "e14"
+      return App.formatHole(ref);      // e.g. "e14", "tp_14"
     }
 
     const comps = state.components;
@@ -681,8 +692,8 @@
     if (!comps.length) {
       md += '_None._\n';
     } else {
-      md += '| id | type | pin_A | pin_B |\n';
-      md += '|----|------|-------|-------|\n';
+      md += '| id | type | value | pin_A | pin_B |\n';
+      md += '|----|------|-------|-------|-------|\n';
       comps.forEach((c, i) => {
         const id = `${c.type}_${i}`;
         let pA = '—', pB = '—';
@@ -695,7 +706,7 @@
           pA = `off-board + → wire ref: ${id}_pin0`;
           pB = `off-board − → wire ref: ${id}_pin1`;
         }
-        md += `| ${id} | ${c.type} | ${pA} | ${pB} |\n`;
+        md += `| ${id} | ${c.type} | ${App.formatValue(c) || '—'} | ${pA} | ${pB} |\n`;
       });
     }
 
@@ -728,16 +739,8 @@
       });
     }
 
-    // ── Topology ──
-    md += `
-## Breadboard topology (always true)
-- Columns 1–50. Holes a1–e1 share one node; f1–j1 share another node (center channel divides them).
-- Same rule for every column: a-e connected together, f-j connected together.
-- To connect top half (a-e) to bottom half (f-j) of the SAME column, you MUST add a wire.
-- tp = positive top rail (+9V), tn = negative top rail (GND).
-- bn = positive bottom rail (+9V), bp = negative bottom rail (GND).
-- Rails are NOT connected to body rows — you must wire from rail to a body hole explicitly.
-`;
+    // ── Topology ── (generated from App.BOARD_GEOMETRY, never typed by hand)
+    md += '\n' + App.boardTopologyText() + '\n';
     return md;
   };
 
@@ -746,7 +749,7 @@
   App.exportState = function () {
     function holeStr(ref) {
       if (!ref) return null;
-      return ref.row + (ref.col + 1);   // e.g. "e14"
+      return App.formatHole(ref);       // e.g. "e14", "tp_14"
     }
 
     const components = state.components.map((c, i) => {
@@ -759,8 +762,15 @@
           z: +c.group.position.z.toFixed(2),
         };
       }
-      if (c.type === 'led')      obj.color = 'red';
-      if (c.type === 'resistor') obj.value = '330Ω';
+      const v = c.values || App.componentValues(c.type);
+      if (c.type === 'led') {
+        obj.color = v.color;
+        obj.value = v.forwardVoltage + 'V';
+      } else if (c.type === 'resistor' || c.type === 'buzzer') {
+        obj.value = v.resistance + 'Ω';
+      } else if (c.type === 'battery') {
+        obj.value = v.voltage + 'V';
+      }
       return obj;
     });
 
@@ -820,6 +830,7 @@
     return {
       components: state.components.map(c => ({
         type:     c.type,
+        values:   c.values,
         holeRefs: c.holeRefs,
         position: c.group ? { x: +c.group.position.x.toFixed(3), z: +c.group.position.z.toFixed(3) } : null,
       })),
@@ -835,7 +846,15 @@
     };
   }
 
+  function newCircuitId() {
+    return Date.now().toString(36) + Math.random().toString(36).slice(2);
+  }
+
   function snapshot() {
+    // Mint the id now if the autosave has not yet. A snapshot carrying a null
+    // id would, once undone, make the next autosave file a second project row
+    // for the same circuit.
+    if (!state.circuitId) state.circuitId = newCircuitId();
     const snap = serializeBoard();
     snap.id   = state.circuitId;
     snap.name = state.circuitName;
@@ -892,7 +911,7 @@
     if (!state.components.length && !state.wires.length) return; // nothing to save
 
     if (!state.circuitId) {
-      state.circuitId = Date.now().toString(36) + Math.random().toString(36).slice(2);
+      state.circuitId = newCircuitId();
     }
 
     // Lightweight thumbnail for auto-save (smaller than download)

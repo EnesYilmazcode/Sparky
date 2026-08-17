@@ -104,7 +104,7 @@ Everything is vanilla JS. No build tools, no frameworks, no bundler. The 3D comp
 | --- | --- |
 | 3D | Three.js r128 from CDN |
 | Frontend | Plain HTML/CSS/JS |
-| AI model | Gemini 2.0 Flash (Google), called server-side |
+| AI model | Gemini, called server-side. Defaults to `gemini-flash-latest`, set `GEMINI_MODEL` to pin one |
 | AI features | Native function calling, conversation memory, preview before apply |
 | Auth + cloud storage | Firebase Auth + Firestore |
 | Optional backend | Node.js http module, zero dependencies |
@@ -114,13 +114,15 @@ Everything is vanilla JS. No build tools, no frameworks, no bundler. The 3D comp
 | Variable | Required | Description |
 | --- | --- | --- |
 | `GEMINI_API_KEY` | Yes | Your Google Gemini API key ([get one here](https://aistudio.google.com/apikey)) |
+| `GEMINI_MODEL` | No | Gemini model id (default: `gemini-flash-latest`) |
+| `AI_PROVIDER` | No | `gemini`, `claude` for the local Claude Code CLI, or `fixture` to replay recorded responses with no key |
 | `PORT` | No | Server port (default: 5001) |
 | `GOOGLE_CLIENT_ID` | No | Google OAuth 2.0 client ID (for login, [setup guide below](#google-oauth-setup)) |
 | `GOOGLE_CLIENT_SECRET` | No | Google OAuth 2.0 client secret |
 | `CLOUDANT_URL` | No | IBM Cloudant URL (for cloud circuit storage) |
 | `CLOUDANT_APIKEY` | No | IBM Cloudant API key |
 
-`GEMINI_API_KEY` is required for the AI tutor. The rest are optional: Google OAuth and Cloudant power the backend's own login and storage routes, while the shipped frontend uses Firebase Auth and Firestore for sign-in and cloud sharing.
+`GEMINI_API_KEY` is required for the AI tutor unless you set `AI_PROVIDER` to `claude` or `fixture`, which need no key at all. The rest are optional: Google OAuth and Cloudant power the backend's own login and storage routes, while the shipped frontend uses Firebase Auth and Firestore for sign-in and cloud sharing.
 
 ## Google OAuth setup
 
