@@ -471,6 +471,27 @@ function askRateLimited(req) {
   return hits.length > ASK_MAX_PER_WINDOW;
 }
 
+// The OAuth popup hands its result to the opener. Payload values come from the
+// callback query string, so they are carried in a JSON block and read with
+// textContent. Interpolating them into the script itself is a reflected XSS.
+// `<` is escaped because JSON.stringify would otherwise let a value close the
+// block early with a literal </script>.
+function oauthPopupPage(payload) {
+  const json = JSON.stringify(payload).replace(/</g, '\\u003c');
+  return '<!doctype html><html><body>'
+    + '<script type="application/json" id="oauth-result">' + json + '</' + 'script>'
+    + '<script>(function(){'
+    + 'var d=JSON.parse(document.getElementById("oauth-result").textContent);'
+    + 'if(window.opener)window.opener.postMessage(d,"*");'
+    + 'window.close();})();</' + 'script>'
+    + '</body></html>';
+}
+
+function sendOAuthPopup(res, payload) {
+  res.writeHead(200, { 'Content-Type': 'text/html' });
+  res.end(oauthPopupPage(payload));
+}
+
 const server = http.createServer(async (req, res) => {
   setCORS(res);
   if (req.method === 'OPTIONS') { res.writeHead(204); res.end(); return; }
@@ -521,9 +542,7 @@ const server = http.createServer(async (req, res) => {
       const error = urlObj.searchParams.get('error');
 
       if (error || !code) {
-        const html = `<html><body><script>window.opener.postMessage({error:"${error || 'No code received'}"},"*");window.close();</script></body></html>`;
-        res.writeHead(200, { 'Content-Type': 'text/html' });
-        res.end(html);
+        sendOAuthPopup(res, { error: error || 'No code received' });
         return;
       }
 
@@ -537,22 +556,16 @@ const server = http.createServer(async (req, res) => {
       if (!tokenRes.ok) {
         const err = await tokenRes.text();
         console.error('Token exchange failed:', err);
-        const html = `<html><body><script>window.opener.postMessage({error:"Login failed"},"*");window.close();</script></body></html>`;
-        res.writeHead(200, { 'Content-Type': 'text/html' });
-        res.end(html);
+        sendOAuthPopup(res, { error: 'Login failed' });
         return;
       }
 
       const tokens = await tokenRes.json();
       console.log('[auth] Google login successful');
-      const html = `<html><body><script>window.opener.postMessage({access_token:"${tokens.access_token}"},"*");window.close();</script></body></html>`;
-      res.writeHead(200, { 'Content-Type': 'text/html' });
-      res.end(html);
+      sendOAuthPopup(res, { access_token: tokens.access_token });
     } catch (e) {
       console.error('Callback error:', e.message);
-      const html = `<html><body><script>window.opener.postMessage({error:"${e.message}"},"*");window.close();</script></body></html>`;
-      res.writeHead(200, { 'Content-Type': 'text/html' });
-      res.end(html);
+      sendOAuthPopup(res, { error: 'Login failed' });
     }
     return;
   }
@@ -649,7 +662,12 @@ const server = http.createServer(async (req, res) => {
   };
 
   if (req.method === 'GET') {
-    let urlPath = decodeURIComponent(req.url.split('?')[0]);
+    let urlPath;
+    try {
+      urlPath = decodeURIComponent(req.url.split('?')[0]);
+    } catch {
+      return sendJSON(res, 400, { error: 'Bad request path' });
+    }
     if (urlPath === '/') urlPath = '/index.html';
     const filePath = path.join(STATIC_ROOT, urlPath);
     if (!filePath.startsWith(STATIC_ROOT)) return sendJSON(res, 403, { error: 'Forbidden' });
@@ -666,6 +684,20 @@ const server = http.createServer(async (req, res) => {
   }
 
   sendJSON(res, 404, { error: 'Not found' });
+});
+
+// Malformed HTTP from a client must not be fatal.
+server.on('clientError', (err, socket) => {
+  if (socket.writable) socket.end('HTTP/1.1 400 Bad Request\r\n\r\n');
+  else socket.destroy();
+});
+
+// Last resort: log and keep serving rather than exiting on a single bad request.
+process.on('uncaughtException', err => {
+  console.error('Uncaught exception:', err && err.stack ? err.stack : err);
+});
+process.on('unhandledRejection', err => {
+  console.error('Unhandled rejection:', err && err.stack ? err.stack : err);
 });
 
 server.listen(PORT, () => {
