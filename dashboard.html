@@ -862,9 +862,9 @@
 
       // Thumbnail preview
       const th = document.getElementById('publish-thumb');
-      th.innerHTML = c.thumbnail
-        ? `<img src="${c.thumbnail}">`
-        : '';
+      th.innerHTML = '';
+      const thumbImg = makeThumbImg(c.thumbnail);
+      if (thumbImg) th.appendChild(thumbImg);
 
       document.getElementById('publish-modal').style.display = 'flex';
       document.getElementById('publish-name').focus();
@@ -982,8 +982,9 @@
       const wireCount = (c.wires     ?? c.circuit?.wires    )?.length ?? 0;
       const saved = c.updatedAt ? new Date(c.updatedAt).toLocaleDateString() : '';
 
-      const thumbHtml = c.thumbnail
-        ? `<img src="${c.thumbnail}" style="width:100%;height:100%;object-fit:cover;display:block;">`
+      const thumbImg  = makeThumbImg(c.thumbnail, 'width:100%;height:100%;object-fit:cover;display:block;');
+      const thumbHtml = thumbImg
+        ? ''
         : `<div class="card-thumb-grid"><span class="card-thumb-emoji" style="color:var(--text-dim)"><svg width="36" height="25" viewBox="0 0 36 25" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"><rect x="1" y="4" width="34" height="17" rx="1.5"/><line x1="7" y1="4" x2="7" y2="21"/><line x1="13" y1="4" x2="13" y2="21"/><line x1="18" y1="4" x2="18" y2="21"/><line x1="23" y1="4" x2="23" y2="21"/><line x1="29" y1="4" x2="29" y2="21"/><line x1="4" y1="1.5" x2="4" y2="4"/><line x1="10" y1="1.5" x2="10" y2="4"/><line x1="15" y1="1.5" x2="15" y2="4"/><line x1="20" y1="1.5" x2="20" y2="4"/><line x1="26" y1="1.5" x2="26" y2="4"/><line x1="31" y1="1.5" x2="31" y2="4"/><line x1="4" y1="21" x2="4" y2="23.5"/><line x1="10" y1="21" x2="10" y2="23.5"/><line x1="15" y1="21" x2="15" y2="23.5"/><line x1="20" y1="21" x2="20" y2="23.5"/><line x1="26" y1="21" x2="26" y2="23.5"/><line x1="31" y1="21" x2="31" y2="23.5"/></svg></span></div>`;
 
       card.innerHTML = `
@@ -1005,6 +1006,8 @@
           </div>
         </div>
       `;
+
+      if (thumbImg) card.querySelector('.card-thumb').appendChild(thumbImg);
 
       card.addEventListener('click', e => {
         if (e.target.closest('.card-menu-wrap')) return;
@@ -1174,9 +1177,8 @@
         const isStarred = starred.has(spark.id);
         const starFill   = isStarred ? '#f59e0b' : 'none';
         const starStroke = isStarred ? '#f59e0b' : 'currentColor';
-        const thumbHtml = spark.thumbnail
-          ? `<img src="${spark.thumbnail}" style="width:100%;height:100%;object-fit:cover;display:block;">`
-          : `<span style="color:#555">${BOARD_SVG}</span>`;
+        const thumbImg  = makeThumbImg(spark.thumbnail, 'width:100%;height:100%;object-fit:cover;display:block;');
+        const thumbHtml = thumbImg ? '' : `<span style="color:#555">${BOARD_SVG}</span>`;
         const isOwn = myUid && spark.uid === myUid;
 
         const card = document.createElement('div');
@@ -1188,16 +1190,23 @@
               <div class="spark-card-title">${escHtml(spark.name || 'Untitled')}</div>
               <div class="spark-card-author">${spark.author ? escHtml(spark.author) : ''}${spark.sharedAt ? ' · ' + new Date(spark.sharedAt).toLocaleDateString() : ''}</div>
             </div>
-            <button class="star-btn ${isStarred ? 'starred' : ''}" onclick="toggleStar('${spark.id}', event)" title="${isStarred ? 'Unstar' : 'Star'}">
+            <button class="star-btn ${isStarred ? 'starred' : ''}" title="${isStarred ? 'Unstar' : 'Star'}">
               <svg width="15" height="15" viewBox="0 0 24 24" fill="${starFill}" stroke="${starStroke}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>
             </button>
           </div>
           ${spark.desc ? `<div class="spark-card-desc">${escHtml(spark.desc)}</div>` : ''}
           <div class="spark-card-footer">
-            <button class="btn btn-ghost" style="font-size:0.75rem;" onclick="forkSpark('${spark.id}')">Fork to My Circuits</button>
-            ${isOwn ? `<button class="btn btn-danger" style="font-size:0.75rem;" onclick="unshareFromSparks('${spark.id}')">Remove</button>` : ''}
+            <button class="btn btn-ghost spark-fork-btn" style="font-size:0.75rem;">Fork to My Circuits</button>
+            ${isOwn ? '<button class="btn btn-danger spark-remove-btn" style="font-size:0.75rem;">Remove</button>' : ''}
           </div>
         `;
+
+        if (thumbImg) card.querySelector('.spark-thumb').appendChild(thumbImg);
+        card.querySelector('.star-btn').addEventListener('click', e => toggleStar(spark.id, e));
+        card.querySelector('.spark-fork-btn').addEventListener('click', () => forkSpark(spark.id));
+        const removeBtn = card.querySelector('.spark-remove-btn');
+        if (removeBtn) removeBtn.addEventListener('click', () => unshareFromSparks(spark.id));
+
         grid.appendChild(card);
       });
     }
@@ -1232,6 +1241,17 @@
       t.classList.add('show');
       clearTimeout(_toastTimer);
       _toastTimer = setTimeout(() => t.classList.remove('show'), 2400);
+    }
+
+    // ── Safe thumbnail image ────────────────────────────────────────────
+    // Thumbnails can come from another user's spark, so build the node and set
+    // src as a property instead of interpolating it into markup.
+    function makeThumbImg(src, style) {
+      if (!src || !/^(data:image\/|https?:\/\/)/i.test(String(src))) return null;
+      const img = document.createElement('img');
+      img.src = src;
+      if (style) img.style.cssText = style;
+      return img;
     }
 
     // ── Escape HTML ────────────────────────────────────────────
