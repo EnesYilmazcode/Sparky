@@ -21,10 +21,23 @@
 //  If the circuit drives current the wrong way the LED stays off.
 //  Battery: pin 0 = positive (+) output, pin 1 = negative (−) return.
 //
-//  Exports: App.runSimulation(), App.stopSimulation()
+//  EXPORTS
+//  ───────
+//  Browser: window.App.runSimulation() / App.stopSimulation(), unchanged.
+//  Node:    module.exports = the pure solver (PROPS, buildGraph,
+//           findAllPaths, analyze) so a test runner can call it.
+//  Everything above the "Presentation" divider is pure: no document,
+//  no THREE, no AudioContext.
 // ─────────────────────────────────────────────────────────────
 
-(function (App) {
+(function (root, factory) {
+  const Sim = factory();
+  if (typeof module === 'object' && module.exports) module.exports = Sim;
+  if (root) Sim.install(root.App = root.App || {});
+})(typeof window !== 'undefined' ? window : null, function () {
+
+  // Browser App namespace, set by install(). Stays null under node.
+  let App = null;
 
   // ── Electrical properties ───────────────────────────────────
   const PROPS = {
@@ -33,53 +46,6 @@
     led:      { forwardVoltage: 2.0, thresholdCurrent: 0.001 },
     buzzer:   { resistance: 42,      thresholdCurrent: 0.001 },
   };
-
-  // ── Buzzer audio ─────────────────────────────────────────────
-  let _audioCtx = null;
-  const _buzzerNodes = new Map(); // comp → { osc, gain }
-
-  function _getAudioCtx() {
-    if (!_audioCtx) _audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-    return _audioCtx;
-  }
-
-  function activateBuzzer(comp) {
-    if (_buzzerNodes.has(comp)) return;
-    try {
-      const ctx  = _getAudioCtx();
-      const osc  = ctx.createOscillator();
-      const gain = ctx.createGain();
-      osc.type = 'square';
-      osc.frequency.value = 220;   // low, buzzy tone
-      gain.gain.value = 0.12;
-      osc.connect(gain);
-      gain.connect(ctx.destination);
-      osc.start();
-      _buzzerNodes.set(comp, { osc, gain });
-    } catch {}
-  }
-
-  function deactivateBuzzer(comp) {
-    const node = _buzzerNodes.get(comp);
-    if (!node) return;
-    try {
-      const ctx = _getAudioCtx();
-      node.gain.gain.setTargetAtTime(0, ctx.currentTime, 0.02);
-      setTimeout(() => { try { node.osc.stop(); } catch {} }, 80);
-    } catch {}
-    _buzzerNodes.delete(comp);
-  }
-
-  function stopAllBuzzers() {
-    _buzzerNodes.forEach((node) => {
-      try {
-        const ctx = _getAudioCtx();
-        node.gain.gain.setTargetAtTime(0, ctx.currentTime, 0.02);
-        setTimeout(() => { try { node.osc.stop(); } catch {} }, 80);
-      } catch {}
-    });
-    _buzzerNodes.clear();
-  }
 
   // ── Union-Find ──────────────────────────────────────────────
   class UnionFind {
@@ -211,6 +177,182 @@
     return allPaths;
   }
 
+  // ── Pure: analyze ────────────────────────────────────────────
+  //
+  //  components + wires in, numbers and report lines out. Returns:
+  //    status    'empty' | 'no-battery' | 'ok'
+  //    lines     [{ text, cls }] for the results panel
+  //    ledsOn    components the caller should light
+  //    buzzersOn components the caller should sound
+  //    branches  one record per enumerated path, with its current
+  //
+  function analyze(components, wires) {
+    const blank = { lines: [], ledsOn: [], buzzersOn: [], branches: [] };
+
+    if (!components.length) {
+      return Object.assign({}, blank, {
+        status: 'empty',
+        lines: [{ text: 'No components placed.', cls: 'sim-warn' }],
+      });
+    }
+
+    const graph     = buildGraph(components, wires);
+    const lines     = [];
+    const branches  = [];
+    const ledsOn    = [];
+    const buzzersOn = [];
+    const bats      = graph.filter(g => g.comp.type === 'battery');
+    const buttons   = components.filter(c => c.type === 'button');
+
+    buttons.forEach((btn, i) => {
+      const state = btn.pressed ? '🟢 CLOSED (current flowing)' : '⭕ OPEN — click to press';
+      lines.push({ text: `Button ${i + 1}: ${state}`, cls: btn.pressed ? 'sim-on' : 'sim-info' });
+    });
+
+    if (!bats.length) {
+      return Object.assign({}, blank, {
+        status: 'no-battery',
+        lines: [{ text: 'No battery in circuit.', cls: 'sim-warn' }],
+      });
+    }
+
+    bats.forEach((bat, bi) => {
+      const posNode = bat.nodes[0];  // + terminal node
+      const negNode = bat.nodes[1];  // − terminal node
+      const V       = PROPS.battery.voltage;
+
+      lines.push({ text: `Battery ${bi + 1}: ${V}V`, cls: 'sim-info' });
+
+      const paths = findAllPaths(graph, posNode, negNode, bat.comp);
+
+      if (!paths.length) {
+        lines.push({ text: '  Circuit open — no complete path.', cls: 'sim-warn' });
+        const hasBatConn = graph.some(g =>
+          g.comp !== bat.comp && g.nodes.some(n => n === posNode || n === negNode));
+        if (!hasBatConn) {
+          lines.push({ text: '  ⚠ Battery terminals not connected to anything.', cls: 'sim-warn' });
+        }
+        return;
+      }
+
+      // Each path is an independent parallel branch — evaluate separately.
+      const litLEDs     = new Set();
+      const litBuzzers  = new Set();
+      let   shortCircuit = false;
+
+      paths.forEach((path, pi) => {
+        let totalR  = 0;
+        let totalVf = 0;
+        path.forEach(step => {
+          const p = PROPS[step.comp.type] || {};
+          totalR  += p.resistance     || 0;
+          totalVf += p.forwardVoltage || 0;
+        });
+
+        const branch = { battery: bi, path, totalR, totalVf, current: 0, shorted: false };
+        branches.push(branch);
+
+        if (totalR === 0) {
+          branch.shorted = true;
+          if (!shortCircuit) {
+            lines.push({ text: '  ⚠ Short circuit — no resistance in path!', cls: 'sim-err' });
+            shortCircuit = true;
+          }
+          return;
+        }
+
+        const netV = V - totalVf;
+        if (netV <= 0) return; // not enough voltage for this branch
+
+        const I    = netV / totalR;
+        const I_mA = I * 1000;
+        branch.current = I;
+
+        path.forEach(step => {
+          const type = step.comp.type;
+
+          if (type === 'led') {
+            if (litLEDs.has(step.comp)) return;
+            litLEDs.add(step.comp);
+            if (I >= PROPS.led.thresholdCurrent) {
+              ledsOn.push(step.comp);
+              lines.push({ text: `  💡 LED ON  (${I_mA.toFixed(1)} mA)`, cls: 'sim-on' });
+            } else {
+              lines.push({ text: '  LED: current too low.', cls: 'sim-warn' });
+            }
+          }
+
+          if (type === 'buzzer') {
+            if (litBuzzers.has(step.comp)) return;
+            litBuzzers.add(step.comp);
+            if (I >= PROPS.buzzer.thresholdCurrent) {
+              buzzersOn.push(step.comp);
+              lines.push({ text: `  🔔 BUZZER ON  (${I_mA.toFixed(1)} mA)`, cls: 'sim-on' });
+            } else {
+              lines.push({ text: '  Buzzer: current too low.', cls: 'sim-warn' });
+            }
+          }
+        });
+      });
+
+      if (!shortCircuit && litLEDs.size === 0 && litBuzzers.size === 0 && paths.length > 0) {
+        lines.push({ text: '  No output components in circuit path.', cls: 'sim-info' });
+      }
+    });
+
+    return { status: 'ok', lines, ledsOn, buzzersOn, branches };
+  }
+
+  // ── Presentation ─────────────────────────────────────────────
+  //  DOM, THREE and audio live below this line.
+
+  // ── Buzzer audio ─────────────────────────────────────────────
+  let _audioCtx = null;
+  const _buzzerNodes = new Map(); // comp → { osc, gain }
+
+  function _getAudioCtx() {
+    if (!_audioCtx) _audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    return _audioCtx;
+  }
+
+  function activateBuzzer(comp) {
+    if (_buzzerNodes.has(comp)) return;
+    try {
+      const ctx  = _getAudioCtx();
+      const osc  = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.type = 'square';
+      osc.frequency.value = 220;   // low, buzzy tone
+      gain.gain.value = 0.12;
+      osc.connect(gain);
+      gain.connect(ctx.destination);
+      osc.start();
+      _buzzerNodes.set(comp, { osc, gain });
+    } catch {}
+  }
+
+  function deactivateBuzzer(comp) {
+    const node = _buzzerNodes.get(comp);
+    if (!node) return;
+    try {
+      const ctx = _getAudioCtx();
+      node.gain.gain.setTargetAtTime(0, ctx.currentTime, 0.02);
+      setTimeout(() => { try { node.osc.stop(); } catch {} }, 80);
+    } catch {}
+    _buzzerNodes.delete(comp);
+  }
+
+  function stopAllBuzzers() {
+    _buzzerNodes.forEach((node) => {
+      try {
+        const ctx = _getAudioCtx();
+        node.gain.gain.setTargetAtTime(0, ctx.currentTime, 0.02);
+        setTimeout(() => { try { node.osc.stop(); } catch {} }, 80);
+      } catch {}
+    });
+    _buzzerNodes.clear();
+  }
+
   // ── Visual: LED on/off ──────────────────────────────────────
   const activeLights = [];
 
@@ -324,8 +466,9 @@
     hideResults();
   }
 
-  // ── Public: runSimulation ───────────────────────────────────
-  App.runSimulation = function () {
+  // ── Public: runSimulation ────────────────────────────────────
+  //  Solve with analyze(), then render the result.
+  function runSimulation() {
     const { components, wires } = App.state;
     const isRerun = _btnClickHandler !== null; // already running = button click re-run
     clearSimVisuals(); // preserve button states across re-runs
@@ -333,116 +476,25 @@
     // Switch to select mode so user can click components during simulation
     if (!isRerun && App.setMode) App.setMode('select');
 
-    if (!components.length) {
-      showResults([{ text: 'No components placed.', cls: 'sim-warn' }]);
-      return;
+    const result = analyze(components, wires);
+    showResults(result.lines);
+    if (result.status === 'empty') return;
+
+    result.ledsOn.forEach(lightUpLED);
+    result.buzzersOn.forEach(activateBuzzer);
+
+    if (result.status === 'ok') {
+      App.simRunning = true;
+      document.getElementById('sim-run-btn').style.display  = 'none';
+      document.getElementById('sim-stop-btn').style.display = 'inline-flex';
     }
-
-    const graph   = buildGraph(components, wires);
-    const lines   = [];
-    const bats    = graph.filter(g => g.comp.type === 'battery');
-    const buttons = components.filter(c => c.type === 'button');
-    buttons.forEach((btn, i) => {
-      const state = btn.pressed ? '🟢 CLOSED (current flowing)' : '⭕ OPEN — click to press';
-      lines.push({ text: `Button ${i + 1}: ${state}`, cls: btn.pressed ? 'sim-on' : 'sim-info' });
-    });
-
-    if (!bats.length) {
-      showResults([{ text: 'No battery in circuit.', cls: 'sim-warn' }]);
-      if (!isRerun) installButtonClicks();
-      return;
-    }
-
-    bats.forEach((bat, bi) => {
-      const posNode = bat.nodes[0];  // + terminal node
-      const negNode = bat.nodes[1];  // − terminal node
-      const V       = PROPS.battery.voltage;
-
-      lines.push({ text: `Battery ${bi + 1}: ${V}V`, cls: 'sim-info' });
-
-      const paths = findAllPaths(graph, posNode, negNode, bat.comp);
-
-      if (!paths.length) {
-        lines.push({ text: '  Circuit open — no complete path.', cls: 'sim-warn' });
-        const hasBatConn = graph.some(g =>
-          g.comp !== bat.comp && g.nodes.some(n => n === posNode || n === negNode));
-        if (!hasBatConn) {
-          lines.push({ text: '  ⚠ Battery terminals not connected to anything.', cls: 'sim-warn' });
-        }
-        return;
-      }
-
-      // Each path is an independent parallel branch — evaluate separately.
-      const litLEDs     = new Set();
-      const litBuzzers  = new Set();
-      let   shortCircuit = false;
-
-      paths.forEach((path, pi) => {
-        let totalR  = 0;
-        let totalVf = 0;
-        path.forEach(step => {
-          const p = PROPS[step.comp.type] || {};
-          totalR  += p.resistance     || 0;
-          totalVf += p.forwardVoltage || 0;
-        });
-
-        if (totalR === 0) {
-          if (!shortCircuit) {
-            lines.push({ text: '  ⚠ Short circuit — no resistance in path!', cls: 'sim-err' });
-            shortCircuit = true;
-          }
-          return;
-        }
-
-        const netV = V - totalVf;
-        if (netV <= 0) return; // not enough voltage for this branch
-
-        const I    = netV / totalR;
-        const I_mA = I * 1000;
-
-        path.forEach(step => {
-          const type = step.comp.type;
-
-          if (type === 'led') {
-            if (litLEDs.has(step.comp)) return;
-            litLEDs.add(step.comp);
-            if (I >= PROPS.led.thresholdCurrent) {
-              lightUpLED(step.comp);
-              lines.push({ text: `  💡 LED ON  (${I_mA.toFixed(1)} mA)`, cls: 'sim-on' });
-            } else {
-              lines.push({ text: '  LED: current too low.', cls: 'sim-warn' });
-            }
-          }
-
-          if (type === 'buzzer') {
-            if (litBuzzers.has(step.comp)) return;
-            litBuzzers.add(step.comp);
-            if (I >= PROPS.buzzer.thresholdCurrent) {
-              activateBuzzer(step.comp);
-              lines.push({ text: `  🔔 BUZZER ON  (${I_mA.toFixed(1)} mA)`, cls: 'sim-on' });
-            } else {
-              lines.push({ text: '  Buzzer: current too low.', cls: 'sim-warn' });
-            }
-          }
-        });
-      });
-
-      if (!shortCircuit && litLEDs.size === 0 && litBuzzers.size === 0 && paths.length > 0) {
-        lines.push({ text: '  No output components in circuit path.', cls: 'sim-info' });
-      }
-    });
-
-    showResults(lines);
-    App.simRunning = true;
-    document.getElementById('sim-run-btn').style.display  = 'none';
-    document.getElementById('sim-stop-btn').style.display = 'inline-flex';
     // Only install the click handler on the first run — re-runs from
     // the button handler itself keep the same handler alive.
     if (!isRerun) installButtonClicks();
-  };
+  }
 
   // ── Public: stopSimulation ──────────────────────────────────
-  App.stopSimulation = function () {
+  function stopSimulation() {
     clearSimVisuals();
     // Reset all buttons directly — no toggleButton call to avoid re-entrancy
     App.state.components.forEach(c => {
@@ -464,6 +516,14 @@
     const stopBtn = document.getElementById('sim-stop-btn');
     if (runBtn)  runBtn.style.display  = 'inline-flex';
     if (stopBtn) stopBtn.style.display = 'none';
-  };
+  }
 
-})(window.App = window.App || {});
+  // ── Wiring ───────────────────────────────────────────────────
+  function install(app) {
+    App = app;
+    App.runSimulation  = runSimulation;
+    App.stopSimulation = stopSimulation;
+  }
+
+  return { PROPS, UnionFind, bbNodeId, buildGraph, findAllPaths, analyze, install };
+});
