@@ -39,10 +39,10 @@ const mA = i => i * 1000;
 function texts(result) { return result.lines.map(l => l.text); }
 function hasLine(result, substr) { return texts(result).some(t => t.includes(substr)); }
 
-// ── Series: 9V - 220R - LED ───────────────────────────────────
-// I = (9 - 2) / 220 = 31.818 mA
+// ── Series: 9V - 470R - LED ───────────────────────────────────
+// I = (9 - 2) / 470 = 14.894 mA
 
-test('series battery, resistor, LED: one branch at (9-2)/220', () => {
+test('series battery, resistor, LED: one branch at (9-2)/470', () => {
   const bat = battery();
   const res = comp('resistor', [h(5, 'a'), h(10, 'a')]);
   const led = comp('led',      [h(15, 'a'), h(10, 'a')]); // pin0 cathode, pin1 anode
@@ -52,13 +52,13 @@ test('series battery, resistor, LED: one branch at (9-2)/220', () => {
 
   assert.equal(r.status, 'ok');
   assert.equal(r.branches.length, 1);
-  assert.ok(Math.abs(mA(r.branches[0].current) - 31.818) < 0.01,
-    `expected 31.818 mA, got ${mA(r.branches[0].current)}`);
+  assert.ok(Math.abs(mA(r.branches[0].current) - 14.894) < 0.01,
+    `expected 14.894 mA, got ${mA(r.branches[0].current)}`);
   assert.equal(r.ledsOn.length, 1);
-  assert.ok(hasLine(r, 'LED ON  (31.8 mA)'), texts(r).join(' | '));
+  assert.ok(hasLine(r, 'LED ON  (14.9 mA)'), texts(r).join(' | '));
 });
 
-// ── Parallel: 9V - 220R - two LEDs sharing it ─────────────────
+// ── Parallel: 9V - 470R - two LEDs sharing it ─────────────────
 // Correct: 31.8 mA through the resistor, 15.9 mA per LED.
 // WRONG TODAY: each enumerated path is solved on its own, so both LEDs
 // report the full 31.8 mA and KCL is violated at the shared node.
@@ -79,8 +79,8 @@ test('parallel LEDs behind one resistor: WRONG TODAY, full current in both (#8)'
 
   assert.equal(r.branches.length, 2);
   r.branches.forEach(b => {
-    assert.ok(Math.abs(mA(b.current) - 31.818) < 0.01,
-      `expected the current 31.818 mA per branch, got ${mA(b.current)}`);
+    assert.ok(Math.abs(mA(b.current) - 14.894) < 0.01,
+      `expected the current 14.894 mA per branch, got ${mA(b.current)}`);
   });
   assert.equal(r.ledsOn.length, 2);
 });
@@ -90,13 +90,13 @@ test('parallel LEDs behind one resistor: KCL holds, 15.9 mA each (#8)', { skip: 
   const r = Sim.analyze(components, wires);
 
   const total = r.branches.reduce((s, b) => s + b.current, 0);
-  assert.ok(Math.abs(mA(total) - 31.818) < 0.01, 'branch currents must sum to the resistor current');
+  assert.ok(Math.abs(mA(total) - 14.894) < 0.01, 'branch currents must sum to the resistor current');
   r.branches.forEach(b => {
-    assert.ok(Math.abs(mA(b.current) - 15.909) < 0.01);
+    assert.ok(Math.abs(mA(b.current) - 7.447) < 0.01);
   });
 });
 
-// ── Voltage divider: 9V - 220R - node X - 220R - GND ──────────
+// ── Voltage divider: 9V - 470R - node X - 470R - GND ──────────
 // Correct: V(X) = 4.5 V. There is no node voltage anywhere in the
 // output today, only a loop current. See issue #9.
 
@@ -113,8 +113,8 @@ test('voltage divider: loop current is right, node voltage is absent (#9)', () =
   const r = Sim.analyze(components, wires);
 
   assert.equal(r.branches.length, 1);
-  assert.ok(Math.abs(mA(r.branches[0].current) - 20.454) < 0.01,
-    `expected 20.454 mA, got ${mA(r.branches[0].current)}`);
+  assert.ok(Math.abs(mA(r.branches[0].current) - 9.574) < 0.01,
+    `expected 9.574 mA, got ${mA(r.branches[0].current)}`);
   assert.equal(r.nodeVoltages, undefined, 'no node voltage is computed today');
 });
 
@@ -177,7 +177,7 @@ test('resistor and LED not wired to the battery leave the circuit open', () => {
 });
 
 // ── Two batteries in series ───────────────────────────────────
-// Correct for 18 V: (18 - 2) / 220 = 72.7 mA. WRONG TODAY: each
+// Correct for 18 V: (18 - 2) / 470 = 34.0 mA. WRONG TODAY: each
 // battery is solved alone and the other counts as a 0-ohm wire, so
 // the answer is the single-battery answer. See issue #11.
 
@@ -196,8 +196,8 @@ test('two 9V batteries in series: WRONG TODAY, same current as one (#11)', () =>
 
   assert.ok(r.branches.length > 0);
   r.branches.forEach(b => {
-    assert.ok(Math.abs(mA(b.current) - 31.818) < 0.01,
-      `expected the single-battery current 31.818 mA, got ${mA(b.current)}`);
+    assert.ok(Math.abs(mA(b.current) - 14.894) < 0.01,
+      `expected the single-battery current 14.894 mA, got ${mA(b.current)}`);
   });
 });
 
@@ -205,7 +205,7 @@ test('two 9V batteries in series: 18 V drives 72.7 mA (#11)', { skip: 'blocked o
   const { components, wires } = twoInSeries();
   const r = Sim.analyze(components, wires);
 
-  assert.ok(Math.abs(mA(r.branches[0].current) - 72.727) < 0.01);
+  assert.ok(Math.abs(mA(r.branches[0].current) - 34.043) < 0.01);
 });
 
 // ── Degenerate inputs ─────────────────────────────────────────

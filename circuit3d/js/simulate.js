@@ -42,10 +42,28 @@
   // ── Electrical properties ───────────────────────────────────
   const PROPS = {
     battery:  { voltage: 9.0 },
-    resistor: { resistance: 220 },    // 220 Ω default
-    led:      { forwardVoltage: 2.0, thresholdCurrent: 0.001 },
+    resistor: { resistance: 470 },    // about 15 mA on 9 V through an LED
+    led:      { forwardVoltage: 2.0, thresholdCurrent: 0.001, maxCurrent: 0.020 },
     buzzer:   { resistance: 42,      thresholdCurrent: 0.001 },
   };
+
+  const STOCK_R = [100, 150, 220, 330, 470, 680, 1000, 1500, 2200, 3300, 4700, 10000];
+
+  function stockResistor(minOhms) {
+    return STOCK_R.find(r => r >= minOhms) || Math.ceil(minOhms / 1000) * 1000;
+  }
+
+  function overCurrentLine(type, I, netV) {
+    const max = PROPS[type].maxCurrent;
+    if (!max || I <= max) return null;
+    const minR = Math.ceil(netV / max);
+    return {
+      text: "  " + type.toUpperCase() + " is over its " + (max * 1000).toFixed(0) +
+            " mA rating at " + (I * 1000).toFixed(1) + " mA. Needs at least " + minR +
+            " ohm in series, so use " + stockResistor(minR) + " ohm.",
+      cls: "sim-err",
+    };
+  }
 
   // app.js places LEDs pin 0 = cathode, pin 1 = anode.
   const LED_ANODE_PIN = 1;
@@ -310,7 +328,24 @@
         if (totalR === 0) {
           branch.shorted = true;
           if (!shortCircuit) {
-            lines.push({ text: '  ⚠ Short circuit — no resistance in path!', cls: 'sim-err' });
+            const part = path.find(step => PROPS[step.comp.type].maxCurrent);
+            if (part) {
+              const max  = PROPS[part.comp.type].maxCurrent;
+              const minR = Math.ceil((V - totalVf) / max);
+              lines.push({
+                text: "  Short circuit. The " + part.comp.type.toUpperCase() +
+                      " sits straight across the battery with no current-limiting resistor.",
+                cls: "sim-err",
+              });
+              lines.push({
+                text: "  A series resistor sets the current: (" + V + "V - " + totalVf + "V) / " +
+                      (max * 1000).toFixed(0) + " mA = " + minR + " ohm minimum, so use a " +
+                      stockResistor(minR) + " ohm.",
+                cls: "sim-info",
+              });
+            } else {
+              lines.push({ text: '  ⚠ Short circuit — no resistance in path!', cls: 'sim-err' });
+            }
             shortCircuit = true;
           }
           return;
@@ -332,6 +367,8 @@
             if (I >= PROPS.led.thresholdCurrent) {
               ledsOn.push(step.comp);
               lines.push({ text: `  💡 LED ON  (${I_mA.toFixed(1)} mA)`, cls: 'sim-on' });
+              const over = overCurrentLine("led", I, netV);
+              if (over) lines.push(over);
             } else {
               lines.push({ text: '  LED: current too low.', cls: 'sim-warn' });
             }
