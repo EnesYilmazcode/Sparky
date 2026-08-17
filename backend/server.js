@@ -35,7 +35,7 @@ function loadEnv() {
 loadEnv();
 
 const GEMINI_KEY   = process.env.GEMINI_API_KEY;
-const GEMINI_MODEL = 'gemini-2.0-flash';
+const GEMINI_MODEL = process.env.GEMINI_MODEL || 'gemini-flash-latest';
 const GEMINI_URL   = `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent`;
 const PORT         = process.env.PORT || 5001;
 
@@ -462,6 +462,42 @@ function sendJSON(res, status, obj) {
   res.end(JSON.stringify(obj));
 }
 
+// /api/ask spends the Gemini key, so cap it per IP or it is an open proxy.
+const ASK_WINDOW_MS = 60000;
+const ASK_MAX_PER_WINDOW = 20;
+const askHits = new Map();
+
+function askRateLimited(req) {
+  const ip = req.socket.remoteAddress || 'unknown';
+  const now = Date.now();
+  if (askHits.size > 5000) askHits.clear();
+  const hits = (askHits.get(ip) || []).filter(t => now - t < ASK_WINDOW_MS);
+  hits.push(now);
+  askHits.set(ip, hits);
+  return hits.length > ASK_MAX_PER_WINDOW;
+}
+
+// The OAuth popup hands its result to the opener. Payload values come from the
+// callback query string, so they are carried in a JSON block and read with
+// textContent. Interpolating them into the script itself is a reflected XSS.
+// `<` is escaped because JSON.stringify would otherwise let a value close the
+// block early with a literal </script>.
+function oauthPopupPage(payload) {
+  const json = JSON.stringify(payload).replace(/</g, '\\u003c');
+  return '<!doctype html><html><body>'
+    + '<script type="application/json" id="oauth-result">' + json + '</' + 'script>'
+    + '<script>(function(){'
+    + 'var d=JSON.parse(document.getElementById("oauth-result").textContent);'
+    + 'if(window.opener)window.opener.postMessage(d,"*");'
+    + 'window.close();})();</' + 'script>'
+    + '</body></html>';
+}
+
+function sendOAuthPopup(res, payload) {
+  res.writeHead(200, { 'Content-Type': 'text/html' });
+  res.end(oauthPopupPage(payload));
+}
+
 const server = http.createServer(async (req, res) => {
   setCORS(res);
   if (req.method === 'OPTIONS') { res.writeHead(204); res.end(); return; }
@@ -471,6 +507,9 @@ const server = http.createServer(async (req, res) => {
   }
 
   if (req.method === 'POST' && req.url === '/api/ask') {
+    if (askRateLimited(req)) {
+      return sendJSON(res, 429, { reply: 'Too many requests. Give Sparky a moment and try again.', actions: [] });
+    }
     let body = '';
     req.on('data', chunk => (body += chunk));
     req.on('end', async () => {
@@ -480,8 +519,9 @@ const server = http.createServer(async (req, res) => {
         console.log(`[ask] "${message.slice(0,60)}" → ${actions.length} action(s)`);
         return sendJSON(res, 200, { reply, actions });
       } catch (e) {
-        console.error('Error:', e.message);
-        return sendJSON(res, 200, { reply: `⚠️ ${e.message}`, actions: [] });
+        // Upstream body can contain key/quota detail, so it stays in the log.
+        console.error('[ask] failed:', e.message);
+        return sendJSON(res, 502, { reply: 'Sparky could not reach the AI service. Please try again in a moment.', actions: [] });
       }
     });
     return;
@@ -508,9 +548,7 @@ const server = http.createServer(async (req, res) => {
       const error = urlObj.searchParams.get('error');
 
       if (error || !code) {
-        const html = `<html><body><script>window.opener.postMessage({error:"${error || 'No code received'}"},"*");window.close();</script></body></html>`;
-        res.writeHead(200, { 'Content-Type': 'text/html' });
-        res.end(html);
+        sendOAuthPopup(res, { error: error || 'No code received' });
         return;
       }
 
@@ -524,22 +562,16 @@ const server = http.createServer(async (req, res) => {
       if (!tokenRes.ok) {
         const err = await tokenRes.text();
         console.error('Token exchange failed:', err);
-        const html = `<html><body><script>window.opener.postMessage({error:"Login failed"},"*");window.close();</script></body></html>`;
-        res.writeHead(200, { 'Content-Type': 'text/html' });
-        res.end(html);
+        sendOAuthPopup(res, { error: 'Login failed' });
         return;
       }
 
       const tokens = await tokenRes.json();
       console.log('[auth] Google login successful');
-      const html = `<html><body><script>window.opener.postMessage({access_token:"${tokens.access_token}"},"*");window.close();</script></body></html>`;
-      res.writeHead(200, { 'Content-Type': 'text/html' });
-      res.end(html);
+      sendOAuthPopup(res, { access_token: tokens.access_token });
     } catch (e) {
       console.error('Callback error:', e.message);
-      const html = `<html><body><script>window.opener.postMessage({error:"${e.message}"},"*");window.close();</script></body></html>`;
-      res.writeHead(200, { 'Content-Type': 'text/html' });
-      res.end(html);
+      sendOAuthPopup(res, { error: 'Login failed' });
     }
     return;
   }
@@ -636,7 +668,12 @@ const server = http.createServer(async (req, res) => {
   };
 
   if (req.method === 'GET') {
-    let urlPath = decodeURIComponent(req.url.split('?')[0]);
+    let urlPath;
+    try {
+      urlPath = decodeURIComponent(req.url.split('?')[0]);
+    } catch {
+      return sendJSON(res, 400, { error: 'Bad request path' });
+    }
     if (urlPath === '/') urlPath = '/index.html';
     const filePath = path.join(STATIC_ROOT, urlPath);
     if (!filePath.startsWith(STATIC_ROOT)) return sendJSON(res, 403, { error: 'Forbidden' });
@@ -653,6 +690,20 @@ const server = http.createServer(async (req, res) => {
   }
 
   sendJSON(res, 404, { error: 'Not found' });
+});
+
+// Malformed HTTP from a client must not be fatal.
+server.on('clientError', (err, socket) => {
+  if (socket.writable) socket.end('HTTP/1.1 400 Bad Request\r\n\r\n');
+  else socket.destroy();
+});
+
+// Last resort: log and keep serving rather than exiting on a single bad request.
+process.on('uncaughtException', err => {
+  console.error('Uncaught exception:', err && err.stack ? err.stack : err);
+});
+process.on('unhandledRejection', err => {
+  console.error('Unhandled rejection:', err && err.stack ? err.stack : err);
 });
 
 server.listen(PORT, () => {
