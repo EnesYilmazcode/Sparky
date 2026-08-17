@@ -592,3 +592,64 @@ canvas {
 ::-webkit-scrollbar { width: 5px; }
 ::-webkit-scrollbar-track { background: transparent; }
 ::-webkit-scrollbar-thumb { background: var(--border-dark); border-radius: 3px; }
+
+/* ── RESPONSIVE ─────────────────────────────── */
+
+/* Below this width the two side panels no longer fit beside the canvas and
+   squeeze it to nothing, so stack them under it instead. The canvas is the
+   product, so it takes whatever height the stacked panels do not need. */
+@media (max-width: 1024px) and (min-height: 600px) {
+  #body {
+    flex-direction: column;
+  }
+
+  #canvas-wrap {
+    order: -1;
+    flex: 1 1 auto;
+    min-height: 0;
+  }
+
+  #sidebar {
+    width: 100%;
+    flex-direction: row;
+    align-items: center;
+    gap: 6px;
+    padding: 8px;
+    border-right: none;
+    border-top: 1px solid var(--border);
+    overflow-x: auto;
+    overflow-y: hidden;
+  }
+
+  .comp-item {
+    width: auto;
+    flex-shrink: 0;
+  }
+
+  #wire-color-row {
+    flex-shrink: 0;
+  }
+
+  .color-swatches {
+    flex-wrap: nowrap;
+    padding: 0 6px;
+  }
+
+  /* Vertical-only furniture: it would eat the strip sideways */
+  .sidebar-section-label,
+  .sidebar-divider,
+  .sidebar-help {
+    display: none;
+  }
+}
+
+@media (max-width: 640px) {
+  #topbar {
+    padding: 0 10px;
+  }
+
+  /* Icon-only chips, so the strip stays one thumb tall */
+  .comp-item-text {
+    display: none;
+  }
+}
