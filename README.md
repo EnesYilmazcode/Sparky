@@ -4,7 +4,7 @@ A 3D circuit designer that runs right in your browser. Drop components onto a br
 
 **[Try it live at sparky-na2c.onrender.com](https://sparky-na2c.onrender.com/landing.html)**
 
-![Sparky Circuit Designer](demo.png)
+![Sparky Circuit Designer](https://raw.githubusercontent.com/EnesYilmazcode/Sparky/main/demo.png)
 
 ---
 
