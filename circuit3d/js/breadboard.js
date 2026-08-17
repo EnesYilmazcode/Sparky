@@ -62,6 +62,33 @@
 - ${GEOMETRY.TOTAL_HOLES} holes total: ${COLS} columns × ${ALL_ROWS.length} rows.`;
   };
 
+  // ── Hole addresses ────────────────────────────────────────────
+  //  One format, used by the exporter and by the action parser: body holes
+  //  are "<row><col>" (e14), rails take an underscore ("tp_14") so the
+  //  two-letter row name stays readable.  Columns are 1-based in an address
+  //  and 0-based in holeData.
+  const HOLE_ADDRESS_RE = /^(tp|tn|bn|bp)_(\d+)$|^([a-j])(\d+)$/i;
+
+  function formatHole(ref) {
+    if (!ref || !ALL_ROWS.includes(ref.row) || !(ref.col >= 0 && ref.col < COLS)) {
+      throw new Error('formatHole: not a board hole: ' + JSON.stringify(ref));
+    }
+    return ref.row + (RAIL_ROWS.includes(ref.row) ? '_' : '') + (ref.col + 1);
+  }
+
+  function parseHole(str) {
+    const m = HOLE_ADDRESS_RE.exec(String(str));
+    if (!m) throw new Error('parseHole: unrecognised hole address: ' + str);
+    const col = parseInt(m[2] || m[4], 10) - 1;
+    if (col < 0 || col >= COLS) {
+      throw new Error('parseHole: column out of range 1-' + COLS + ': ' + str);
+    }
+    return { col, row: (m[1] || m[3]).toLowerCase() };
+  }
+
+  App.formatHole = formatHole;   // { col, row } -> "e14" / "tp_14"
+  App.parseHole  = parseHole;    // "tp_14" -> { col, row }, throws if it cannot
+
   // ─────────────────────────────────────────────────────────────
   //  Canvas texture — all visual labelling lives here
   // ─────────────────────────────────────────────────────────────

@@ -3,7 +3,7 @@
     "rules": "firestore.rules"
   },
   "hosting": {
-    "site": "sparkylab",
+    "site": "buildwithsparky",
     "public": ".",
     "ignore": [
       "firebase.json",

@@ -250,3 +250,22 @@
 
 #sparky-input::placeholder { color: var(--text-sub); }
 
+
+/* ── RESPONSIVE ──────────────────────────────────────────── */
+
+/* Stacked under the canvas rather than beside it, and capped so the canvas
+   keeps the majority of the screen. */
+@media (max-width: 1024px) and (min-height: 600px) {
+  #sparky-panel {
+    width: 100%;
+    height: 30vh;
+    border-left: none;
+    border-top: 1px solid var(--border);
+  }
+}
+
+@media (max-width: 640px) {
+  #sparky-panel {
+    height: 26vh;
+  }
+}
