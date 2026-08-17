@@ -61,7 +61,9 @@
     }
     union(a, b) {
       const ra = this.find(a), rb = this.find(b);
-      if (ra !== rb) this._p[rb] = ra;
+      if (ra === rb) return;
+      // Smaller id always wins, so a root does not depend on wire order.
+      if (ra < rb) this._p[rb] = ra; else this._p[ra] = rb;
     }
   }
 
@@ -139,45 +141,79 @@
   //  endNode so that parallel branches (multiple LEDs) are each
   //  evaluated independently.  Cap at 30 paths for safety.
   //
+  // The walk is exponential, so it is bounded two ways: by completed paths and
+  // by steps taken. The step budget is what saves an open circuit, where no path
+  // is ever completed. It counts work rather than milliseconds so the same
+  // circuit always returns the same answer.
+  const MAX_PATHS = 30;
+  const MAX_STEPS = 200000;
+
+  // A cap only means something if the paths it keeps are always the same ones,
+  // so walk the components in an order derived from the circuit rather than
+  // from the order the user happened to place them.
+  function traversalOrder(graph) {
+    return graph
+      .map((entry, i) => ({ entry, i, key: entry.comp.type + nodeSig(entry) }))
+      .sort((a, b) => (a.key < b.key ? -1 : a.key > b.key ? 1 : a.i - b.i))
+      .map(o => o.entry);
+  }
+  function nodeSig(entry) { return entry.nodes.slice().sort().join("|"); }
+
   function findAllPaths(graph, startNode, endNode, skipComp) {
-    const allPaths = [];
-    const visited  = new Set([startNode]);
-    const path     = [];
+    const order = traversalOrder(graph);
+    const index = new Map(order.map((e, i) => [e.comp, i]));
+    const found = new Map();
+    let   steps     = 0;
+    let   truncated = false;
+    let   cutShort  = false;
 
-    function dfs(cur) {
-      if (allPaths.length >= 30) return; // safety cap
+    // Deepen one level at a time. Real circuits are short and traps are deep,
+    // so a working two-part branch is found before the budget goes on a mesh.
+    for (let limit = 1; limit <= order.length && !truncated && !cutShort; limit++) {
+      const visited = new Set([startNode]);
+      const path    = [];
 
-      if (cur === endNode) {
-        allPaths.push([...path]);
-        return; // record path and keep searching (don't stop here)
-      }
+      const dfs = (cur, depth) => {
+        if (found.size >= MAX_PATHS) { truncated = true; return; }
+        if (++steps > MAX_STEPS)     { cutShort  = true; return; }
 
-      for (const entry of graph) {
-        if (entry.comp === skipComp) continue;
-        // Open buttons break the circuit
-        if (entry.comp.type === 'button' && !entry.comp.pressed) continue;
-        const ns = entry.nodes;
+        if (cur === endNode) {
+          const sig = path.map(st => index.get(st.comp) + ":" + st.inPin).join(",");
+          if (!found.has(sig)) found.set(sig, path.slice());
+          return;
+        }
+        if (depth >= limit) return;
 
-        for (let inPin = 0; inPin < ns.length; inPin++) {
-          if (ns[inPin] !== cur) continue;
+        for (const entry of order) {
+          if (entry.comp === skipComp) continue;
+          if (entry.comp.type === "button" && !entry.comp.pressed) continue;
+          const ns = entry.nodes;
 
-          for (let outPin = 0; outPin < ns.length; outPin++) {
-            if (outPin === inPin) continue;
-            const next = ns[outPin];
-            if (visited.has(next)) continue;
+          for (let inPin = 0; inPin < ns.length; inPin++) {
+            if (ns[inPin] !== cur) continue;
 
-            visited.add(next);
-            path.push({ comp: entry.comp, inPin, outPin });
-            dfs(next);        // don't early-exit; backtrack and keep going
-            path.pop();
-            visited.delete(next);
+            for (let outPin = 0; outPin < ns.length; outPin++) {
+              if (outPin === inPin) continue;
+              const next = ns[outPin];
+              if (visited.has(next)) continue;
+
+              visited.add(next);
+              path.push({ comp: entry.comp, inPin, outPin });
+              dfs(next, depth + 1);
+              path.pop();
+              visited.delete(next);
+
+              // Stop expanding, but keep every path already found.
+              if (truncated || cutShort) return;
+            }
           }
         }
-      }
+      };
+
+      dfs(startNode, 0);
     }
 
-    dfs(startNode);
-    return allPaths;
+    return { paths: [...found.values()], truncated, cutShort };
   }
 
   // ── Pure: analyze ────────────────────────────────────────────
@@ -226,10 +262,19 @@
 
       lines.push({ text: `Battery ${bi + 1}: ${V}V`, cls: 'sim-info' });
 
-      const paths = findAllPaths(graph, posNode, negNode, bat.comp);
+      const walk  = findAllPaths(graph, posNode, negNode, bat.comp);
+      const paths = walk.paths;
+
+      if (walk.truncated) {
+        lines.push({ text: '  Only the first ' + MAX_PATHS + ' branches were checked. This circuit has more.', cls: 'sim-warn' });
+      } else if (walk.cutShort) {
+        lines.push({ text: '  This circuit has too many routes to check them all, so the result is partial.', cls: 'sim-warn' });
+      }
 
       if (!paths.length) {
-        lines.push({ text: '  Circuit open — no complete path.', cls: 'sim-warn' });
+        if (!walk.cutShort && !walk.truncated) {
+          lines.push({ text: '  Circuit open — no complete path.', cls: 'sim-warn' });
+        }
         const hasBatConn = graph.some(g =>
           g.comp !== bat.comp && g.nodes.some(n => n === posNode || n === negNode));
         if (!hasBatConn) {
