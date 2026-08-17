@@ -567,7 +567,8 @@ canvas {
 
 #sim-results {
   position: absolute;
-  top: 14px;
+  /* Clears the Clear All button above it (14px top + 26px tall) */
+  top: 50px;
   right: 14px;
   min-width: 220px;
   background: rgba(255, 255, 255, 0.97);
@@ -578,7 +579,7 @@ canvas {
   line-height: 1.7;
   box-shadow: 0 4px 20px rgba(0,0,0,0.13);
   display: none;
-  pointer-events: none;
+  pointer-events: auto;
 }
 
 .sim-line { padding: 1px 0; }

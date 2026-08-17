@@ -442,6 +442,20 @@
       }
     });
 
+    // ── Clear All guard ──────────────────────────────────────
+    // The button calls App.clearAll() from an inline onclick and there is no
+    // undo, so confirm here in the capture phase, before the event reaches it.
+    // App.clearAll itself stays silent: loading and AI actions call it too.
+    document.addEventListener('click', e => {
+      if (!e.target.closest?.('#clear-all-btn')) return;
+      const n = state.components.length + state.wires.length;
+      if (!n) return;
+      if (!confirm(`Delete all ${n} item${n === 1 ? '' : 's'} on the board? This cannot be undone.`)) {
+        e.preventDefault();
+        e.stopPropagation();
+      }
+    }, true);
+
     // Clean up ghost when mode changes
     const _origSetMode = App.setMode.bind(App);
     App.setMode = function (m) {
