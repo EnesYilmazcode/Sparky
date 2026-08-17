@@ -20,18 +20,16 @@
   const LEAD_MAT = () => new THREE.MeshLambertMaterial({ color: 0xc0c0c0 });
 
   // ─── Electrical values ───────────────────────────────────────
-  //  Single source of truth. A component instance copies these at
-  //  placement time (App.componentValues) and carries its own values
-  //  from then on; the simulator, the exporter and the renderer all
-  //  read the instance, never this table.
+  //  The defaults live in simulate.js, the one module that loads outside the
+  //  browser, so there is exactly one table. A component copies them at
+  //  placement time and carries its own values from then on.
 
-  const DEFAULT_VALUES = {
-    battery:  { voltage: 9.0 },
-    resistor: { resistance: 220 },
-    led:      { color: 'red', forwardVoltage: 2.0, thresholdCurrent: 0.001 },
-    buzzer:   { resistance: 42, thresholdCurrent: 0.001 },
-    button:   {},
-  };
+  function defaultValues(type) {
+    const base = (App.PROPS && App.PROPS[type]) || {};
+    return type === "led" ? Object.assign({ color: "red" }, base) : Object.assign({}, base);
+  }
+
+  function defaultResistance() { return defaultValues("resistor").resistance || 220; }
 
   // Dome colour and typical forward voltage for each LED colour.
   const LED_TYPES = {
@@ -48,7 +46,7 @@
   // Values for a new instance: defaults plus anything restored from
   // a saved circuit.
   function componentValues(type, overrides) {
-    const v = Object.assign({}, DEFAULT_VALUES[type] || {}, overrides || {});
+    const v = Object.assign(defaultValues(type), overrides || {});
     if (type === 'led' && !(overrides && overrides.forwardVoltage != null)) {
       v.forwardVoltage = ledType(v.color).forwardVoltage;
     }
@@ -191,7 +189,7 @@
     group.add(bodyMesh);
 
     // Colour bands — the real 4-band code for this resistor's value
-    const bands    = resistorBands(resistance ?? DEFAULT_VALUES.resistor.resistance);
+    const bands    = resistorBands(resistance ?? defaultResistance());
     const numBands = bands.length;
     const bSpace   = bodyLen / (numBands + 1);
     for (let i = 0; i < numBands; i++) {
@@ -655,7 +653,7 @@
       group.add(body);
 
       // bands
-      const bands = resistorBands(DEFAULT_VALUES.resistor.resistance);
+      const bands = resistorBands(defaultResistance());
       const bw = bodyLen * 0.1;
       const bs = bodyLen / 5;
       for (let i = 0; i < bands.length; i++) {

@@ -835,6 +835,7 @@
       updatedAt:  new Date().toISOString(),
       components: state.components.map((c, i) => ({
         type:     c.type,
+        values:   c.values,
         holeRefs: c.holeRefs,
         position: c.group ? { x: +c.group.position.x.toFixed(3), z: +c.group.position.z.toFixed(3) } : null,
       })),
