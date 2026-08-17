@@ -11,14 +11,89 @@
 //    Caller repositions it each frame.
 //
 //  Exports: App.buildResistor, App.buildLED,
-//           App.buildBattery, App.buildPreview
+//           App.buildBattery, App.buildPreview,
+//           App.componentValues, App.formatValue, App.ledHex
 // ─────────────────────────────────────────────────────────────
 
 (function (App) {
 
   const LEAD_MAT = () => new THREE.MeshLambertMaterial({ color: 0xc0c0c0 });
 
-  const BAND_COLORS = [0xf87171, 0xfb923c, 0xfbbf24, 0xa3e635, 0x834d14];
+  // ─── Electrical values ───────────────────────────────────────
+  //  The defaults live in simulate.js, the one module that loads outside the
+  //  browser, so there is exactly one table. A component copies them at
+  //  placement time and carries its own values from then on.
+
+  function defaultValues(type) {
+    const base = (App.PROPS && App.PROPS[type]) || {};
+    return type === "led" ? Object.assign({ color: "red" }, base) : Object.assign({}, base);
+  }
+
+  function defaultResistance() { return defaultValues("resistor").resistance || 220; }
+
+  // Dome colour and typical forward voltage for each LED colour.
+  const LED_TYPES = {
+    red:    { hex: 0xff2222, forwardVoltage: 2.0 },
+    yellow: { hex: 0xffd21f, forwardVoltage: 2.1 },
+    green:  { hex: 0x35d94a, forwardVoltage: 2.2 },
+    blue:   { hex: 0x3b82f6, forwardVoltage: 3.2 },
+    white:  { hex: 0xf5f5f5, forwardVoltage: 3.4 },
+  };
+
+  function ledType(color) { return LED_TYPES[color] || LED_TYPES.red; }
+  function ledHex(color)  { return ledType(color).hex; }
+
+  // Values for a new instance: defaults plus anything restored from
+  // a saved circuit.
+  function componentValues(type, overrides) {
+    const v = Object.assign(defaultValues(type), overrides || {});
+    if (type === 'led' && !(overrides && overrides.forwardVoltage != null)) {
+      v.forwardVoltage = ledType(v.color).forwardVoltage;
+    }
+    return v;
+  }
+
+  function formatOhms(r) {
+    if (!(r > 0)) return '0 Ω';
+    if (r >= 1e6) return +(r / 1e6).toFixed(2) + ' MΩ';
+    if (r >= 1e3) return +(r / 1e3).toFixed(2) + ' kΩ';
+    return r + ' Ω';
+  }
+
+  // Human-readable value of a placed component, e.g. "220 Ω".
+  function formatValue(comp) {
+    const v = comp.values || componentValues(comp.type);
+    if (comp.type === 'resistor' || comp.type === 'buzzer') return formatOhms(v.resistance);
+    if (comp.type === 'battery') return v.voltage + ' V';
+    if (comp.type === 'led') return (v.color || 'red') + ', ' + v.forwardVoltage.toFixed(1) + ' V forward';
+    return '';
+  }
+
+  // ─── Resistor colour code ────────────────────────────────────
+  // Bands are digit, digit, decimal multiplier, tolerance.
+
+  const DIGIT_COLORS = [
+    0x1a1a1a, 0x7b3f00, 0xd62828, 0xf77f00, 0xfcbf49,
+    0x2a9d3f, 0x1d4ed8, 0x7c3aed, 0x9ca3af, 0xf5f5f5,
+  ];
+  const GOLD = 0xd4af37, SILVER = 0xc0c0c0;
+
+  function multiplierColor(exp) {
+    if (exp === -1) return GOLD;
+    if (exp === -2) return SILVER;
+    return DIGIT_COLORS[exp] ?? DIGIT_COLORS[0];
+  }
+
+  // 220 Ω → red, red, brown, gold
+  function resistorBands(ohms) {
+    let sig = Number(ohms), exp = 0;
+    if (!(sig > 0)) return [DIGIT_COLORS[0], DIGIT_COLORS[0], DIGIT_COLORS[0], GOLD];
+    while (sig >= 100) { sig /= 10; exp++; }
+    while (sig < 10)   { sig *= 10; exp--; }
+    sig = Math.round(sig);
+    if (sig === 100) { sig = 10; exp++; }   // rounding carried, e.g. 99.6 Ω
+    return [DIGIT_COLORS[Math.floor(sig / 10)], DIGIT_COLORS[sig % 10], multiplierColor(exp), GOLD];
+  }
 
   // ─── Helpers ─────────────────────────────────────────────────
 
@@ -43,7 +118,7 @@
   //  The resistor arcs horizontally (or vertically) between them.
   //  Thinner body than before.
   // ─────────────────────────────────────────────────────────────
-  function buildResistor(holeA, holeB) {
+  function buildResistor(holeA, holeB, resistance) {
     const group = new THREE.Group();
     const ax = holeA.x, az = holeA.z;
     const bx = holeB.x, bz = holeB.z;
@@ -113,12 +188,13 @@
     bodyMesh.position.set(midX, LEAD_H, midZ);
     group.add(bodyMesh);
 
-    // Colour bands
-    const numBands = 4;
+    // Colour bands — the real 4-band code for this resistor's value
+    const bands    = resistorBands(resistance ?? defaultResistance());
+    const numBands = bands.length;
     const bSpace   = bodyLen / (numBands + 1);
     for (let i = 0; i < numBands; i++) {
       const bGeo = new THREE.CylinderGeometry(BODY_R + 0.004, BODY_R + 0.004, bodyLen * 0.1, 14);
-      const bMat = new THREE.MeshLambertMaterial({ color: BAND_COLORS[i % BAND_COLORS.length] });
+      const bMat = new THREE.MeshLambertMaterial({ color: bands[i] });
       const band = new THREE.Mesh(bGeo, bMat);
       if (isHoriz) {
         band.rotation.z = Math.PI / 2;
@@ -147,7 +223,7 @@
   //  holeA = cathode (−), holeB = anode (+)
   // ─────────────────────────────────────────────────────────────
   function buildLED(holeA, holeB, color) {
-    color = color || 0xff2222;
+    color = typeof color === 'string' ? ledHex(color) : (color || LED_TYPES.red.hex);
     const group = new THREE.Group();
 
     const ax = holeA.x, az = holeA.z;
@@ -577,10 +653,11 @@
       group.add(body);
 
       // bands
+      const bands = resistorBands(defaultResistance());
       const bw = bodyLen * 0.1;
       const bs = bodyLen / 5;
-      for (let i = 0; i < 4; i++) {
-        const b = cylinder(BODY_R + 0.004, bw, 12, ghostMat(BAND_COLORS[i], alpha));
+      for (let i = 0; i < bands.length; i++) {
+        const b = cylinder(BODY_R + 0.004, bw, 12, ghostMat(bands[i], alpha));
         b.rotation.z = Math.PI / 2;
         b.position.set(-bodyLen / 2 + bs * (i + 1), LEAD_H, 0);
         group.add(b);
@@ -620,7 +697,7 @@
 
       const dome = new THREE.Mesh(
         new THREE.SphereGeometry(COLLAR_R, 18, 9, 0, Math.PI * 2, 0, Math.PI * 0.55),
-        ghostMat(0xff2222, alpha * 0.85)
+        ghostMat(LED_TYPES.red.hex, alpha * 0.85)
       );
       dome.position.y = bodyY + 0.04;
       group.add(dome);
@@ -753,5 +830,9 @@
   App.buildBuzzer   = buildBuzzer;
   App.buildButton   = buildButton;
   App.buildPreview  = buildPreview;
+
+  App.componentValues = componentValues;
+  App.formatValue     = formatValue;
+  App.ledHex          = ledHex;
 
 })(window.App = window.App || {});
