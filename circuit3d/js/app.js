@@ -595,7 +595,7 @@
     }
     if (data.id) state.circuitId = data.id;
 
-    App.setHint(`Loaded "${data.name || 'circuit'}" — ${data.components?.length ?? 0} components`, 3000);
+    App.setHint(`Loaded "${data.name || 'circuit'}" · ${data.components?.length ?? 0} components`, 3000);
   };
 
   // Replaying a board re-runs the place/wire helpers, which would each record
@@ -770,7 +770,7 @@
 
     const isEmpty = !comps.length && !wires.length;
     let md = isEmpty
-      ? '**Board status: EMPTY — no components or wires placed yet.**\n\n'
+      ? '**Board status: EMPTY. No components or wires placed yet.**\n\n'
       : `**Board status: ${comps.length} component(s), ${wires.length} wire(s).**\n\n`;
 
     md += '## Components\n';

@@ -261,7 +261,7 @@
     const buttons   = components.filter(c => c.type === 'button');
 
     buttons.forEach((btn, i) => {
-      const state = btn.pressed ? '🟢 CLOSED (current flowing)' : '⭕ OPEN — click to press';
+      const state = btn.pressed ? 'CLOSED, current flowing' : 'OPEN, click it to press';
       lines.push({ text: `Button ${i + 1}: ${state}`, cls: btn.pressed ? 'sim-on' : 'sim-info' });
     });
 
@@ -292,7 +292,7 @@
     const iOf = comp => sol.currents[comp._simId] ?? 0;
 
     if (!sol.ok) {
-      lines.push({ text: '  ⚠ Circuit could not be solved — check for conflicting connections.',
+      lines.push({ text: '  Circuit could not be solved. Check for conflicting connections.',
                    cls: 'sim-err' });
       return { status: 'ok', lines, ledsOn, buzzersOn, branches, nodeVoltages };
     }
@@ -327,7 +327,7 @@
           cls: "sim-info",
         });
       } else {
-        lines.push({ text: '  ⚠ Short circuit — no resistance in path!', cls: 'sim-err' });
+        lines.push({ text: '  Short circuit: there is no resistance in the path.', cls: 'sim-err' });
       }
       branches.push({ battery: 0, path: [], totalR: 0, totalVf: 0, current: 0, shorted: true });
       return { status: 'ok', lines, ledsOn, buzzersOn, branches, nodeVoltages };
@@ -353,7 +353,7 @@
     // ── Open circuit ──────────────────────────────────────────
     if (supplyI < OPEN_CIRCUIT_A) {
       if (!backwards.length) {
-        lines.push({ text: '  Circuit open — no complete path.', cls: 'sim-warn' });
+        lines.push({ text: '  Circuit open: there is no complete path.', cls: 'sim-warn' });
       }
       const posNode = bats[0].nodes[0], negNode = bats[0].nodes[1];
       const hasBatConn = graph.some(g =>
@@ -414,7 +414,7 @@
         const I = Math.abs(iOf(comp));
         const R = propsOf(comp).resistance || 0;
         lines.push({
-          text: `  Resistor ${R} ohm — ${(I * 1000).toFixed(2)} mA, ${(I * I * R * 1000).toFixed(0)} mW`,
+          text: `  Resistor ${R} ohm: ${(I * 1000).toFixed(2)} mA, ${(I * I * R * 1000).toFixed(0)} mW`,
           cls: 'sim-info' });
       });
       if (rs.length) {

@@ -323,7 +323,7 @@
 
     // lit state: stronger emission, a warm pool of light, and a halo
     const glow = new THREE.Sprite(new THREE.SpriteMaterial({
-      map: glowTexture(), color: lin(hex), transparent: true, depthWrite: false,
+      map: glowTexture(), color: lin(hex), transparent: true, depthWrite: false, toneMapped: false,
       blending: THREE.AdditiveBlending, opacity: 0,
     }));
     glow.position.set(0, top + 0.1, 0);
@@ -334,10 +334,10 @@
     let light = null;
     group.userData.setLit = function (on, level) {
       const k = Math.max(0.35, Math.min(1.4, level == null ? 1 : level));
-      epoxy.emissiveIntensity = on ? 1.1 * k : 0.05;
+      epoxy.emissiveIntensity = on ? 0.85 * k : 0.05;
       epoxy.opacity = on ? 0.95 : 0.78;
       glow.visible = on;
-      glow.material.opacity = on ? 0.6 * k : 0;
+      glow.material.opacity = on ? 0.42 * k : 0;
       if (on && !light) {
         light = new THREE.PointLight(lin(hex), 1.2 * k, 5, 2);
         light.position.set(0, top, 0);
