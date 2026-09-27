@@ -937,22 +937,29 @@
     };
     const googleBtn = document.getElementById('google-btn');
     const authError = document.getElementById('auth-error');
-    firebase.initializeApp(firebaseConfig);
-    const auth = firebase.auth();
 
-    googleBtn.addEventListener('click', () => {
-      authError.textContent = '';
-      googleBtn.disabled = true;
-      auth.signInWithPopup(new firebase.auth.GoogleAuthProvider())
-        .then(() => { window.location.href = 'dashboard.html'; })
-        .catch(err => { authError.textContent = err.message; })
-        .finally(() => { googleBtn.disabled = false; });
-    });
+    if (!window.firebase) {
+      googleBtn.addEventListener('click', () => {
+        authError.textContent = 'Sign-in is unavailable right now. You can still use the editor without an account.';
+      });
+    } else {
+      firebase.initializeApp(firebaseConfig);
+      const auth = firebase.auth();
 
-    auth.onAuthStateChanged(user => {
-      signedIn = !!user;
-      document.getElementById('nav-cta').textContent = user ? 'Dashboard' : 'Sign in';
-    });
+      googleBtn.addEventListener('click', () => {
+        authError.textContent = '';
+        googleBtn.disabled = true;
+        auth.signInWithPopup(new firebase.auth.GoogleAuthProvider())
+          .then(() => { window.location.href = 'dashboard.html'; })
+          .catch(err => { authError.textContent = err.message; })
+          .finally(() => { googleBtn.disabled = false; });
+      });
+
+      auth.onAuthStateChanged(user => {
+        signedIn = !!user;
+        document.getElementById('nav-cta').textContent = user ? 'Dashboard' : 'Sign in';
+      });
+    }
   </script>
 </body>
 </html>
