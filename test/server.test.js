@@ -132,6 +132,38 @@ test('the rate limit counts each client by its first X-Forwarded-For address', a
   });
 });
 
+test('CORS is never a wildcard: only the app hosts and localhost get a grant', async () => {
+  await withServer({ generate: stubModel, model: 'stub' }, async base => {
+    const allow = async (origin, method = 'POST') => {
+      const res = method === 'OPTIONS'
+        ? await fetch(base + '/api/ask', { method, headers: { Origin: origin, 'Access-Control-Request-Method': 'POST' } })
+        : await post(base, { message: 'hi' }, { Origin: origin });
+      assert.equal(res.headers.get('vary'), 'Origin');
+      return res.headers.get('access-control-allow-origin');
+    };
+    assert.equal(await allow('https://evil.example'), null);
+    assert.equal(await allow('https://evil.example', 'OPTIONS'), null);
+    assert.equal(await allow('https://sparky-na2c.onrender.com'), 'https://sparky-na2c.onrender.com');
+    assert.equal(await allow('https://buildwithsparky.web.app', 'OPTIONS'), 'https://buildwithsparky.web.app');
+    assert.equal(await allow('http://localhost:5173'), 'http://localhost:5173');
+    assert.equal(await allow('http://localhost.evil.example'), null);
+    const plain = await post(base, { message: 'hi' });                 // same origin sends no Origin
+    assert.equal(plain.headers.get('access-control-allow-origin'), null);
+    assert.equal(plain.status, 200);
+  });
+});
+
+test('/api/ask only takes JSON, so a cross-site form post cannot skip the preflight', async () => {
+  let asked = 0;
+  const counting = async contents => { asked++; return stubModel(contents); };
+  await withServer({ generate: counting, model: 'stub' }, async base => {
+    const res = await fetch(base + '/api/ask', { method: 'POST', headers: { 'Content-Type': 'text/plain' }, body: JSON.stringify({ message: 'hi' }) });
+    assert.equal(res.status, 415);
+    assert.equal(asked, 0);
+    assert.equal((await post(base, { message: 'hi' }, { 'Content-Type': 'application/json; charset=utf-8' })).status, 200);
+  });
+});
+
 test('the static site is still served, and the removed auth and storage routes are gone', async () => {
   await withServer({ generate: stubModel, model: 'stub' }, async base => {
     const page = await fetch(base + '/circuit3d/index.html');

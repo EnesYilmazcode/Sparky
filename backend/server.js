@@ -179,14 +179,27 @@ const ASK_BUDGET_MS = 90000;
 // request from filling memory before it is even parsed.
 const MAX_BODY_BYTES = 200 * 1024;
 
-function setCORS(res) {
-  res.setHeader('Access-Control-Allow-Origin',  '*');
-  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
+// The app calls /api/ask from its own origin, which needs no CORS at all.
+// Beyond that only the app's other hosts and local development get a grant,
+// never a wildcard.
+const ALLOWED_ORIGINS = new Set([
+  'https://sparky-na2c.onrender.com',
+  'https://buildwithsparky.web.app',
+  'https://sparkylab.web.app',
+]);
+const LOCAL_ORIGIN = /^http:\/\/(localhost|127\.0\.0\.1|\[::1\])(:\d+)?$/;
+
+function setCORS(req, res) {
+  res.setHeader('Vary', 'Origin');
+  const origin = req.headers.origin;
+  if (!origin || !(ALLOWED_ORIGINS.has(origin) || LOCAL_ORIGIN.test(origin))) return;
+  res.setHeader('Access-Control-Allow-Origin', origin);
+  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+  res.setHeader('Access-Control-Max-Age', '600');
 }
 
 function sendJSON(res, status, obj) {
-  setCORS(res);
   res.writeHead(status, { 'Content-Type': 'application/json' });
   res.end(JSON.stringify(obj));
 }
@@ -289,6 +302,11 @@ function createServer({ generate = null, model = '', rateLimit } = {}) {
     if (askRateLimited(req)) {
       return sendJSON(res, 429, askReply('Too many requests. Give Sparky a moment and try again.'));
     }
+    // A text/plain POST skips the CORS preflight, so any site could make a
+    // visitor's browser spend the key. JSON forces the preflight.
+    if (!/^application\/json\b/i.test(req.headers['content-type'] || '')) {
+      return sendJSON(res, 415, askReply('Send the request as JSON.'));
+    }
     let raw;
     try {
       raw = await readBody(req, MAX_BODY_BYTES);
@@ -334,9 +352,9 @@ function createServer({ generate = null, model = '', rateLimit } = {}) {
   }
 
   const server = http.createServer((req, res) => {
-    setCORS(res);
-    if (req.method === 'OPTIONS') { res.writeHead(204); res.end(); return; }
     const url = req.url.split('?')[0];
+    if (url.startsWith('/api/')) setCORS(req, res);
+    if (req.method === 'OPTIONS') { res.writeHead(204); res.end(); return; }
 
     if (req.method === 'GET' && url === '/api/health') {
       return sendJSON(res, 200, { status: 'ok', model });
