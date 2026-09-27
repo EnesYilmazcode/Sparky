@@ -214,6 +214,7 @@ test('a backwards build goes back to the model, and the fixed one is returned', 
   assert.deepEqual(out.notes, []);
   // The second build came without text, and the first build's claim is not repeated.
   assert.equal(out.reply, 'I built it from scratch with a 9V battery, a 470 ohm resistor, a red LED and 4 wires. ' +
+                          'My first try failed the simulator check (the red LED stays dark because it is in backwards). ' +
                           'Checked in the simulator: the red LED lights at 14.9 mA.');
 
   // The repair: the model's own turn sent back untouched, then one
@@ -267,6 +268,15 @@ test('a button circuit passes on the first try, and the reply keeps the model te
   assert.equal(out.verification.leds[0].needsPress, true);
   assert.match(out.verification.summary, /lights at 14\.9 mA when you press the button/);
   assert.equal(out.reply, 'Press the button to light the LED.');
+});
+
+test('a reply written from the build names the parts', async () => {
+  const lights = POWER.concat(led(3, { color: 'red' }), led(11, { color: 'yellow' }), led(19, { color: 'green' }));
+  lights[5] = Object.assign({}, lights[5], { resistance: 820 });
+  const out = await answer({ generate: stub(modelTurn(lights)), message: 'Build a traffic light', board: EMPTY_EXPORT });
+  assert.match(out.reply, /^I built it from scratch with a 9V battery, 3 resistors, 3 LEDs \(red, yellow and green\) and 8 wires\. /);
+  const one = await answer({ generate: stub(modelTurn(POWER.concat(led(3)).map(a => (a.tool === 'place_resistor' ? Object.assign({}, a, { resistance: 820 }) : a)))), message: 'Build it', board: EMPTY_EXPORT });
+  assert.match(one.reply, /an 820 ohm resistor/);
 });
 
 test('a pure question gets words only, and no verification', async () => {

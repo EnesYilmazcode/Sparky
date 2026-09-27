@@ -380,7 +380,7 @@ function firstTurn(message, board, markdown) {
     lines.push(describeBoard(board));
     if (board.components.length) {
       const v = verifyBoard(board, []);
-      lines.push('', 'SIMULATOR CHECK OF THE CURRENT BOARD: ' + v.summary.replace(/^Checked in the simulator: /, ''));
+      lines.push('', `SIMULATOR CHECK OF THE CURRENT BOARD: ${plain(v)}.`);
       v.problems.forEach(p => lines.push('- ' + p));
     }
   } else {
@@ -469,7 +469,13 @@ const an = n => /^8/.test(n) || /^1[18](000)*$/.test(n);
 
 const ONE  = { battery: () => 'a 9V battery', led: a => `a ${a.color} LED`, button: () => 'a push button',
                buzzer: () => 'a buzzer', resistor: a => `${an(String(a.resistance)) ? 'an' : 'a'} ${a.resistance} ohm resistor` };
-const MANY = { battery: 'batteries', resistor: 'resistors', led: 'LEDs', button: 'push buttons', buzzer: 'buzzers' };
+const MANY = {
+  battery: n => `${n} batteries`, resistor: n => `${n} resistors`, button: n => `${n} push buttons`, buzzer: n => `${n} buzzers`,
+  led: (n, list) => {
+    const colors = [...new Set(list.map(a => a.color))];
+    return colors.length === 1 ? `${n} ${colors[0]} LEDs` : `${n} LEDs (${joinAnd(colors)})`;
+  },
+};
 
 // One sentence on what a build did, for when the model wrote none.
 function describeBuild(actions) {
@@ -483,7 +489,7 @@ function describeBuild(actions) {
     else if (a.tool === 'remove_component') removed.push(a.id);
     else if (a.tool === 'remove_wire') removed.push(`the wire from ${a.from} to ${a.to}`);
   }
-  const items = [...placed].map(([type, list]) => (list.length === 1 ? ONE[type](list[0]) : `${list.length} ${MANY[type]}`));
+  const items = [...placed].map(([type, list]) => (list.length === 1 ? ONE[type](list[0]) : MANY[type](list.length, list)));
   if (wires) items.push(wires === 1 ? 'a wire' : `${wires} wires`);
   const done = [];
   if (removed.length) done.push(`removed ${joinAnd(removed)}`);
@@ -492,11 +498,19 @@ function describeBuild(actions) {
   return done.length ? `I ${joinAnd(done)}.` : '';
 }
 
+const plain = v => v.summary.replace(/^Checked in the simulator: /, '').replace(/\.$/, '');
+
 // The model writes its text before anything is checked, so that text
 // only stands when the check passed.
 function composeReply(best, tries, v) {
   const built = describeBuild(best.check.actions);
-  if (v.ok) return best.turn.text || [built, v.summary].filter(Boolean).join(' ');
+  if (v.ok) {
+    if (best.turn.text) return best.turn.text;
+    // A fix can change what the user asked for (a 100 ohm resistor
+    // becomes 470), so the reply says what the check caught.
+    const caught = best === tries[0] ? '' : `My first try failed the simulator check (${plain(tries[0].check.verification)}).`;
+    return [built, caught, v.summary].filter(Boolean).join(' ');
+  }
   if (tries.length > 1) {
     return `I tried ${tries.length} times but could not get this circuit working. ${v.summary} ` +
            'You can still apply it and fix that by hand, or ask me to try again.';
