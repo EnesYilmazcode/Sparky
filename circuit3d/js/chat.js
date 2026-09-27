@@ -177,7 +177,7 @@
         return true;
       case 'place_battery': {
         const n = App.state.components.filter(c => c.type === 'battery').length;
-        const p = App.batterySlot(n);
+        const p = App.batterySlot(a.slot ?? n);
         App.placeBattery(p.x, p.z);
         return true;
       }
