@@ -199,6 +199,18 @@ function setCORS(req, res) {
   res.setHeader('Access-Control-Max-Age', '600');
 }
 
+// Only framing is restricted. A full resource allowlist would have to track
+// every CDN the pages load while they are being rewritten, and the Google
+// sign-in popup cannot be exercised headless to prove one safe.
+const DEFAULT_CSP = "frame-ancestors 'self'";
+
+// Sent with every response, pages and API alike.
+function setSecurityHeaders(res, csp) {
+  res.setHeader('X-Content-Type-Options', 'nosniff');
+  res.setHeader('Referrer-Policy', 'strict-origin-when-cross-origin');
+  if (csp) res.setHeader('Content-Security-Policy', csp);
+}
+
 function sendJSON(res, status, obj) {
   res.writeHead(status, { 'Content-Type': 'application/json' });
   res.end(JSON.stringify(obj));
@@ -295,7 +307,7 @@ function serveStatic(req, res) {
 // ── The server ────────────────────────────────────────────────
 // `generate` is the model from ai-providers.js, or null when none is
 // configured. Tests pass a stub, and smaller rate limits.
-function createServer({ generate = null, model = '', rateLimit } = {}) {
+function createServer({ generate = null, model = '', rateLimit, csp = DEFAULT_CSP } = {}) {
   const askRateLimited = makeRateLimiter(rateLimit);
 
   async function handleAsk(req, res) {
@@ -353,6 +365,7 @@ function createServer({ generate = null, model = '', rateLimit } = {}) {
 
   const server = http.createServer((req, res) => {
     const url = req.url.split('?')[0];
+    setSecurityHeaders(res, csp);
     if (url.startsWith('/api/')) setCORS(req, res);
     if (req.method === 'OPTIONS') { res.writeHead(204); res.end(); return; }
 

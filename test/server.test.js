@@ -164,6 +164,16 @@ test('/api/ask only takes JSON, so a cross-site form post cannot skip the prefli
   });
 });
 
+test('pages and API answers carry the security headers', async () => {
+  await withServer({ generate: stubModel, model: 'stub' }, async base => {
+    for (const res of [await fetch(base + '/landing.html'), await post(base, { message: 'hi' }), await fetch(base + '/nope')]) {
+      assert.equal(res.headers.get('x-content-type-options'), 'nosniff');
+      assert.equal(res.headers.get('referrer-policy'), 'strict-origin-when-cross-origin');
+      assert.equal(res.headers.get('content-security-policy'), "frame-ancestors 'self'");
+    }
+  });
+});
+
 test('the static site is still served, and the removed auth and storage routes are gone', async () => {
   await withServer({ generate: stubModel, model: 'stub' }, async base => {
     const page = await fetch(base + '/circuit3d/index.html');
