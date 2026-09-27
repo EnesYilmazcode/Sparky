@@ -897,7 +897,7 @@
         name,
         author,
         desc,
-        thumbnail:  c.thumbnail || null,
+        thumbnail:  safeThumb(c.thumbnail),
         sharedAt:   new Date().toISOString(),
         components: c.components || [],
         wires:      c.wires      || [],
@@ -978,8 +978,9 @@
       const card = document.createElement('div');
       card.className = 'circuit-card';
 
-      const compCount = (c.components ?? c.circuit?.components)?.length ?? 0;
-      const wireCount = (c.wires     ?? c.circuit?.wires    )?.length ?? 0;
+      // A crafted file or spark can make .length a string of markup.
+      const compCount = listOf(c.components ?? c.circuit?.components).length;
+      const wireCount = listOf(c.wires      ?? c.circuit?.wires     ).length;
       const saved = c.updatedAt ? new Date(c.updatedAt).toLocaleDateString() : '';
 
       const thumbImg  = makeThumbImg(c.thumbnail, 'width:100%;height:100%;object-fit:cover;display:block;');
@@ -1021,7 +1022,7 @@
       const c = _circuitsCache[idx];
       if (!c) return;
       // Pass the full entry so designer can restore name + id
-      const payload = { id: c.id, name: c.name, components: c.components ?? c.circuit?.components ?? [], wires: c.wires ?? c.circuit?.wires ?? [] };
+      const payload = { id: c.id, name: c.name, components: listOf(c.components ?? c.circuit?.components), wires: listOf(c.wires ?? c.circuit?.wires) };
       sessionStorage.setItem('sparky_load_circuit', JSON.stringify(payload));
       window.location.href = 'circuit3d/index.html';
     }
@@ -1029,7 +1030,7 @@
     function downloadCircuit(idx) {
       const c = _circuitsCache[idx];
       if (!c) return;
-      const payload = { id: c.id, name: c.name, components: c.components ?? c.circuit?.components ?? [], wires: c.wires ?? c.circuit?.wires ?? [] };
+      const payload = { id: c.id, name: c.name, components: listOf(c.components ?? c.circuit?.components), wires: listOf(c.wires ?? c.circuit?.wires) };
       const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
@@ -1084,14 +1085,15 @@
         try {
           const text = await file.text();
           const data = JSON.parse(text);
-          const name = data.name || file.name.replace(/\.(sparky|json)$/i, '').replace(/_/g, ' ');
+          const name = (typeof data.name === 'string' && data.name.trim()) ||
+                       file.name.replace(/\.(sparky|json)$/i, '').replace(/_/g, ' ');
           saveCircuitLocal({
-            id:        data.id || (Date.now().toString(36) + Math.random().toString(36).slice(2)),
+            id:        typeof data.id === 'string' && data.id ? data.id : (Date.now().toString(36) + Math.random().toString(36).slice(2)),
             name,
-            thumbnail: data.thumbnail || null,
+            thumbnail: safeThumb(data.thumbnail),
             updatedAt: new Date().toISOString(),
-            components: data.components || [],
-            wires:      data.wires      || [],
+            components: listOf(data.components),
+            wires:      listOf(data.wires),
           });
           imported++;
         } catch {}
@@ -1216,11 +1218,11 @@
       if (!spark) return;
       saveCircuitLocal({
         id:        Date.now().toString(36) + Math.random().toString(36).slice(2),
-        name:      spark.name,
-        thumbnail: spark.thumbnail || null,
+        name:      String(spark.name || 'Untitled'),
+        thumbnail: safeThumb(spark.thumbnail),
         updatedAt: new Date().toISOString(),
-        components: spark.components || [],
-        wires:      spark.wires      || [],
+        components: listOf(spark.components),
+        wires:      listOf(spark.wires),
       });
       switchTab('my');
       renderMyCircuits();
@@ -1244,15 +1246,27 @@
     }
 
     // ── Safe thumbnail image ────────────────────────────────────────────
-    // Thumbnails can come from another user's spark, so build the node and set
-    // src as a property instead of interpolating it into markup.
+    // Thumbnails come from other users' sparks and from imported files. Only a
+    // base64 PNG, JPEG or WebP data URL is kept: no remote URL (a tracking
+    // pixel for every viewer), no SVG, nothing else.
+    const THUMB_RE  = /^data:image\/(png|jpeg|webp);base64,[A-Za-z0-9+/]+={0,2}$/;
+    const THUMB_MAX = 300 * 1024;
+    function safeThumb(src) {
+      return typeof src === 'string' && src.length <= THUMB_MAX && THUMB_RE.test(src) ? src : null;
+    }
     function makeThumbImg(src, style) {
-      if (!src || !/^(data:image\/|https?:\/\/)/i.test(String(src))) return null;
+      const ok = safeThumb(src);
+      if (!ok) return null;
       const img = document.createElement('img');
-      img.src = src;
+      img.src = ok;
+      img.alt = '';
       if (style) img.style.cssText = style;
       return img;
     }
+
+    // Circuit data can come from a file or another user's spark, so anything
+    // that should be a list is checked before its length is used.
+    function listOf(v) { return Array.isArray(v) ? v : []; }
 
     // ── Escape HTML ────────────────────────────────────────────
     function escHtml(s) {
@@ -1260,7 +1274,8 @@
         .replace(/&/g, '&amp;')
         .replace(/</g, '&lt;')
         .replace(/>/g, '&gt;')
-        .replace(/"/g, '&quot;');
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#39;');
     }
 
     // ── Init ───────────────────────────────────────────────────
