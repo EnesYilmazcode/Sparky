@@ -1,15 +1,80 @@
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
+
+    // Sparks: the community gallery. One doc per published circuit, keyed by
+    // the circuit id. Every field is written by a browser, so every field is
+    // checked here; the dashboard's own checks can be skipped by any client.
     match /sparks/{sparkId} {
-      // Anyone signed in can read all sparks
-      allow read: if request.auth != null;
-      // Only signed-in users can create, and uid must match
-      allow create: if request.auth != null
-                    && request.resource.data.uid == request.auth.uid;
-      // Only the owner can update or delete
-      allow update, delete: if request.auth != null
-                            && resource.data.uid == request.auth.uid;
+      // Anyone signed in can browse the gallery.
+      allow read: if signedIn();
+
+      // Publish: a well formed spark that belongs to the caller.
+      allow create: if signedIn() && isValidSpark(request.resource.data, sparkId);
+
+      // Re-publish: only the owner, and the owner cannot hand the doc to
+      // another uid (that would let them plant sparks under someone else).
+      allow update: if signedIn()
+                    && resource.data.uid == request.auth.uid
+                    && request.resource.data.uid == resource.data.uid
+                    && isValidSpark(request.resource.data, sparkId);
+
+      // Take down: only the owner.
+      allow delete: if signedIn() && resource.data.uid == request.auth.uid;
+    }
+
+    function signedIn() {
+      return request.auth != null;
+    }
+
+    // The exact field set the dashboard writes. Nothing missing, nothing extra.
+    function sparkFields() {
+      return ['id', 'uid', 'name', 'author', 'desc', 'thumbnail', 'sharedAt', 'components', 'wires'];
+    }
+
+    function isValidSpark(d, sparkId) {
+      return d.keys().hasAll(sparkFields())
+          && d.keys().hasOnly(sparkFields())
+          // The id field mirrors the doc id, so it cannot point at another spark.
+          && d.id == sparkId
+          // You can only publish as yourself.
+          && d.uid == request.auth.uid
+          // Shown as text in every viewer's feed, so the size is capped.
+          && isText(d.name, 1, 80)
+          && isText(d.author, 1, 80)
+          && isText(d.desc, 0, 500)
+          && isThumbnail(d.thumbnail)
+          && (isShareTime(d.sharedAt) || keepsShareTime(d))
+          // The circuit itself. Lists only: a map with a "length" key once
+          // turned into markup in the feed.
+          && d.components is list && d.components.size() <= 500
+          && d.wires is list && d.wires.size() <= 1000;
+    }
+
+    function isText(v, min, max) {
+      return v is string && v.size() >= min && v.size() <= max;
+    }
+
+    // No picture, or a base64 PNG, JPEG or WebP data URL up to 300 KB.
+    // A remote URL would ping an outside server from every viewer's browser.
+    function isThumbnail(v) {
+      return v == null
+          || (v is string
+              && v.size() <= 307200
+              && v.matches('data:image/(png|jpeg|webp);base64,[A-Za-z0-9+/]+={0,2}'));
+    }
+
+    // Publish time: the server clock (serverTimestamp), or epoch millis no
+    // more than five minutes ahead. The feed is sorted by this field, so a
+    // spark dated in the future would sit at the top.
+    function isShareTime(v) {
+      return (v is timestamp && v == request.time)
+          || (v is number && v <= request.time.toMillis() + 300000);
+    }
+
+    // An update may also leave the publish time as it was.
+    function keepsShareTime(d) {
+      return resource != null && d.sharedAt == resource.data.sharedAt;
     }
   }
 }

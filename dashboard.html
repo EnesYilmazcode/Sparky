@@ -697,13 +697,13 @@
       <div id="publish-thumb" class="publish-thumb"></div>
       <div class="publish-fields">
         <label class="publish-label">Title
-          <input id="publish-name" class="publish-input" type="text" placeholder="Circuit name…">
+          <input id="publish-name" class="publish-input" type="text" maxlength="80" placeholder="Circuit name…">
         </label>
         <label class="publish-label">Your name
-          <input id="publish-author" class="publish-input" type="text" placeholder="e.g. @yourname">
+          <input id="publish-author" class="publish-input" type="text" maxlength="80" placeholder="e.g. @yourname">
         </label>
         <label class="publish-label">Description
-          <textarea id="publish-desc" class="publish-input publish-textarea" placeholder="What does this circuit do? What will others learn?"></textarea>
+          <textarea id="publish-desc" class="publish-input publish-textarea" maxlength="500" placeholder="What does this circuit do? What will others learn?"></textarea>
         </label>
       </div>
       <div class="publish-actions">
@@ -806,10 +806,20 @@
       return `Could not ${action} — ${escHtml(code || 'unexpected error')}.`;
     }
 
+    // sharedAt is a server Timestamp on new sparks and an ISO string on older
+    // ones. Firestore sorts mixed types by type first, so sort here by time.
+    function sharedMillis(v) {
+      if (v && typeof v.toMillis === 'function') return v.toMillis();
+      if (typeof v === 'number') return v;
+      const t = typeof v === 'string' ? Date.parse(v) : NaN;
+      return isNaN(t) ? 0 : t;
+    }
+
     async function fetchSparks() {
       try {
         const snap = await db.collection('sparks').orderBy('sharedAt', 'desc').get();
-        _sparksCache = snap.docs.map(doc => ({ _docId: doc.id, ...doc.data() }));
+        _sparksCache = snap.docs.map(doc => ({ _docId: doc.id, ...doc.data() }))
+          .sort((a, b) => sharedMillis(b.sharedAt) - sharedMillis(a.sharedAt));
         _sparksError = null;
       } catch (e) {
         console.warn('Failed to fetch sparks:', e);
@@ -884,9 +894,17 @@
         return;
       }
 
-      const name   = document.getElementById('publish-name').value.trim()   || c.name || 'Untitled';
-      const author = document.getElementById('publish-author').value.trim() || 'Anonymous';
-      const desc   = document.getElementById('publish-desc').value.trim();
+      // Limits match firestore.rules, so a valid form never hits a denied write.
+      const clip   = (s, n) => String(s || '').trim().slice(0, n);
+      const name   = clip(document.getElementById('publish-name').value, 80) || clip(c.name, 80) || 'Untitled';
+      const author = clip(document.getElementById('publish-author').value, 80) || 'Anonymous';
+      const desc   = clip(document.getElementById('publish-desc').value, 500);
+      const components = listOf(c.components ?? c.circuit?.components);
+      const wires      = listOf(c.wires      ?? c.circuit?.wires);
+      if (components.length > 500 || wires.length > 1000) {
+        showToast('This circuit is too big to publish.');
+        return;
+      }
 
       // Persist username for next time (only if not locked to auth account)
       if (!_authUsername) localStorage.setItem('sparky_username', author);
@@ -898,9 +916,9 @@
         author,
         desc,
         thumbnail:  safeThumb(c.thumbnail),
-        sharedAt:   new Date().toISOString(),
-        components: c.components || [],
-        wires:      c.wires      || [],
+        sharedAt:   firebase.firestore.FieldValue.serverTimestamp(),
+        components,
+        wires,
       });
 
       if (!published) return; // saveSpark already said why
@@ -1149,7 +1167,7 @@
         (s.author || '').toLowerCase().includes(query) ||
         (s.desc || '').toLowerCase().includes(query)
       );
-      if (_favOnly) sparks = sparks.filter(s => starred.has(s.id));
+      if (_favOnly) sparks = sparks.filter(s => starred.has(s._docId));
 
       grid.innerHTML = '';
 
@@ -1176,7 +1194,10 @@
       const BOARD_SVG = `<svg width="40" height="28" viewBox="0 0 36 25" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"><rect x="1" y="4" width="34" height="17" rx="1.5"/><line x1="7" y1="4" x2="7" y2="21"/><line x1="13" y1="4" x2="13" y2="21"/><line x1="18" y1="4" x2="18" y2="21"/><line x1="23" y1="4" x2="23" y2="21"/><line x1="29" y1="4" x2="29" y2="21"/><line x1="4" y1="1.5" x2="4" y2="4"/><line x1="10" y1="1.5" x2="10" y2="4"/><line x1="15" y1="1.5" x2="15" y2="4"/><line x1="20" y1="1.5" x2="20" y2="4"/><line x1="26" y1="1.5" x2="26" y2="4"/><line x1="31" y1="1.5" x2="31" y2="4"/><line x1="4" y1="21" x2="4" y2="23.5"/><line x1="10" y1="21" x2="10" y2="23.5"/><line x1="15" y1="21" x2="15" y2="23.5"/><line x1="20" y1="21" x2="20" y2="23.5"/><line x1="26" y1="21" x2="26" y2="23.5"/><line x1="31" y1="21" x2="31" y2="23.5"/></svg>`;
 
       sparks.forEach((spark) => {
-        const isStarred = starred.has(spark.id);
+        // Actions key on the Firestore doc id, not the id field inside the doc.
+        const docId = spark._docId;
+        const when  = sharedMillis(spark.sharedAt);
+        const isStarred = starred.has(docId);
         const starFill   = isStarred ? '#f59e0b' : 'none';
         const starStroke = isStarred ? '#f59e0b' : 'currentColor';
         const thumbImg  = makeThumbImg(spark.thumbnail, 'width:100%;height:100%;object-fit:cover;display:block;');
@@ -1190,7 +1211,7 @@
           <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:0.5rem;">
             <div>
               <div class="spark-card-title">${escHtml(spark.name || 'Untitled')}</div>
-              <div class="spark-card-author">${spark.author ? escHtml(spark.author) : ''}${spark.sharedAt ? ' · ' + new Date(spark.sharedAt).toLocaleDateString() : ''}</div>
+              <div class="spark-card-author">${spark.author ? escHtml(spark.author) : ''}${when ? ' · ' + new Date(when).toLocaleDateString() : ''}</div>
             </div>
             <button class="star-btn ${isStarred ? 'starred' : ''}" title="${isStarred ? 'Unstar' : 'Star'}">
               <svg width="15" height="15" viewBox="0 0 24 24" fill="${starFill}" stroke="${starStroke}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>
@@ -1204,17 +1225,17 @@
         `;
 
         if (thumbImg) card.querySelector('.spark-thumb').appendChild(thumbImg);
-        card.querySelector('.star-btn').addEventListener('click', e => toggleStar(spark.id, e));
-        card.querySelector('.spark-fork-btn').addEventListener('click', () => forkSpark(spark.id));
+        card.querySelector('.star-btn').addEventListener('click', e => toggleStar(docId, e));
+        card.querySelector('.spark-fork-btn').addEventListener('click', () => forkSpark(docId));
         const removeBtn = card.querySelector('.spark-remove-btn');
-        if (removeBtn) removeBtn.addEventListener('click', () => unshareFromSparks(spark.id));
+        if (removeBtn) removeBtn.addEventListener('click', () => unshareFromSparks(docId));
 
         grid.appendChild(card);
       });
     }
 
-    function forkSpark(id) {
-      const spark = _sparksCache.find(s => s.id === id);
+    function forkSpark(docId) {
+      const spark = _sparksCache.find(s => s._docId === docId);
       if (!spark) return;
       saveCircuitLocal({
         id:        Date.now().toString(36) + Math.random().toString(36).slice(2),
