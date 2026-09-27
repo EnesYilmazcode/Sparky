@@ -284,11 +284,13 @@
     const RB = 0.39, FL = 0.43, Y0 = 0.36;          // body radius, flange radius, flange bottom
 
     // epoxy: its own material so each LED can light independently
-    const tint = colorName === 'white' ? lin(0xdfe9ff) : lin(hex);
+    // Unlit, the epoxy is a deep tint; lit, it glows with the die's colour.
+    // It skips tone mapping so a lit red stays red instead of going orange.
+    const tint = colorName === 'white' ? lin(0xdfe9ff) : lin(hex).multiplyScalar(0.6);
     const epoxy = new THREE.MeshPhysicalMaterial({
-      color: tint, emissive: lin(hex), emissiveIntensity: 0.05,
+      color: tint, emissive: lin(hex), emissiveIntensity: 0,
       roughness: 0.06, metalness: 0, clearcoat: 1, clearcoatRoughness: 0.04,
-      transparent: true, opacity: 0.78, depthWrite: false,
+      transparent: true, opacity: 0.82, depthWrite: false, toneMapped: false,
     });
 
     const flange = new THREE.Mesh(flangeGeometry(FL, 0.35, 0.08), epoxy);
@@ -321,13 +323,24 @@
     group.add(leadTo(V3(-0.2, frameY + 0.02, 0), -span / 2, LR, 0.16));
     group.add(leadTo(V3( 0.2, frameY + 0.02, 0),  span / 2, LR, 0.16));
 
-    // lit state: stronger emission, a warm pool of light, and a halo
+    // lit state: the die's hot spot, a warm pool of light, and a halo
+    const core = new THREE.Sprite(new THREE.SpriteMaterial({
+      map: glowTexture(), color: lin(hex).lerp(new THREE.Color(1, 1, 1), 0.45), transparent: true,
+      depthWrite: false, toneMapped: false, blending: THREE.AdditiveBlending, opacity: 0,
+    }));
+    core.position.set(-0.04, frameY + 0.44, 0);
+    core.scale.set(1.1, 1.1, 1);
+    core.renderOrder = 2;
+    core.visible = false;
+    group.add(core);
+
     const glow = new THREE.Sprite(new THREE.SpriteMaterial({
       map: glowTexture(), color: lin(hex), transparent: true, depthWrite: false, toneMapped: false,
       blending: THREE.AdditiveBlending, opacity: 0,
     }));
     glow.position.set(0, top + 0.1, 0);
-    glow.scale.set(2.6, 2.6, 1);
+    glow.scale.set(3.2, 3.2, 1);
+    glow.renderOrder = 2;
     glow.visible = false;
     group.add(glow);
 
@@ -339,11 +352,12 @@
     group.add(light);
     group.userData.setLit = function (on, level) {
       const k = Math.max(0.35, Math.min(1.4, level == null ? 1 : level));
-      epoxy.emissiveIntensity = on ? 0.85 * k : 0.05;
-      epoxy.opacity = on ? 0.95 : 0.78;
-      glow.visible = on;
-      glow.material.opacity = on ? 0.42 * k : 0;
-      light.intensity = on ? 1.2 * k : 0;
+      epoxy.emissiveIntensity = on ? 0.9 * k : 0;
+      epoxy.opacity = on ? 0.9 : 0.82;
+      core.visible = glow.visible = on;
+      core.material.opacity = on ? Math.min(1, 0.95 * k) : 0;
+      glow.material.opacity = on ? 0.5 * k : 0;
+      light.intensity = on ? 1.6 * k : 0;
     };
     group.userData.epoxy = epoxy;
 
