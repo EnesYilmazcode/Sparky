@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Sparky</title>
+  <title>Sparky · 3D circuit workbench</title>
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=Inter:wght@400;500;600&display=swap" rel="stylesheet" />
   <link rel="stylesheet" href="css/style.css" />
@@ -16,42 +16,56 @@
   <!-- TOP BAR -->
   <header id="topbar">
     <div class="topbar-left-group">
-      <a class="topbar-brand" href="../dashboard.html" title="Back to dashboard" style="text-decoration:none;color:inherit;">
-        <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
-          <path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/>
-        </svg>
+      <a class="topbar-brand" href="../dashboard.html" title="Back to your circuits">
+        <span class="brand-mark">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linejoin="round"><path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/></svg>
+        </span>
         Sparky
       </a>
-      <span class="topbar-name-sep">·</span>
+      <span class="topbar-name-sep">/</span>
       <span id="circuit-name-field"
             contenteditable="true"
             spellcheck="false"
-            title="Click to rename circuit"
+            title="Click to rename"
             onblur="App.state.circuitName = this.textContent.trim() || 'Untitled'; this.textContent = App.state.circuitName; if(App.scheduleAutoSave) App.scheduleAutoSave();"
             onkeydown="if(event.key==='Enter'){event.preventDefault();this.blur();}">Untitled</span>
     </div>
 
     <div class="topbar-center">
-      <button class="btn-simulate" id="sim-run-btn" onclick="App.runSimulation()">
-        <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor">
-          <polygon points="5,3 19,12 5,21"/>
-        </svg>
-        Run Simulation
+      <div class="seg" role="group" aria-label="Tool">
+        <button class="mode-btn" data-mode="select" title="Select (S)">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linejoin="round"><path d="M4 3l7 17 2.5-7.5L21 10z"/></svg>
+          Select
+        </button>
+        <button class="mode-btn" data-mode="wire" title="Wire (W)">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><circle cx="5" cy="17" r="2"/><circle cx="19" cy="17" r="2"/><path d="M5 15c0-8 14-8 14 0"/></svg>
+          Wire
+        </button>
+      </div>
+      <button class="btn-simulate" id="sim-run-btn" onclick="App.runSimulation()" title="Run the circuit">
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor"><polygon points="6,4 20,12 6,20"/></svg>
+        Run simulation
       </button>
       <button class="btn-stop" id="sim-stop-btn" onclick="App.stopSimulation()" style="display:none">
-        <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor">
-          <rect x="4" y="4" width="16" height="16"/>
-        </svg>
+        <svg width="11" height="11" viewBox="0 0 24 24" fill="currentColor"><rect x="5" y="5" width="14" height="14" rx="2"/></svg>
         Stop
       </button>
     </div>
 
     <div class="topbar-actions">
-      <button class="btn-secondary" onclick="App.saveCircuit()" title="Download circuit as .sparky file">
-        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-          <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
-          <polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/>
-        </svg>
+      <button class="icon-btn" onclick="App.undo()" title="Undo (Ctrl+Z)" aria-label="Undo">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 14 4 9l5-5"/><path d="M4 9h10.5a5.5 5.5 0 0 1 0 11H11"/></svg>
+      </button>
+      <button class="icon-btn" onclick="App.redo()" title="Redo (Ctrl+Shift+Z)" aria-label="Redo">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="m15 14 5-5-5-5"/><path d="M20 9H9.5a5.5 5.5 0 0 0 0 11H13"/></svg>
+      </button>
+      <span class="topbar-divider"></span>
+      <button class="btn-secondary" onclick="App.loadCircuit()" title="Open a .sparky file">
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 20h16a1 1 0 0 0 1-1V8a1 1 0 0 0-1-1h-8l-2-3H4a1 1 0 0 0-1 1v14a1 1 0 0 0 1 1z"/></svg>
+        Open
+      </button>
+      <button class="btn-secondary" onclick="App.saveCircuit()" title="Download as a .sparky file">
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><path d="m7 10 5 5 5-5"/><path d="M12 15V3"/></svg>
         Download
       </button>
     </div>
@@ -60,143 +74,76 @@
   <!-- BODY -->
   <div id="body">
 
-    <!-- SIDEBAR -->
+    <!-- PARTS LIBRARY -->
     <aside id="sidebar">
-      <div class="sidebar-section-label">Components</div>
+      <div class="sidebar-section-label">Parts</div>
 
       <button class="comp-item" data-type="resistor">
-        <span class="comp-item-icon">
-          <!-- Resistor: horizontal body + color bands + axial leads -->
-          <svg width="28" height="28" viewBox="0 0 28 28" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
-            <line x1="1" y1="14" x2="7" y2="14"/>
-            <rect x="7" y="10" width="14" height="8" rx="1.5" fill="currentColor" fill-opacity="0.1"/>
-            <rect x="7" y="10" width="14" height="8" rx="1.5"/>
-            <line x1="11.5" y1="10" x2="11.5" y2="18"/>
-            <line x1="14" y1="10" x2="14" y2="18"/>
-            <line x1="16.5" y1="10" x2="16.5" y2="18"/>
-            <line x1="21" y1="14" x2="27" y2="14"/>
-          </svg>
-        </span>
-        <div class="comp-item-text">
+        <span class="comp-item-icon" data-thumb="resistor"></span>
+        <span class="comp-item-text">
           <span class="comp-item-name">Resistor</span>
-          <span class="comp-item-sub">2 leads · axial</span>
-        </div>
+          <span class="comp-item-sub">470 Ω · quarter watt</span>
+        </span>
       </button>
 
       <button class="comp-item" data-type="led">
-        <span class="comp-item-icon">
-          <!-- LED: dome side profile + leads + light rays -->
-          <svg width="28" height="28" viewBox="0 0 28 28" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
-            <path d="M8 19 C8 7, 20 7, 20 19 Z" fill="currentColor" fill-opacity="0.15"/>
-            <path d="M8 19 C8 7, 20 7, 20 19"/>
-            <line x1="6" y1="19" x2="22" y2="19"/>
-            <line x1="10" y1="19" x2="10" y2="26"/>
-            <line x1="18" y1="19" x2="18" y2="26"/>
-            <line x1="22" y1="11" x2="25" y2="8" stroke-width="1.3"/>
-            <line x1="22" y1="15" x2="26" y2="15" stroke-width="1.3"/>
-          </svg>
-        </span>
-        <div class="comp-item-text">
+        <span class="comp-item-icon" data-thumb="led"></span>
+        <span class="comp-item-text">
           <span class="comp-item-name">LED</span>
-          <span class="comp-item-sub">2 leads · 5mm</span>
-        </div>
+          <span class="comp-item-sub">5 mm · red</span>
+        </span>
       </button>
 
       <button class="comp-item" data-type="battery">
-        <span class="comp-item-icon">
-          <!-- Battery: snap nub on top + rectangular body + +/- terminals -->
-          <svg width="28" height="28" viewBox="0 0 28 28" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
-            <rect x="10" y="3" width="8" height="4" rx="1"/>
-            <rect x="5" y="7" width="18" height="17" rx="2" fill="currentColor" fill-opacity="0.1"/>
-            <rect x="5" y="7" width="18" height="17" rx="2"/>
-            <line x1="9" y1="14" x2="12" y2="14" stroke-width="1.5"/>
-            <line x1="10.5" y1="12.5" x2="10.5" y2="15.5" stroke-width="1.5"/>
-            <line x1="16" y1="14" x2="19" y2="14" stroke-width="1.5"/>
-          </svg>
-        </span>
-        <div class="comp-item-text">
+        <span class="comp-item-icon" data-thumb="battery"></span>
+        <span class="comp-item-text">
           <span class="comp-item-name">Battery</span>
-          <span class="comp-item-sub">9V · snap connector</span>
-        </div>
+          <span class="comp-item-sub">9 V · beside the board</span>
+        </span>
       </button>
 
       <button class="comp-item" data-type="buzzer">
-        <span class="comp-item-icon">
-          <!-- Buzzer: cylinder side view (disc) with + polarity mark + leads -->
-          <svg width="28" height="28" viewBox="0 0 28 28" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
-            <ellipse cx="14" cy="9" rx="9" ry="3"/>
-            <line x1="5" y1="9" x2="5" y2="18"/>
-            <line x1="23" y1="9" x2="23" y2="18"/>
-            <path d="M5 18 A9 3 0 0 0 23 18" fill="currentColor" fill-opacity="0.1"/>
-            <path d="M5 18 A9 3 0 0 0 23 18"/>
-            <line x1="11" y1="9" x2="13.5" y2="9" stroke-width="1.3"/>
-            <line x1="12.2" y1="7.8" x2="12.2" y2="10.2" stroke-width="1.3"/>
-            <line x1="10" y1="21" x2="10" y2="26"/>
-            <line x1="18" y1="21" x2="18" y2="26"/>
-          </svg>
-        </span>
-        <div class="comp-item-text">
+        <span class="comp-item-icon" data-thumb="buzzer"></span>
+        <span class="comp-item-text">
           <span class="comp-item-name">Buzzer</span>
-          <span class="comp-item-sub">2 leads · active</span>
-        </div>
+          <span class="comp-item-sub">active · beeps on DC</span>
+        </span>
       </button>
 
       <button class="comp-item" data-type="button">
-        <span class="comp-item-icon">
-          <!-- Push button: square base + round pressable cap on top + leads -->
-          <svg width="28" height="28" viewBox="0 0 28 28" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
-            <rect x="6" y="14" width="16" height="10" rx="1.5" fill="currentColor" fill-opacity="0.1"/>
-            <rect x="6" y="14" width="16" height="10" rx="1.5"/>
-            <circle cx="14" cy="11" r="5" fill="currentColor" fill-opacity="0.15"/>
-            <circle cx="14" cy="11" r="5"/>
-            <line x1="9" y1="24" x2="9" y2="27"/>
-            <line x1="19" y1="24" x2="19" y2="27"/>
-          </svg>
+        <span class="comp-item-icon" data-thumb="button"></span>
+        <span class="comp-item-text">
+          <span class="comp-item-name">Push button</span>
+          <span class="comp-item-sub">tactile · momentary</span>
         </span>
-        <div class="comp-item-text">
-          <span class="comp-item-name">Push Button</span>
-          <span class="comp-item-sub">2 leads · momentary</span>
-        </div>
       </button>
 
-      <div class="sidebar-section-label" style="margin-top:12px;">Tools</div>
+      <div class="sidebar-section-label" style="margin-top:10px;">Wiring</div>
 
       <button class="comp-item" data-type="wire" id="wire-tool-btn">
-        <span class="comp-item-icon">
-          <!-- Wire: arc between two endpoint dots -->
-          <svg width="28" height="28" viewBox="0 0 28 28" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round">
-            <circle cx="4" cy="18" r="2" fill="currentColor"/>
-            <path d="M4 18 C4 6, 24 6, 24 18"/>
-            <circle cx="24" cy="18" r="2" fill="currentColor"/>
-          </svg>
+        <span class="comp-item-icon" data-thumb="wire"></span>
+        <span class="comp-item-text">
+          <span class="comp-item-name">Jumper wire</span>
+          <span class="comp-item-sub">hole to hole</span>
         </span>
-        <div class="comp-item-text">
-          <span class="comp-item-name">Wire</span>
-          <span class="comp-item-sub">connect pins</span>
-        </div>
       </button>
 
-      <div class="sidebar-divider"></div>
-
       <div id="wire-color-row" style="display:none;">
-        <div class="sidebar-section-label">Wire Color</div>
-        <div class="color-swatches">
-          <button class="swatch active" data-color="0xef4444" style="background:#ef4444" title="Red"></button>
-          <button class="swatch" data-color="0xfbbf24" style="background:#fbbf24" title="Yellow"></button>
-          <button class="swatch" data-color="0x22c55e" style="background:#22c55e" title="Green"></button>
-          <button class="swatch" data-color="0x3b82f6" style="background:#3b82f6" title="Blue"></button>
-          <button class="swatch" data-color="0x000000" style="background:#333" title="Black"></button>
-          <button class="swatch" data-color="0xffffff" style="background:#e8e8e8;border:1px solid #ccc" title="White"></button>
+        <div class="color-swatches" role="radiogroup" aria-label="Wire color">
+          <button class="swatch active" data-color="0xef4444" style="background:#ef4444" title="Red" aria-label="Red"></button>
+          <button class="swatch" data-color="0x111111" style="background:#1f1f1f" title="Black" aria-label="Black"></button>
+          <button class="swatch" data-color="0xfbbf24" style="background:#fbbf24" title="Yellow" aria-label="Yellow"></button>
+          <button class="swatch" data-color="0x22c55e" style="background:#22c55e" title="Green" aria-label="Green"></button>
+          <button class="swatch" data-color="0x3b82f6" style="background:#3b82f6" title="Blue" aria-label="Blue"></button>
+          <button class="swatch" data-color="0xffffff" style="background:#f4f4f4" title="White" aria-label="White"></button>
         </div>
       </div>
 
       <div class="sidebar-help">
-        <p><kbd>S</kbd> Select &nbsp;<kbd>P</kbd> Place &nbsp;<kbd>W</kbd> Wire</p>
-        <p><kbd>R</kbd> Rotate &nbsp;<kbd>Del</kbd> Delete</p>
-        <p><kbd>Esc</kbd> Cancel / deselect</p>
-        <p><strong>Left-drag</strong> to orbit</p>
-        <p><strong>Right-drag</strong> to pan camera</p>
-        <p><strong>Scroll</strong> to zoom</p>
+        <div class="help-row"><kbd>S</kbd><span>Select</span><kbd>W</kbd><span>Wire</span></div>
+        <div class="help-row"><kbd>R</kbd><span>Rotate</span><kbd>Del</kbd><span>Delete</span></div>
+        <div class="help-row"><kbd>Esc</kbd><span>Cancel</span><kbd>Ctrl Z</kbd><span>Undo</span></div>
+        <p>Drag to orbit · right-drag to pan · scroll to zoom</p>
       </div>
     </aside>
 
@@ -204,71 +151,76 @@
     <div id="canvas-wrap">
       <canvas id="canvas"></canvas>
 
-      <!-- Floating hint that appears contextually -->
       <div id="hint-box" class="hint-hidden">
         <span id="hint-text"></span>
       </div>
 
-      <!-- Hover label for nearest hole -->
       <div id="hole-label"></div>
 
-      <!-- Rotate indicator (shown in place mode) -->
-      <div id="rotate-badge">
-        <kbd>R</kbd> rotate
+      <div id="rotate-badge"><kbd>R</kbd> rotate</div>
+
+      <div class="view-tools">
+        <button id="clear-all-btn" title="Clear the board" style="display:none" onclick="App.clearAll()">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M9 6V4h6v2"/></svg>
+          Clear
+        </button>
+        <button id="reset-cam-btn" title="Reset the view" onclick="App.resetView && App.resetView()">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/></svg>
+          Reset view
+        </button>
       </div>
-
-      <!-- Clear All (hidden until board has content) -->
-      <button id="clear-all-btn" title="Clear All" style="display:none" onclick="App.clearAll()">
-        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
-          <polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/>
-          <path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4h6v2"/>
-        </svg>
-        Clear All
-      </button>
-
-      <!-- Reset camera -->
-      <button id="reset-cam-btn" title="Reset camera view" onclick="if(App.controls){App.controls.target.set(0,0,0); App.camera.position.set(0,22,30); App.controls.update();}">
-        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
-          <path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/>
-          <path d="M3 3v5h5"/>
-        </svg>
-        Reset View
-      </button>
     </div>
 
-    <!-- ── AI PANEL (right sidebar) ─────────────────────────── -->
+    <!-- SPARKY PANEL -->
     <div id="sparky-panel">
-
-      <div id="sparky-messages">
-
-        <!-- Welcome / empty state -->
-        <div id="sparky-welcome">
-          <div class="sparky-welcome-icon">
-            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
-              <path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/>
-            </svg>
-          </div>
-          <div class="sparky-welcome-title">Sparky</div>
-          <div class="sparky-welcome-sub">What would you like to build?</div>
-          <div id="sparky-suggestions">
-            <button class="sparky-suggest-btn" onclick="sparkyQuick('Build a complete working LED circuit from scratch. Place all the components and wires needed.', true)">⚡ Build an LED circuit</button>
-            <button class="sparky-suggest-btn" onclick="sparkyQuick('Analyze my circuit and tell me if it will work correctly.', false)">🔍 Analyze my circuit</button>
-            <button class="sparky-suggest-btn" onclick="sparkyQuick('What components or wires should I add to improve my circuit?', false)">🔧 What should I add?</button>
-          </div>
+      <div class="sparky-header">
+        <span class="sparky-avatar">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linejoin="round"><path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/></svg>
+        </span>
+        <div class="sparky-title">
+          <div class="sparky-name">Sparky</div>
+          <div class="sparky-role">AI tutor · builds are simulated first</div>
         </div>
-
+        <button id="sparky-clear" class="icon-btn" title="New chat" aria-label="New chat">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4z"/></svg>
+        </button>
       </div>
 
-      <!-- Pending-changes bar — shown when AI suggests edits awaiting review -->
+      <div id="sparky-messages">
+        <div id="sparky-welcome">
+          <div class="sparky-welcome-title">What should we build?</div>
+          <div class="sparky-welcome-sub">Sparky can build a circuit for you, explain your board, or find out why something is not working.</div>
+          <div id="sparky-suggestions">
+            <button class="sparky-suggest-btn" onclick="sparkyQuick('Build a complete working LED circuit from scratch.')">
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18h6M10 22h4M12 2a7 7 0 0 0-4 12.7V17h8v-2.3A7 7 0 0 0 12 2z"/></svg>
+              <span>Build an LED circuit</span>
+            </button>
+            <button class="sparky-suggest-btn" onclick="sparkyQuick('Build a circuit where a push button turns an LED on.')">
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><rect x="4" y="4" width="16" height="16" rx="3"/></svg>
+              <span>Add a button that switches it</span>
+            </button>
+            <button class="sparky-suggest-btn" onclick="sparkyQuick('Look at my board and tell me whether it will work, and why.')">
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>
+              <span>Check my circuit</span>
+            </button>
+          </div>
+        </div>
+      </div>
+
       <div id="sparky-pending-bar" style="display:none">
-        <button class="pending-accept" onclick="sparkyAcceptChanges()">Accept</button>
-        <button class="pending-decline" onclick="sparkyDeclineChanges()">Decline</button>
+        <span id="sparky-pending-count">Changes ready</span>
+        <button class="pending-decline" onclick="sparkyDeclineChanges()">Discard</button>
+        <button class="pending-accept" onclick="sparkyAcceptChanges()">Apply</button>
       </div>
 
       <div id="sparky-input-row">
-        <textarea id="sparky-input" rows="1" placeholder="Ask Sparky anything…"></textarea>
+        <div class="sparky-input-box">
+          <textarea id="sparky-input" rows="1" placeholder="Ask Sparky, or tell it what to build…" aria-label="Message Sparky"></textarea>
+          <button id="sparky-send" title="Send" aria-label="Send">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M13 6l6 6-6 6"/></svg>
+          </button>
+        </div>
       </div>
-
     </div>
 
   </div>
@@ -283,7 +235,7 @@
       <div class="lpm-name" id="lpm-name"></div>
       <div class="lpm-meta" id="lpm-meta"></div>
       <div class="lpm-btns">
-        <button class="btn-simulate" id="lpm-confirm">Load Circuit</button>
+        <button class="btn-simulate" id="lpm-confirm">Load circuit</button>
         <button class="btn-secondary" onclick="document.getElementById('load-preview-modal').style.display='none'">Cancel</button>
       </div>
     </div>
@@ -294,8 +246,10 @@
 <!-- Three.js -->
 <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
 <script src="https://unpkg.com/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+<script src="https://unpkg.com/three@0.128.0/examples/js/environments/RoomEnvironment.js"></script>
 
 <!-- App modules (load in dependency order) -->
+<script src="js/board-model.js"></script>
 <script src="js/scene.js"></script>
 <script src="js/breadboard.js"></script>
 <script src="js/components.js"></script>
@@ -303,442 +257,8 @@
 <script src="js/mna.js"></script>
 <script src="js/simulate.js"></script>
 <script src="js/app.js"></script>
-
-
-<script>
-// ── Sparky AI chat ─────────────────────────────────────────────
-// No model key in the browser. The system prompt, tool schema and action
-// validation live once in backend/server.js and are reached over /api/ask.
-const chatHistory = [];   // {role:'user'|'model', text} pairs for conversation memory
-
-async function askSparky(markdown, userMsg, history) {
-  const res = await fetch('/api/ask', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ markdown, message: userMsg, history }),
-  });
-  let data = null;
-  try { data = await res.json(); } catch { /* upstream returned a non-JSON error page */ }
-  if (!res.ok || !data) {
-    console.error('/api/ask failed:', res.status, data);
-    throw new Error((data && data.reply) || 'Sparky could not reach the AI service. Please try again in a moment.');
-  }
-  return { reply: data.reply || '(no response)', actions: data.actions || [] };
-}
-
-// ── Chat helpers ─────────────────────────────────────────────────
-
-function sparkyAddMsg(text, role) {
-  const welcome = document.getElementById('sparky-welcome');
-  if (welcome) welcome.classList.add('hidden');
-  const box = document.getElementById('sparky-messages');
-  const el  = document.createElement('div');
-  el.className   = 'chat-msg ' + role;
-  el.textContent = text;
-  box.appendChild(el);
-  box.scrollTop  = box.scrollHeight;
-  return el;
-}
-
-function sparkyTyping() {
-  const welcome = document.getElementById('sparky-welcome');
-  if (welcome) welcome.classList.add('hidden');
-  const box = document.getElementById('sparky-messages');
-  const el  = document.createElement('div');
-  el.className = 'chat-msg typing';
-  el.innerHTML = '<div class="typing-dots"><span></span><span></span><span></span></div>';
-  box.appendChild(el);
-  box.scrollTop = box.scrollHeight;
-  return el;
-}
-
-// ── Hole parser ──────────────────────────────────────────────────
-
-function parseHole(str) {
-  if (!str) return [null, null];
-  const railM = str.match(/^(tp|tn|bp|bn)_(\d+)$/i);
-  if (railM) return [parseInt(railM[2]) - 1, railM[1].toLowerCase()];
-  const m = str.match(/^([a-j])(\d+)$/i);
-  if (m)    return [parseInt(m[2]) - 1, m[1].toLowerCase()];
-  return [null, null];
-}
-
-// ── Execute actions (real placement) ────────────────────────────
-
-function sparkyExecActions(actions) {
-  if (!actions || !actions.length) return 0;
-  const bb = App.state.breadboard;
-  let done = 0;
-  actions.forEach(a => {
-    try {
-      if (a.tool === 'place_resistor') {
-        const hA = bb.getHole(...parseHole(a.holeA));
-        const hB = bb.getHole(...parseHole(a.holeB));
-        if (hA && hB) { App.placeResistor(hA, hB); done++; }
-      } else if (a.tool === 'place_led') {
-        const hA = bb.getHole(...parseHole(a.holeA));
-        const hB = bb.getHole(...parseHole(a.holeB));
-        if (hA && hB) { App.placeLED(hA, hB); done++; }
-      } else if (a.tool === 'place_buzzer') {
-        const hA = bb.getHole(...parseHole(a.holeA));
-        const hB = bb.getHole(...parseHole(a.holeB));
-        if (hA && hB) { App.placeBuzzer(hA, hB); done++; }
-      } else if (a.tool === 'place_button') {
-        const hA = bb.getHole(...parseHole(a.holeA));
-        const hB = bb.getHole(...parseHole(a.holeB));
-        if (hA && hB) { App.placeButton(hA, hB); done++; }
-      } else if (a.tool === 'place_battery') {
-        App.placeBattery(13, 0); done++;
-      } else if (a.tool === 'add_wire') {
-        execWire(a.from, a.to, a.color); done++;
-      } else if (a.tool === 'remove_component') {
-        if (execRemoveComponent(a.id)) done++;
-      } else if (a.tool === 'remove_wire') {
-        if (execRemoveWire(a.from, a.to)) done++;
-      } else if (a.tool === 'delete_all') {
-        App.clearAll(); done++;
-      }
-    } catch (e) { console.warn('Action failed:', a, e.message); }
-  });
-  return done;
-}
-
-function execRemoveComponent(compId) {
-  if (!compId) return false;
-  // Parse id like "resistor_0", "led_1", "battery_0"
-  const m = compId.match(/^(\w+)_(\d+)$/);
-  if (!m) return false;
-  const type = m[1], idx = parseInt(m[2]);
-  const comps = App.state.components.filter(c => c.type === type);
-  const comp = comps[idx];
-  if (!comp) { console.warn('remove_component: not found:', compId); return false; }
-  // Remove from scene
-  (comp.pinMeshes || []).forEach(pm => App.scene.remove(pm));
-  App.scene.remove(comp.group);
-  App.state.components = App.state.components.filter(c => c !== comp);
-  console.log('Removed component:', compId);
-  return true;
-}
-
-function execRemoveWire(fromStr, toStr) {
-  if (!fromStr || !toStr) return false;
-  const bb = App.state.breadboard;
-  // Helper to normalize a wire endpoint to a comparable string
-  function holeKey(ref) {
-    if (!ref) return null;
-    return ref.row + (ref.col + 1);
-  }
-  function pinKey(comp, pinIdx) {
-    if (!comp) return null;
-    const idx = App.state.components.indexOf(comp);
-    return `${comp.type}_${idx}_pin${pinIdx}`;
-  }
-  function wireEndKey(w, side) {
-    if (side === 'start') {
-      if (w.startHole) return holeKey(w.startHole);
-      if (w.startComp) return pinKey(w.startComp, w.startPinIdx);
-    } else {
-      if (w.endHole) return holeKey(w.endHole);
-      if (w.endComp) return pinKey(w.endComp, w.endPinIdx);
-    }
-    return null;
-  }
-  // Normalize the from/to strings for comparison
-  const normFrom = fromStr.toLowerCase();
-  const normTo = toStr.toLowerCase();
-  // Find matching wire (check both orderings)
-  const idx = App.state.wires.findIndex(w => {
-    const ws = wireEndKey(w, 'start');
-    const we = wireEndKey(w, 'end');
-    if (!ws || !we) return false;
-    return (ws === normFrom && we === normTo) || (ws === normTo && we === normFrom);
-  });
-  if (idx === -1) { console.warn('remove_wire: not found:', fromStr, '→', toStr); return false; }
-  const wire = App.state.wires[idx];
-  App.scene.remove(wire.group);
-  App.state.wires.splice(idx, 1);
-  console.log('Removed wire:', fromStr, '→', toStr);
-  return true;
-}
-
-function execWire(fromStr, toStr, colorName) {
-  const bb = App.state.breadboard;
-  const COLOR_MAP = { red: 0xef4444, yellow: 0xfbbf24, green: 0x22c55e,
-                      blue: 0x3b82f6, black: 0x111111, white: 0xffffff };
-  const colorHex = colorName ? (COLOR_MAP[colorName.toLowerCase()] || 0xef4444) : App.state.wireColor;
-
-  function resolve(str) {
-    const pinM = str.match(/^(\w+)_(\d+)_pin(\d+)$/i);
-    if (pinM) {
-      const comps = App.state.components.filter(c => c.type === pinM[1]);
-      const comp  = comps[parseInt(pinM[2])];
-      if (comp) {
-        const pm = comp.pinMeshes[parseInt(pinM[3])];
-        if (pm) return { world: pm.userData.world.clone(), holeRef: null, pinMesh: pm };
-      }
-      return null;
-    }
-    const [col, row] = parseHole(str);
-    if (col === null) return null;
-    const h = bb.getHole(col, row);
-    if (!h) return null;
-    return { world: h.world.clone(), holeRef: { col: h.col, row: h.row }, pinMesh: null };
-  }
-
-  const start = resolve(fromStr);
-  const end   = resolve(toStr);
-  if (!start || !end) return;
-  const saved = App.state.wireColor;
-  App.state.wireColor = colorHex;
-  App.state.wireStart = start;
-  App.finishWire(end);
-  App.state.wireColor = saved;
-}
-
-// ── Preview / Accept / Decline ───────────────────────────────────
-
-let _pendingActions = null;
-let _pendingGhosts  = [];
-
-const _COLOR_MAP = { red: 0xef4444, yellow: 0xfbbf24, green: 0x22c55e,
-                     blue: 0x3b82f6, black: 0x111111, white: 0xffffff };
-
-function sparkyPreviewActions(actions) {
-  sparkyDeclineChanges();          // clear any stale preview first
-  if (!actions || !actions.length) return;
-  _pendingActions = actions;
-
-  const bb = App.state.breadboard;
-
-  // ── Pre-compute expected pin positions for pending components ──
-  // This lets wire ghosts resolve pins of components that don't exist yet.
-  const pendingPins = {};
-  const H = 2.6;                          // battery body height (must match buildBattery)
-  let pendingBatteryIdx = App.state.components.filter(c => c.type === 'battery').length;
-  for (const a of actions) {
-    if (a.tool === 'place_battery') {
-      const wx = 13, wz = 0;             // same as sparkyExecActions hardcoded position
-      pendingPins[`battery_${pendingBatteryIdx}_pin0`] = new THREE.Vector3(wx - 0.32, H + 0.54, wz);
-      pendingPins[`battery_${pendingBatteryIdx}_pin1`] = new THREE.Vector3(wx + 0.32, H + 0.24, wz);
-      pendingBatteryIdx++;
-    }
-  }
-
-  // ── Build a ghost for each action ─────────────────────────────
-  for (const a of actions) {
-    let ghost = null;
-
-    // Component ghosts — use existing buildPreview (already semi-transparent)
-    if (['place_resistor','place_led','place_buzzer','place_button'].includes(a.tool)) {
-      const type = a.tool.replace('place_', '');
-      const hA   = bb.getHole(...parseHole(a.holeA));
-      const hB   = bb.getHole(...parseHole(a.holeB));
-      if (hA && hB) {
-        const SPANS = { resistor: App.RESISTOR_SPAN, led: App.LED_SPAN,
-                        buzzer: App.BUZZER_SPAN, button: App.BUTTON_SPAN };
-        const rotation = hA.col === hB.col ? 1 : 0;
-        ghost = App.buildPreview(type, SPANS[type] || 2, bb.HS, rotation);
-        ghost.position.set((hA.x + hB.x) / 2, 0, (hA.z + hB.z) / 2);
-      }
-
-    } else if (a.tool === 'place_battery') {
-      ghost = App.buildPreview('battery', 0, bb.HS, 0);
-      ghost.position.set(13, 0, 0);
-
-    } else if (a.tool === 'add_wire') {
-      ghost = _buildWireGhost(a.from, a.to, a.color, pendingPins);
-
-    } else if (a.tool === 'remove_component') {
-      // Highlight the component to be removed with red tint
-      const m = a.id && a.id.match(/^(\w+)_(\d+)$/);
-      if (m) {
-        const comps = App.state.components.filter(c => c.type === m[1]);
-        const comp = comps[parseInt(m[2])];
-        if (comp && comp.group) {
-          comp.group.traverse(child => {
-            if (child.isMesh && child.material) {
-              child._origMaterial = child.material;
-              child.material = child.material.clone();
-              child.material.color.set(0xff0000);
-              child.material.transparent = true;
-              child.material.opacity = 0.5;
-            }
-          });
-          _pendingGhosts.push({ _isRemovalHighlight: true, comp: comp });
-        }
-      }
-
-    } else if (a.tool === 'remove_wire') {
-      // Highlight the wire to be removed with red tint
-      const normFrom = a.from?.toLowerCase(), normTo = a.to?.toLowerCase();
-      function hk(ref) { return ref ? ref.row + (ref.col + 1) : null; }
-      function pk(comp, pi) { const i = App.state.components.indexOf(comp); return comp ? `${comp.type}_${i}_pin${pi}` : null; }
-      const wire = App.state.wires.find(w => {
-        const ws = w.startHole ? hk(w.startHole) : pk(w.startComp, w.startPinIdx);
-        const we = w.endHole ? hk(w.endHole) : pk(w.endComp, w.endPinIdx);
-        return (ws === normFrom && we === normTo) || (ws === normTo && we === normFrom);
-      });
-      if (wire && wire.group) {
-        wire.group.traverse(child => {
-          if (child.isMesh && child.material) {
-            child._origMaterial = child.material;
-            child.material = child.material.clone();
-            child.material.color.set(0xff0000);
-            child.material.transparent = true;
-            child.material.opacity = 0.5;
-          }
-        });
-        _pendingGhosts.push({ _isRemovalHighlight: true, wire: wire });
-      }
-    }
-    // delete_all: no ghost mesh — flagged in the pending bar text instead
-
-    if (ghost) { App.scene.add(ghost); _pendingGhosts.push(ghost); }
-  }
-
-  // Show the pending bar
-  document.getElementById('sparky-pending-bar').style.display = 'flex';
-}
-
-function _buildWireGhost(fromStr, toStr, colorName, pendingPins) {
-  const bb  = App.state.breadboard;
-  const hex = colorName ? (_COLOR_MAP[colorName.toLowerCase()] || 0xef4444) : 0xef4444;
-
-  function resolvePos(str) {
-    // Check pending pins first (for not-yet-placed components e.g. battery preview)
-    if (pendingPins && pendingPins[str]) return pendingPins[str].clone();
-    // Try breadboard hole
-    const [col, row] = parseHole(str);
-    if (col !== null) {
-      const h = bb.getHole(col, row);
-      if (h) return new THREE.Vector3(h.x, 0.06, h.z);
-    }
-    // Try existing placed component pin
-    const pinM = str.match(/^(\w+)_(\d+)_pin(\d+)$/i);
-    if (pinM) {
-      const comps = App.state.components.filter(c => c.type === pinM[1]);
-      const comp  = comps[parseInt(pinM[2])];
-      const pm    = comp?.pinMeshes[parseInt(pinM[3])];
-      if (pm) return pm.userData.world.clone();
-    }
-    return null;
-  }
-
-  const start = resolvePos(fromStr);
-  const end   = resolvePos(toStr);
-  if (!start || !end) return null;
-
-  const g    = new THREE.Group();
-  const mat  = new THREE.MeshLambertMaterial({ color: hex, transparent: true, opacity: 0.42, depthWrite: false });
-  const dist = start.distanceTo(end);
-  const mid  = new THREE.Vector3(
-    (start.x + end.x) / 2,
-    Math.max(start.y, end.y) + dist * 0.22 + 0.38,
-    (start.z + end.z) / 2
-  );
-  const curve = new THREE.CatmullRomCurve3([start, mid, end]);
-  g.add(new THREE.Mesh(new THREE.TubeGeometry(curve, 26, 0.043, 7, false), mat));
-  return g;
-}
-
-function sparkyAcceptChanges() {
-  if (!_pendingActions) return;
-  const actions = _pendingActions;
-  _sparkyClearGhosts();
-  _pendingActions = null;
-  document.getElementById('sparky-pending-bar').style.display = 'none';
-
-  const n = sparkyExecActions(actions);
-  sparkyAddMsg(`✓ Applied ${n} change${n !== 1 ? 's' : ''} to your circuit.`, 'system');
-}
-
-function sparkyDeclineChanges() {
-  if (!_pendingActions) return;
-  _sparkyClearGhosts();
-  _pendingActions = null;
-  document.getElementById('sparky-pending-bar').style.display = 'none';
-  sparkyAddMsg('Changes declined.', 'system');
-}
-
-function _sparkyClearGhosts() {
-  _pendingGhosts.forEach(g => {
-    if (g._isRemovalHighlight) {
-      // Restore original materials on highlighted components/wires
-      const target = g.comp ? g.comp.group : g.wire ? g.wire.group : null;
-      if (target) {
-        target.traverse(child => {
-          if (child.isMesh && child._origMaterial) {
-            child.material = child._origMaterial;
-            delete child._origMaterial;
-          }
-        });
-      }
-    } else {
-      App.scene.remove(g);
-    }
-  });
-  _pendingGhosts = [];
-}
-
-// ── Main ask ─────────────────────────────────────────────────────
-
-async function sparkyAsk(overrideMsg) {
-  const input = document.getElementById('sparky-input');
-  const msg   = (overrideMsg !== undefined) ? overrideMsg : input.value.trim();
-  if (!msg) return;
-
-  // If there's an open preview, dismiss it before sending a new message
-  if (_pendingActions) {
-    _sparkyClearGhosts();
-    _pendingActions = null;
-    document.getElementById('sparky-pending-bar').style.display = 'none';
-  }
-
-  sparkyAddMsg(msg, 'user');
-  input.value = '';
-  input.style.height = 'auto';
-
-  const typingEl = sparkyTyping();
-
-  try {
-    const markdown = (typeof App !== 'undefined' && App.exportMarkdown)
-      ? App.exportMarkdown() : '_Board not ready._';
-
-    const data = await askSparky(markdown, msg, chatHistory.slice(-20));
-    typingEl.remove();
-    sparkyAddMsg(data.reply || '(no reply)', 'ai');
-
-    // Store turn pair for conversation memory
-    chatHistory.push({ role: 'user', text: msg });
-    chatHistory.push({ role: 'model', text: data.reply || '' });
-
-    if (data.actions && data.actions.length) {
-      sparkyPreviewActions(data.actions);
-    }
-
-  } catch (err) {
-    typingEl.remove();
-    sparkyAddMsg('⚠️ ' + err.message, 'system');
-  }
-
-}
-
-function sparkyQuick(msg) { sparkyAsk(msg); }
-
-document.addEventListener('DOMContentLoaded', () => {
-  const inp = document.getElementById('sparky-input');
-  if (!inp) return;
-  inp.addEventListener('keydown', e => {
-    if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sparkyAsk(); }
-  });
-  // Auto-resize textarea as user types
-  function autoResize() {
-    inp.style.height = 'auto';
-    inp.style.height = Math.min(inp.scrollHeight, 100) + 'px';
-  }
-  inp.addEventListener('input', autoResize);
-});
-</script>
+<script src="js/chat.js"></script>
+<script src="js/thumbs.js"></script>
 
 </body>
 </html>
