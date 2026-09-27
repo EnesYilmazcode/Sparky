@@ -6,12 +6,9 @@
  *
  * POST /api/ask            { markdown, message }  →  { reply, actions[] }
  * GET  /api/health
- * POST /api/auth/login     { email, password }    →  { access_token, ... }
- * POST /api/auth/signup    { email, password, name } → { access_token, ... }
- * GET  /api/auth/me                                →  { user }
- * GET  /api/circuits                               →  { circuits[] }
- * POST /api/circuits       { name, circuit }       →  { id, rev }
- * DELETE /api/circuits/:id                         →  { ok }
+ *
+ * Sign-in and saved circuits live in Firebase Auth and Firestore, called
+ * from the pages, so this server holds no user data.
  */
 
 const http = require('http');
@@ -39,84 +36,8 @@ const GEMINI_MODEL = process.env.GEMINI_MODEL || 'gemini-flash-latest';
 const GEMINI_URL   = `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent`;
 const PORT         = process.env.PORT || 5001;
 
-// Google OAuth 2.0 (free — create credentials at console.cloud.google.com)
-const GOOGLE_CLIENT_ID     = process.env.GOOGLE_CLIENT_ID;
-const GOOGLE_CLIENT_SECRET = process.env.GOOGLE_CLIENT_SECRET;
-
-// IBM Cloudant
-const CLOUDANT_URL    = process.env.CLOUDANT_URL;
-const CLOUDANT_APIKEY = process.env.CLOUDANT_APIKEY;
-const CLOUDANT_DB     = 'sparky_circuits';
-
 if (!GEMINI_KEY) {
   console.warn('Warning: GEMINI_API_KEY not set — /api/ask will fail');
-}
-if (!GOOGLE_CLIENT_ID || !GOOGLE_CLIENT_SECRET) {
-  console.warn('Warning: GOOGLE_CLIENT_ID / GOOGLE_CLIENT_SECRET not set — auth endpoints will fail');
-}
-if (!CLOUDANT_URL || !CLOUDANT_APIKEY) {
-  console.warn('Warning: CLOUDANT_URL / CLOUDANT_APIKEY not set — circuit storage endpoints will fail');
-}
-
-// ── Cloudant IAM token cache ──────────────────────────────────
-let _cloudantToken = null, _cloudantTokenExpiry = 0;
-
-async function getCloudantToken() {
-  if (_cloudantToken && Date.now() < _cloudantTokenExpiry) return _cloudantToken;
-  const res = await fetch('https://iam.cloud.ibm.com/identity/token', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-    body: `grant_type=urn:ibm:params:oauth:grant-type:apikey&apikey=${CLOUDANT_APIKEY}`,
-  });
-  if (!res.ok) throw new Error(`Cloudant IAM auth failed: ${res.status}`);
-  const data = await res.json();
-  _cloudantToken = data.access_token;
-  _cloudantTokenExpiry = Date.now() + (data.expires_in - 120) * 1000;
-  return _cloudantToken;
-}
-
-async function cloudantRequest(method, dbPath, body) {
-  const token = await getCloudantToken();
-  const url = `${CLOUDANT_URL}/${CLOUDANT_DB}${dbPath}`;
-  const opts = {
-    method,
-    headers: {
-      'Authorization': `Bearer ${token}`,
-      'Content-Type': 'application/json',
-    },
-  };
-  if (body) opts.body = JSON.stringify(body);
-  return fetch(url, opts);
-}
-
-async function ensureCloudantIndex() {
-  try {
-    await cloudantRequest('POST', '/_index', {
-      index: { fields: ['userId', 'savedAt'] },
-      name: 'user-circuits-idx',
-      type: 'json',
-    });
-    console.log('   Cloudant index ready');
-  } catch (e) {
-    console.warn('   Cloudant index warning:', e.message);
-  }
-}
-
-// ── Google OAuth auth helper ─────────────────────────────────
-async function authenticateRequest(req) {
-  const authHeader = req.headers['authorization'];
-  if (!authHeader || !authHeader.startsWith('Bearer ')) return null;
-  const token = authHeader.slice(7);
-  try {
-    const res = await fetch('https://www.googleapis.com/oauth2/v3/userinfo', {
-      headers: { 'Authorization': `Bearer ${token}` },
-    });
-    if (!res.ok) return null;
-    const info = await res.json();
-    return { sub: info.sub, email: info.email, name: info.name };
-  } catch {
-    return null;
-  }
 }
 
 // ── Gemini system prompt ─────────────────────────────────────
@@ -465,27 +386,6 @@ function askRateLimited(req) {
   return hits.length > ASK_MAX_PER_WINDOW;
 }
 
-// The OAuth popup hands its result to the opener. Payload values come from the
-// callback query string, so they are carried in a JSON block and read with
-// textContent. Interpolating them into the script itself is a reflected XSS.
-// `<` is escaped because JSON.stringify would otherwise let a value close the
-// block early with a literal </script>.
-function oauthPopupPage(payload) {
-  const json = JSON.stringify(payload).replace(/</g, '\\u003c');
-  return '<!doctype html><html><body>'
-    + '<script type="application/json" id="oauth-result">' + json + '</' + 'script>'
-    + '<script>(function(){'
-    + 'var d=JSON.parse(document.getElementById("oauth-result").textContent);'
-    + 'if(window.opener)window.opener.postMessage(d,"*");'
-    + 'window.close();})();</' + 'script>'
-    + '</body></html>';
-}
-
-function sendOAuthPopup(res, payload) {
-  res.writeHead(200, { 'Content-Type': 'text/html' });
-  res.end(oauthPopupPage(payload));
-}
-
 const server = http.createServer(async (req, res) => {
   setCORS(res);
   if (req.method === 'OPTIONS') { res.writeHead(204); res.end(); return; }
@@ -513,136 +413,6 @@ const server = http.createServer(async (req, res) => {
       }
     });
     return;
-  }
-
-  // ── Auth: Google OAuth (direct, no IBM) ─────────────────────
-  if (req.method === 'GET' && req.url === '/api/auth/google') {
-    const proto = req.headers['x-forwarded-proto'] || 'http';
-    const host = req.headers['host'] || `localhost:${PORT}`;
-    const redirectUri = `${proto}://${host}/api/auth/callback`;
-    const authUrl = `https://accounts.google.com/o/oauth2/v2/auth?client_id=${GOOGLE_CLIENT_ID}&redirect_uri=${encodeURIComponent(redirectUri)}&response_type=code&scope=openid+email+profile&access_type=offline&prompt=consent`;
-    res.writeHead(302, { Location: authUrl });
-    res.end();
-    return;
-  }
-
-  // ── Auth: Google OAuth callback ────────────────────────────
-  if (req.method === 'GET' && req.url.startsWith('/api/auth/callback')) {
-    try {
-      const cbProto = req.headers['x-forwarded-proto'] || 'http';
-      const cbHost = req.headers['host'] || `localhost:${PORT}`;
-      const urlObj = new URL(req.url, `${cbProto}://${cbHost}`);
-      const code = urlObj.searchParams.get('code');
-      const error = urlObj.searchParams.get('error');
-
-      if (error || !code) {
-        sendOAuthPopup(res, { error: error || 'No code received' });
-        return;
-      }
-
-      const redirectUri = `${cbProto}://${cbHost}/api/auth/callback`;
-      const tokenRes = await fetch('https://oauth2.googleapis.com/token', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-        body: `code=${code}&client_id=${GOOGLE_CLIENT_ID}&client_secret=${GOOGLE_CLIENT_SECRET}&redirect_uri=${encodeURIComponent(redirectUri)}&grant_type=authorization_code`,
-      });
-
-      if (!tokenRes.ok) {
-        const err = await tokenRes.text();
-        console.error('Token exchange failed:', err);
-        sendOAuthPopup(res, { error: 'Login failed' });
-        return;
-      }
-
-      const tokens = await tokenRes.json();
-      console.log('[auth] Google login successful');
-      sendOAuthPopup(res, { access_token: tokens.access_token });
-    } catch (e) {
-      console.error('Callback error:', e.message);
-      sendOAuthPopup(res, { error: 'Login failed' });
-    }
-    return;
-  }
-
-  // ── Auth: Me (validate token) ──────────────────────────────
-  if (req.method === 'GET' && req.url === '/api/auth/me') {
-    try {
-      const user = await authenticateRequest(req);
-      if (!user) return sendJSON(res, 401, { error: 'Not authenticated' });
-      return sendJSON(res, 200, { user });
-    } catch (e) {
-      return sendJSON(res, 401, { error: 'Not authenticated' });
-    }
-  }
-
-  // ── Circuits: List ─────────────────────────────────────────
-  if (req.method === 'GET' && req.url === '/api/circuits') {
-    try {
-      const user = await authenticateRequest(req);
-      if (!user) return sendJSON(res, 401, { error: 'Not authenticated' });
-
-      const queryRes = await cloudantRequest('POST', '/_find', {
-        selector: { userId: user.sub, type: 'circuit' },
-        sort: [{ savedAt: 'desc' }],
-        limit: 100,
-      });
-      const data = await queryRes.json();
-      return sendJSON(res, 200, { circuits: data.docs || [] });
-    } catch (e) {
-      console.error('List circuits error:', e.message);
-      return sendJSON(res, 500, { error: e.message });
-    }
-  }
-
-  // ── Circuits: Create ───────────────────────────────────────
-  if (req.method === 'POST' && req.url === '/api/circuits') {
-    let body = '';
-    req.on('data', chunk => (body += chunk));
-    req.on('end', async () => {
-      try {
-        const user = await authenticateRequest(req);
-        if (!user) return sendJSON(res, 401, { error: 'Not authenticated' });
-
-        const { name, circuit } = JSON.parse(body || '{}');
-        const doc = {
-          type: 'circuit',
-          userId: user.sub,
-          name: name || 'Untitled Circuit',
-          circuit,
-          savedAt: Date.now(),
-        };
-        const saveRes = await cloudantRequest('POST', '', doc);
-        const result = await saveRes.json();
-        console.log(`[circuits] saved "${doc.name}" for ${user.email}`);
-        return sendJSON(res, 201, { id: result.id, rev: result.rev });
-      } catch (e) {
-        console.error('Save circuit error:', e.message);
-        return sendJSON(res, 500, { error: e.message });
-      }
-    });
-    return;
-  }
-
-  // ── Circuits: Delete ───────────────────────────────────────
-  const delMatch = req.url.match(/^\/api\/circuits\/([^/?]+)$/);
-  if (req.method === 'DELETE' && delMatch) {
-    try {
-      const user = await authenticateRequest(req);
-      if (!user) return sendJSON(res, 401, { error: 'Not authenticated' });
-
-      const docId = decodeURIComponent(delMatch[1]);
-      const getRes = await cloudantRequest('GET', `/${docId}`, null);
-      if (!getRes.ok) return sendJSON(res, 404, { error: 'Not found' });
-      const existing = await getRes.json();
-      if (existing.userId !== user.sub) return sendJSON(res, 403, { error: 'Forbidden' });
-
-      await cloudantRequest('DELETE', `/${docId}?rev=${existing._rev}`, null);
-      console.log(`[circuits] deleted "${existing.name}" for ${user.email}`);
-      return sendJSON(res, 200, { ok: true });
-    } catch (e) {
-      console.error('Delete circuit error:', e.message);
-      return sendJSON(res, 500, { error: e.message });
-    }
   }
 
   // ── Static file serving ───────────────────────────────────
@@ -711,5 +481,4 @@ server.listen(PORT, () => {
   console.log(`   AI    : ${process.env.AI_PROVIDER || 'gemini'}`);
   console.log(`   Model : ${GEMINI_MODEL}`);
   console.log(`   Health: http://localhost:${PORT}/api/health`);
-  if (CLOUDANT_URL && CLOUDANT_APIKEY) ensureCloudantIndex();
 });
