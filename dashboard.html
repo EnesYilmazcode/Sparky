@@ -529,6 +529,8 @@
     .gate-inner { display: flex; flex-direction: column; align-items: center; gap: 0.6rem; max-width: 24rem; }
     .gate-inner svg { color: var(--amber); }
     .gate-text { font-weight: 500; color: var(--ink-2); }
+    .gate-hint { font-size: 0.875rem; color: var(--ink-3); }
+    .gate-hint a { color: var(--amber-ink); font-weight: 600; }
 
     /* ── Motion ──────────────────────────────────────────── */
     @keyframes breathe { 50% { opacity: 0.35; } }
@@ -594,6 +596,7 @@
     <div class="gate-inner">
       <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/></svg>
       <p class="gate-text" id="gate-text">Checking your sign-in</p>
+      <p class="gate-hint" id="gate-hint" hidden></p>
     </div>
   </div>
 
@@ -815,6 +818,12 @@
         console.error('Sign out failed:', e);
         showToast('Could not sign out. Check your connection.');
       });
+    }
+
+    function gateHint(text, linkText, href) {
+      const hint = document.getElementById('gate-hint');
+      hint.replaceChildren(text, ' ', h('a', { href }, linkText));
+      hint.hidden = false;
     }
 
     function showUser(user) {
@@ -1365,22 +1374,29 @@
 
     // Auth gate: the page stays covered until Firebase confirms a session,
     // and visitors without one go to the landing page's sign-in.
-    firebase.initializeApp(firebaseConfig);
-    auth = firebase.auth();
-    db   = firebase.firestore();
+    if (!window.firebase) {
+      document.getElementById('gate-text').textContent = 'Could not load sign-in';
+      gateHint('Check your connection and reload the page, or', 'go back to the home page', 'landing.html');
+    } else {
+      firebase.initializeApp(firebaseConfig);
+      auth = firebase.auth();
+      db   = firebase.firestore();
+      const slow = setTimeout(() => gateHint('This is taking a while. Check your connection, or', 'go back to the home page', 'landing.html'), 8000);
 
-    auth.onAuthStateChanged(user => {
-      if (!user) {
-        window.location.replace('landing.html#signin');
-        return;
-      }
-      _currentUser = user;
-      _authUsername = user.email ? user.email.split('@')[0] : (user.displayName || '');
-      localStorage.setItem('sparky_username', _authUsername);
-      showUser(user);
-      document.getElementById('auth-gate').hidden = true;
-      if (!document.getElementById('tab-sparks').hidden) renderSparks();
-    });
+      auth.onAuthStateChanged(user => {
+        clearTimeout(slow);
+        if (!user) {
+          window.location.replace('landing.html#signin');
+          return;
+        }
+        _currentUser = user;
+        _authUsername = user.email ? user.email.split('@')[0] : (user.displayName || '');
+        localStorage.setItem('sparky_username', _authUsername);
+        showUser(user);
+        document.getElementById('auth-gate').hidden = true;
+        if (!document.getElementById('tab-sparks').hidden) renderSparks();
+      });
+    }
   </script>
 </body>
 </html>
