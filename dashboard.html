@@ -1105,8 +1105,11 @@
           const data = JSON.parse(text);
           const name = (typeof data.name === 'string' && data.name.trim()) ||
                        file.name.replace(/\.(sparky|json)$/i, '').replace(/_/g, ' ');
+          // Always a new id: keeping the file's id overwrote any circuit that
+          // shared it, and a file passed between two people gave both the
+          // same spark id, so the second one could never publish it.
           saveCircuitLocal({
-            id:        typeof data.id === 'string' && data.id ? data.id : (Date.now().toString(36) + Math.random().toString(36).slice(2)),
+            id:        Date.now().toString(36) + Math.random().toString(36).slice(2),
             name,
             thumbnail: safeThumb(data.thumbnail),
             updatedAt: new Date().toISOString(),
