@@ -1,7 +1,8 @@
 {
   "scripts": {
     "studio": "remotion studio",
-    "build": "remotion render src/index.ts SparkyDemo out/sparky-demo.mp4"
+    "build": "remotion render src/index.ts SparkyDemo out/sparky-demo.mp4",
+    "test": "node --test && node test/mna.test.js"
   },
   "dependencies": {
     "@react-three/fiber": "^8.18.0",
