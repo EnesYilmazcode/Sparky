@@ -85,6 +85,7 @@ Click a part in the library to start placing it. Drag to orbit, right-drag to pa
 ```
 landing.html            The front page, with a live 3D preview
 dashboard.html          Your saved circuits and the shared gallery (Firebase)
+media/                  The front page's four feature loops, rendered from the part models
 circuit3d/
   index.html            The editor
   viewer.html           The read-only preview the front page embeds
