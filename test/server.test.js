@@ -4,6 +4,8 @@
 
 const test   = require('node:test');
 const assert = require('node:assert');
+const path   = require('path');
+const { spawn } = require('child_process');
 
 const BM = require('../circuit3d/js/board-model.js');
 const { checkBuild } = require('../backend/verify.js');
@@ -172,6 +174,38 @@ test('pages and API answers carry the security headers', async () => {
       assert.equal(res.headers.get('content-security-policy'), "frame-ancestors 'self'");
     }
   });
+});
+
+// Runs `node backend/server.js` the way Render does, on a free port. Values
+// set here win over backend/.env, and /api/health never calls the model.
+function startMain(env) {
+  return new Promise((resolve, reject) => {
+    const child = spawn(process.execPath, [path.join(__dirname, '..', 'backend', 'server.js')], {
+      env: Object.assign({}, process.env, { AI_PROVIDER: 'gemini', RECORD_FIXTURES: '', PORT: '0' }, env),
+    });
+    let out = '';
+    const timer = setTimeout(() => { child.kill(); reject(new Error('server did not start: ' + out)); }, 10000);
+    child.stdout.on('data', d => {
+      out += d;
+      const m = /http:\/\/localhost:(\d+)/.exec(out);
+      if (m) { clearTimeout(timer); resolve({ child, base: `http://127.0.0.1:${m[1]}` }); }
+    });
+    child.on('exit', code => { clearTimeout(timer); reject(new Error(`server exited with ${code}: ${out}`)); });
+  });
+}
+
+test('/api/health says whether the AI is configured, and never shows the key', async () => {
+  for (const [key, ai] of [['test-key-not-real', true], ['', false]]) {
+    const { child, base } = await startMain({ GEMINI_API_KEY: key, GEMINI_MODEL: 'gemini-test-model' });
+    try {
+      const res = await fetch(base + '/api/health');
+      const text = await res.text();
+      assert.deepEqual(JSON.parse(text), { status: 'ok', model: 'gemini-test-model', ai });
+      if (key) assert.ok(!text.includes(key));
+    } finally {
+      child.kill();
+    }
+  }
 });
 
 test('the static site is still served, and the removed auth and storage routes are gone', async () => {

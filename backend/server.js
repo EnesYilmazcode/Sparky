@@ -5,7 +5,7 @@
  *
  * POST /api/ask     { message, history, board, markdown }
  *                   -> { reply, actions, notes, verification }
- * GET  /api/health  -> { status, model }
+ * GET  /api/health  -> { status, model, ai }
  *
  * Everything else is the static site from the repo root. Sign-in and saved
  * circuits live in Firebase Auth and Firestore, called from the pages, so
@@ -369,8 +369,10 @@ function createServer({ generate = null, model = '', rateLimit, csp = DEFAULT_CS
     if (url.startsWith('/api/')) setCORS(req, res);
     if (req.method === 'OPTIONS') { res.writeHead(204); res.end(); return; }
 
+    // `ai` says whether a model is configured, so a deploy missing its key
+    // shows up here instead of as 503s in the chat.
     if (req.method === 'GET' && url === '/api/health') {
-      return sendJSON(res, 200, { status: 'ok', model });
+      return sendJSON(res, 200, { status: 'ok', model, ai: !!generate });
     }
     if (req.method === 'POST' && url === '/api/ask') {
       handleAsk(req, res).catch(e => {
@@ -414,11 +416,13 @@ function main() {
     console.error('Unhandled rejection:', err && err.stack ? err.stack : err);
   });
 
-  createServer({ generate, model }).listen(port, () => {
-    console.log(`Sparky on http://localhost:${port}`);
-    console.log(`   AI    : ${provider}`);
+  const server = createServer({ generate, model });
+  server.listen(port, () => {
+    const bound = server.address().port;        // PORT=0 picks a free one
+    console.log(`Sparky on http://localhost:${bound}`);
+    console.log(`   AI    : ${provider}${generate ? '' : ' (not configured)'}`);
     console.log(`   Model : ${model}`);
-    console.log(`   Health: http://localhost:${port}/api/health`);
+    console.log(`   Health: http://localhost:${bound}/api/health`);
   });
 }
 
