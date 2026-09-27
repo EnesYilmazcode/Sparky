@@ -1,142 +1,113 @@
-# Sparky
+<h1 align="center">Sparky</h1>
 
-A 3D circuit designer that runs right in your browser. Drop components onto a breadboard, wire them up, simulate the circuit, and ask the built-in AI tutor for help.
+<p align="center"><b>A 3D breadboard in your browser, with an AI tutor that checks its own work.</b><br>
+Place parts, wire them up and run the circuit. Ask Sparky to build something and it tests the build in the same simulator before you see it.</p>
 
-**[Try it live at sparky-na2c.onrender.com](https://sparky-na2c.onrender.com/landing.html)**
+<p align="center">
+  <a href="https://buildwithsparky.web.app"><img src="docs/editor.jpg" width="860" alt="The Sparky editor: a 9V battery, a push button, a 470 ohm resistor and a lit red LED on a breadboard, next to Sparky's reply and its simulator check"></a><br>
+  <a href="https://buildwithsparky.web.app"><b>Open Sparky</b></a>
+</p>
 
-![Sparky Circuit Designer](https://raw.githubusercontent.com/EnesYilmazcode/Sparky/main/demo.png)
+## What it does
 
----
+- **Build in 3D.** Resistors, LEDs, a 9V battery, a buzzer and a push button, modeled to scale on a 700-hole breadboard. Leads bend to fit the holes they are given, and every hole takes exactly one lead or one wire end.
+- **Wire it.** Click two holes, or a hole and a battery terminal. Six wire colors.
+- **Run it.** The simulator solves the whole circuit, so each LED lights at the current it really gets. Click the button while it runs to press it.
+- **Ask Sparky.** Tell it what to build, or ask why an LED is dark. Every build it proposes shows up as ghost parts on your board with the simulator's verdict, and nothing changes until you press Apply.
+- **Keep it.** Undo and redo, save and open `.sparky` files, and after signing in, a dashboard of your circuits and a gallery to share them in.
 
-## What can it do?
+The editor and the simulator run entirely in the browser. Only Sparky needs the server.
 
-- **Build circuits in 3D** -- place resistors, LEDs, batteries, buzzers, and push buttons onto a realistic breadboard
-- **Draw wires** between any two holes or pins, pick from 6 colors
-- **Simulate** -- hit play and watch LEDs light up, click buttons to open/close the circuit in real time
-- **AI tutor** -- ask Sparky a question and it explains what's going on, or tell it to build a circuit and it places the parts for you
-- **Conversation memory** -- Sparky remembers your conversation within a session so you can build on previous messages
-- **Save and load** -- export your circuits as `.sparky` files and share them
+## How the simulation works
 
-## Quick start
+The board becomes a netlist. The five holes of a strip (a to e, or f to j, in one column) are one node, each rail is one node, and a wire joins two nodes. A resistor stamps a conductance, the battery is a voltage source, a pressed button is a short and an LED is a diode whose forward voltage comes from its color (2.0 V red, 2.2 V green, 3.2 V blue).
 
-Open `circuit3d/index.html` in your browser. That's it. No install, no server, no npm.
+[`circuit3d/js/mna.js`](circuit3d/js/mna.js) solves that netlist with Modified Nodal Analysis, the method SPICE uses. The diodes are nonlinear, so it runs Newton-Raphson until the node voltages stop moving. Out come every node voltage and every branch current. Two LEDs in parallel share the current properly, a backwards LED blocks it, and a resistor that is too small shows up as 70 mA through a part rated for 20.
 
-The AI tutor needs the backend, because that is where the Gemini key lives. The browser never holds a key: the chat panel posts to same-origin `/api/ask` and the server calls Google.
+## How Sparky works
 
-**Run the backend if you want the AI tutor.** The 3D designer, wiring and simulation all work without it.
+```mermaid
+flowchart LR
+  Q["You: make the button turn on an LED"] --> M["Gemini answers with tool calls: place_resistor, place_led, add_wire"]
+  M --> R["board-model.js replays them on your board"]
+  R --> S["simulate.js runs the result, with the button pressed"]
+  S -->|works| P["Ghost parts and the verdict, then Apply or Discard"]
+  S -->|does not work| F["What went wrong goes back to the model"]
+  F -->|up to twice| M
+```
 
-`backend/server.js` is a standalone Node 18+ server with zero npm dependencies. It serves the static files and exposes `/api/ask`, which is what the chat panel calls. It also carries optional Google OAuth routes and Cloudant storage, which the shipped frontend does not use: sign-in and cloud sharing go through Firebase Auth and Firestore.
+The server sends your board and the conversation to Gemini, which answers with tool calls such as `place_led(holeA: "c13", holeB: "c11")`. [`board-model.js`](circuit3d/js/board-model.js) replays them against your board: a lead aimed at a taken hole moves along its strip to a free one, so parts never stack. [`backend/verify.js`](backend/verify.js) then runs the result through the same simulator the editor uses. If an LED stays dark or burns out, the reason goes back to the model and it tries again, twice at most. The reply says what the first try got wrong.
+
+The editor replays the same actions through the same board model, so the preview, the parts you apply and the server's check always agree.
+
+## Run it locally
+
+The server serves the pages and answers Sparky:
 
 ```bash
 cd backend
-
-# Create a .env file with your API key
-echo "GEMINI_API_KEY=your_gemini_api_key_here" > .env
-
+echo "GEMINI_API_KEY=your_key_here" > .env
 node server.js
 ```
 
-Then open `http://localhost:5001`.
+Then open `http://localhost:5001`. The server is Node 18 or newer with no dependencies. The Gemini key only ever lives on the server; the browser posts to `/api/ask`.
+
+| Variable | Default | What it does |
+| --- | --- | --- |
+| `GEMINI_API_KEY` | | Your [Gemini API key](https://aistudio.google.com/apikey). Needed unless `AI_PROVIDER` says otherwise |
+| `GEMINI_MODEL` | `gemini-flash-latest` | Pin a Gemini model |
+| `AI_PROVIDER` | `gemini` | `claude` uses the local Claude Code CLI, `fixture` replays recorded answers with no key |
+| `CLAUDE_MODEL` | `sonnet` | Model for the `claude` provider |
+| `PORT` | `5001` | Server port |
+
+## Tests
+
+```bash
+npm test
+```
+
+Runs the board model, the solver, the simulator, the build checker and the server against a stub model. Nothing touches the network.
 
 ## Controls
 
 | Key | What it does |
 | --- | --- |
-| `S` | Select mode -- click stuff to select it, then Delete to remove |
-| `P` | Place mode -- hover to preview, click to drop |
-| `W` | Wire mode -- click two holes/pins to connect them |
-| `R` | Rotate component before placing |
-| `Esc` | Cancel whatever you're doing |
-| `Ctrl+Z` | Undo the last placement, wire, delete, Clear All, or file open |
-| `Ctrl+Shift+Z` | Redo |
+| `S` | Select: click a part or a wire, then Delete removes it |
+| `W` | Wire: click two holes or pins |
+| `R` | Rotate the part you are placing |
+| `Esc` | Cancel |
+| `Ctrl+Z` / `Ctrl+Shift+Z` | Undo / redo |
 
-You can also just click components in the sidebar to start placing them.
-
-## How the simulation works
-
-The simulator models the breadboard as a graph. Holes in the same column on the same side of the center channel are electrically connected (just like a real breadboard). Power rails run the full length of the board.
-
-When you hit simulate, it:
-1. Maps every hole and wire into a connectivity graph using Union-Find
-2. Finds **all** paths from battery+ to battery- (not just the first one, this is what makes parallel circuits work)
-3. Calculates current through each path: `I = (9V - LED voltage drops) / total resistance`
-4. Lights up any LED getting enough current
-
-Push buttons work during simulation too -- click them to toggle the circuit on and off.
-
-## How the AI works
-
-When you send a message, the app snapshots your entire board (components, positions, wires) as a markdown table and sends it to Gemini along with your question and your conversation history.
-
-Gemini uses **function calling** to interact with the board. Instead of generating raw JSON, it calls structured tools like `place_resistor(holeA="a3", holeB="a7")` and `add_wire(from="tp_3", to="a3", color="red")`. The returned tool calls are shown as a ghost preview first, and only get applied to the board when you accept them.
-
-So you can literally type "build me 3 LEDs" and watch it happen.
-
-Before returning the tool calls, the server checks the proposed circuit for problems it can describe: an unpowered battery, a backwards LED, an LED that is not between power and ground. It reports them alongside the reply rather than silently rewriting your circuit.
+Click a part in the library to start placing it. Drag to orbit, right-drag to pan, scroll to zoom.
 
 ## Project structure
 
 ```
-landing.html          Marketing page + Firebase sign-in
-dashboard.html        Saved circuits, shared "sparks" (Firestore)
-
+landing.html            The front page, with a live 3D preview
+dashboard.html          Your saved circuits and the shared gallery (Firebase)
 circuit3d/
-  index.html          The app (+ inline chat JS and Gemini calls)
-  css/                 Styling
+  index.html            The editor
+  viewer.html           The read-only preview the front page embeds
   js/
-    scene.js           Three.js scene setup
-    breadboard.js      Procedural breadboard geometry
-    components.js      3D component models
-    interaction.js     Mouse/keyboard handling
-    simulate.js        Circuit simulation engine
-    app.js             Ties everything together
-
+    board-model.js      Hole addresses, part ids, one lead per hole, replaying actions
+    breadboard.js       The board: geometry, drawn holes, connectivity
+    components.js       The part models
+    scene.js            Renderer, lights and camera
+    interaction.js      Placing, wiring and selecting
+    mna.js              The circuit solver
+    simulate.js         Board to netlist, results, lit LEDs and buzzers
+    chat.js             The Sparky panel: ask, preview, apply
+    inspector.js        The selected part's values
+    app.js              State, undo, saving and loading
 backend/
-  server.js            AI backend + static server (zero npm dependencies)
-  .env                 Your API key (not committed)
+  server.js             Static files and /api/ask
+  verify.js             Runs every proposed build in the simulator
+  ai-providers.js       Gemini, the Claude CLI, or recorded fixtures
+test/                   node --test suites
 ```
 
-Everything is vanilla JS. No build tools, no frameworks, no bundler. The 3D components are all built from basic Three.js shapes, so the whole app works offline from the file system (minus the AI).
-
-## Tech stack
-
-| What | How |
-| --- | --- |
-| 3D | Three.js r128 from CDN |
-| Frontend | Plain HTML/CSS/JS |
-| AI model | Gemini, called server-side. Defaults to `gemini-flash-latest`, set `GEMINI_MODEL` to pin one |
-| AI features | Native function calling, conversation memory, preview before apply |
-| Auth + cloud storage | Firebase Auth + Firestore |
-| Optional backend | Node.js http module, zero dependencies |
-
-## .env reference
-
-| Variable | Required | Description |
-| --- | --- | --- |
-| `GEMINI_API_KEY` | Yes | Your Google Gemini API key ([get one here](https://aistudio.google.com/apikey)) |
-| `GEMINI_MODEL` | No | Gemini model id (default: `gemini-flash-latest`) |
-| `AI_PROVIDER` | No | `gemini`, `claude` for the local Claude Code CLI, or `fixture` to replay recorded responses with no key |
-| `PORT` | No | Server port (default: 5001) |
-| `GOOGLE_CLIENT_ID` | No | Google OAuth 2.0 client ID (for login, [setup guide below](#google-oauth-setup)) |
-| `GOOGLE_CLIENT_SECRET` | No | Google OAuth 2.0 client secret |
-| `CLOUDANT_URL` | No | IBM Cloudant URL (for cloud circuit storage) |
-| `CLOUDANT_APIKEY` | No | IBM Cloudant API key |
-
-`GEMINI_API_KEY` is required for the AI tutor unless you set `AI_PROVIDER` to `claude` or `fixture`, which need no key at all. The rest are optional: Google OAuth and Cloudant power the backend's own login and storage routes, while the shipped frontend uses Firebase Auth and Firestore for sign-in and cloud sharing.
-
-## Google OAuth setup
-
-This is **optional** and applies to the backend's own login route only. The shipped app signs in through Firebase, so you do not need any of this to use Sparky.
-
-1. Go to [Google Cloud Console](https://console.cloud.google.com/apis/credentials)
-2. Create a new project (or select an existing one)
-3. Click **Create Credentials** → **OAuth 2.0 Client ID**
-4. Set application type to **Web application**
-5. Under **Authorized redirect URIs**, add:
-   - `http://localhost:5001/api/auth/callback` (for local dev)
-   - Your production URL + `/api/auth/callback` (if deploying)
-6. Copy the **Client ID** and **Client Secret** into your `.env` file
+Plain HTML, CSS and JavaScript with [three.js](https://threejs.org) r128. No build step.
 
 ---
 
-*Made by [Enes Yilmaz](https://enes.web.app) and Colin Lee*
+<sub>Made by [Enes Yilmaz](https://enes.web.app) and [Colin Lee](https://github.com/ColinL-code).</sub>
