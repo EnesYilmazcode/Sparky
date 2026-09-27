@@ -17,6 +17,7 @@
 const http = require('http');
 const fs   = require('fs');
 const path = require('path');
+const BoardModel = require('../circuit3d/js/board-model.js');
 const { makeProvider } = require('./ai-providers');
 const { answer } = require('./verify');
 
@@ -34,140 +35,138 @@ function loadEnv() {
   } catch { /* .env optional */ }
 }
 
-// ── Gemini system prompt ─────────────────────────────────────
+// ── The tutor's instructions ─────────────────────────────────
+// The one-LED build the prompt teaches, at column c(0). The prompt
+// prints it with symbolic columns and the tests build it for real,
+// so the recipe cannot drift into one that breaks a rule.
+function ledRecipe(c) {
+  return [
+    { tool: 'add_wire', from: `tp_${c(0)}`, to: `a${c(0)}`, color: 'red' },
+    { tool: 'place_resistor', holeA: `c${c(0)}`, holeB: `c${c(4)}` },
+    { tool: 'place_led', holeA: `e${c(6)}`, holeB: `e${c(4)}` },
+    { tool: 'add_wire', from: `a${c(6)}`, to: `tn_${c(6)}`, color: 'black' },
+  ];
+}
+
+const POWER_RECIPE = [
+  { tool: 'delete_all' },
+  { tool: 'place_battery' },
+  { tool: 'add_wire', from: 'battery_0_pin0', to: 'tp_1', color: 'red' },
+  { tool: 'add_wire', from: 'battery_0_pin1', to: 'tn_1', color: 'black' },
+];
+
+function recipeLine(a) {
+  if (a.tool === 'add_wire') return `add_wire ${a.from} -> ${a.to} (${a.color})`;
+  if (a.tool === 'place_led') return `place_led holeA=${a.holeA} (cathode), holeB=${a.holeB} (anode)`;
+  if (a.holeA) return `${a.tool} holeA=${a.holeA}, holeB=${a.holeB}`;
+  return a.tool;
+}
+
 const SYSTEM_PROMPT = [
-  'You are Sparky, a friendly AI electronics tutor. You help beginners build circuits on a virtual 700-point breadboard.',
+  'You are Sparky, a friendly electronics tutor. Beginners build circuits on a virtual breadboard, and you help by explaining and by calling tools that change their board.',
   '',
-  'BREADBOARD LAYOUT:',
-  '- Columns 1-50. Rows a/b/c/d/e = top half. Rows f/g/h/i/j = bottom half.',
-  '- Same column + same half = electrically connected (e.g. a14 and e14 share a node).',
-  '- The CENTER CHANNEL separates top from bottom. a14 and f14 are NOT connected unless you wire them.',
-  '- tp_N = positive power rail at column N (+9V). tn_N = GND rail at column N.',
-  '- Rails are NOT auto-connected to body holes. Always wire from tp/tn to body holes.',
+  'THE BOARD',
+  '- Columns 1-50. Rows a-e are the top half, rows f-j the bottom half.',
+  '- A strip is the 5 holes of one column in one half: a7, b7, c7, d7 and e7 are connected. a7 and f7 are not; the center gap splits them.',
+  '- The rails run the whole length: every tp hole is one connection, every tn hole another. Nothing reaches a rail until it is wired to it.',
+  '- One lead or wire end per hole. To join two things, put them in different holes of the same strip.',
   '',
-  'BATTERY (CRITICAL):',
-  '- pin0 = positive (+), pin1 = negative (-). The battery sits off-board.',
-  '- EVERY circuit needs a battery with TWO wires:',
-  '  1. add_wire from "battery_0_pin0" to "tp_N" (red wire)',
-  '  2. add_wire from "battery_0_pin1" to "tn_N" (black wire)',
-  '- Without BOTH battery wires the circuit WILL NOT WORK. ALWAYS include them.',
+  'PARTS',
+  '- Ids count per type in placement order: the first LED is led_0, the second led_1, the first battery battery_0.',
+  '- The 9V battery sits off the board: battery_0_pin0 is +, battery_0_pin1 is -. Wire + to tp_1 and - to tn_1, which makes tp the + rail and tn the - rail.',
+  '- LED: holeA is the cathode (-, toward tn), holeB the anode (+, toward tp). Every LED needs a resistor in series.',
+  '- Buzzer: holeA is + (toward tp), holeB is -.',
+  '- A part lies along one row: a resistor spans 4 columns (c3 to c7), an LED or buzzer 2, a button 3.',
   '',
-  'COMPONENT RULES:',
-  '- LED: holeA = cathode (-) goes toward GND. holeB = anode (+) goes toward resistor/power.',
-  '- Every LED needs a resistor in series to limit current.',
+  'ONE LED AT COLUMN C (C = 3 for the first LED)',
+  ...POWER_RECIPE.concat(ledRecipe(n => (n ? `{C+${n}}` : '{C}'))).map(a => '  ' + recipeLine(a)),
+  'Each extra LED repeats the last four steps at C = 11, 19, 27 and so on, with its own resistor.',
+  'A button or buzzer goes in series the same way: each lead in a free hole of the strip it connects to.',
   '',
-  'SIZING (columns apart, same row):',
-  '- place_resistor: exactly 4 columns apart (e.g. a3 and a7)',
-  '- place_led: exactly 2 columns apart (e.g. cathode a9, anode a7)',
-  '- place_button: exactly 3 columns apart (e.g. a12 and a15)',
-  '- place_buzzer: exactly 2 columns apart',
-  '- No column overlap between components on the same row.',
+  'CHANGING THE BOARD',
+  '- A new circuit, or starting over: delete_all, then the full build.',
+  "- A small change to the user's circuit: edit it in place with remove_component, remove_wire and the place and add tools, and keep their other parts.",
+  '- Every build is checked in a circuit simulator before the user sees it.',
   '',
-  'HOLE NAMES:',
-  '- Body: "a3", "e14", "j22"',
-  '- Rail: "tp_5" (positive col 5), "tn_5" (GND col 5)',
-  '- Battery: "battery_0_pin0" (+), "battery_0_pin1" (-)',
-  '',
-  'BUILDING BEHAVIOR:',
-  '- When asked to build, fix, or create a circuit: call delete_all FIRST, then rebuild from scratch.',
-  '- Never patch an existing circuit. Always clear and rebuild the full correct circuit.',
-  '- After building, write 2-3 sentences explaining what you built and how it works.',
-  '',
-  'CRITICAL WIRING RULES:',
-  '- Placing a component on the board does NOT connect it to power or ground.',
-  '- You MUST add_wire from a power rail (tp_N) to each component that needs +9V.',
-  '- You MUST add_wire from each component that needs GND to a ground rail (tn_N).',
-  '- Without these rail-to-body wires, the circuit WILL NOT WORK.',
-  '',
-  'COMPLETE RECIPE FOR ONE LED (starting at column C):',
-  '  1. delete_all',
-  '  2. place_battery',
-  '  3. add_wire: battery_0_pin0 -> tp_C (red)       ← battery to + rail',
-  '  4. add_wire: battery_0_pin1 -> tn_{C+6} (black) ← battery to - rail',
-  '  5. place_resistor: holeA=a{C}, holeB=a{C+4}',
-  '  6. place_led: holeA=a{C+6} (cathode), holeB=a{C+4} (anode)',
-  '  7. add_wire: tp_{C} -> a{C} (red)               ← rail to resistor (REQUIRED!)',
-  '  8. add_wire: a{C+6} -> tn_{C+6} (black)         ← LED cathode to rail (REQUIRED!)',
-  'Steps 7 and 8 are REQUIRED for EVERY LED group. Without them the LED will not light up.',
-  '',
-  'FOR 3 LEDs (at C=2, C=10, C=18):',
-  '  Total calls: 1 delete_all + 1 place_battery + 2 battery wires + 3*(place_resistor + place_led + 2 rail wires) = 16 calls.',
-  '  Every LED group needs its own pair of rail-to-body wires: tp_{C}->a{C} and a{C+6}->tn_{C+6}.',
-  '',
-  'Reply style: 2-5 sentences max. Be specific with hole names. Be encouraging.',
-  'For pure questions (no building), just respond with helpful text. Do not call any tools.',
+  'REPLIES',
+  '- Short, friendly and plain: 1 to 3 sentences for a beginner.',
+  '- If the user only asks a question, answer it and call no tools.',
 ].join('\n');
 
 // ── Gemini function declarations ─────────────────────────────
+const hole = description => ({ type: 'STRING', description });
+const twoHoles = (a, b, extra) => ({
+  type: 'OBJECT',
+  properties: Object.assign({ holeA: hole(a), holeB: hole(b) }, extra),
+  required: ['holeA', 'holeB'],
+});
+
 const CIRCUIT_TOOLS = [{
   function_declarations: [
     {
       name: 'delete_all',
-      description: 'Clear all components and wires from the board. Call this FIRST when building or fixing a circuit.',
+      description: 'Remove every part and wire. Call it first for a new circuit or to start over.',
     },
     {
       name: 'place_battery',
-      description: 'Place a 9V battery off-board. You MUST follow this with add_wire calls to connect battery_0_pin0 to a positive rail (tp_N) and battery_0_pin1 to a negative rail (tn_N).',
+      description: 'Add a 9V battery off the board. Then wire battery_N_pin0 (+) to a tp hole and battery_N_pin1 (-) to a tn hole.',
     },
     {
       name: 'place_resistor',
-      description: 'Place a resistor. holeA and holeB must be exactly 4 columns apart on the same row.',
-      parameters: {
-        type: 'OBJECT',
-        properties: {
-          holeA: { type: 'STRING', description: 'Start hole, e.g. "a3"' },
-          holeB: { type: 'STRING', description: 'End hole, 4 columns from holeA, e.g. "a7"' },
-        },
-        required: ['holeA', 'holeB'],
-      },
+      description: 'Place a resistor along one row, holes 4 columns apart.',
+      parameters: twoHoles('First hole, e.g. "c3"', 'Second hole, e.g. "c7"', {
+        resistance: { type: 'INTEGER', description: 'Ohms. The default 470 suits one LED on 9V.' },
+      }),
     },
     {
       name: 'place_led',
-      description: 'Place an LED. holeA = cathode (-), holeB = anode (+). Must be exactly 2 columns apart on the same row.',
-      parameters: {
-        type: 'OBJECT',
-        properties: {
-          holeA: { type: 'STRING', description: 'Cathode (-) hole, e.g. "a9"' },
-          holeB: { type: 'STRING', description: 'Anode (+) hole, e.g. "a7"' },
-        },
-        required: ['holeA', 'holeB'],
-      },
+      description: 'Place an LED along one row, holes 2 columns apart. holeA is the cathode (-), holeB the anode (+).',
+      parameters: twoHoles('Cathode (-) hole, e.g. "e9"', 'Anode (+) hole, e.g. "e7"', {
+        color: { type: 'STRING', enum: BoardModel.LED_COLORS, description: 'Default red.' },
+      }),
     },
     {
       name: 'place_buzzer',
-      description: 'Place a buzzer. holeA and holeB must be exactly 2 columns apart on the same row.',
-      parameters: {
-        type: 'OBJECT',
-        properties: {
-          holeA: { type: 'STRING', description: 'First hole, e.g. "a3"' },
-          holeB: { type: 'STRING', description: 'Second hole, e.g. "a5"' },
-        },
-        required: ['holeA', 'holeB'],
-      },
+      description: 'Place a buzzer along one row, holes 2 columns apart. holeA is + and holeB is -.',
+      parameters: twoHoles('+ hole, e.g. "c3"', '- hole, e.g. "c5"'),
     },
     {
       name: 'place_button',
-      description: 'Place a push button. holeA and holeB must be exactly 3 columns apart on the same row.',
-      parameters: {
-        type: 'OBJECT',
-        properties: {
-          holeA: { type: 'STRING', description: 'First hole, e.g. "a12"' },
-          holeB: { type: 'STRING', description: 'Second hole, e.g. "a15"' },
-        },
-        required: ['holeA', 'holeB'],
-      },
+      description: 'Place a push button along one row, holes 3 columns apart. It connects them only while pressed.',
+      parameters: twoHoles('First hole, e.g. "c3"', 'Second hole, e.g. "c6"'),
     },
     {
       name: 'add_wire',
-      description: 'Add a wire between two points. Points can be body holes (e.g. "a3"), rails (e.g. "tp_5", "tn_5"), or battery pins (e.g. "battery_0_pin0").',
+      description: 'Add a wire between two points: body holes ("a3"), rail holes ("tp_5", "tn_5") or battery pins ("battery_0_pin0").',
       parameters: {
         type: 'OBJECT',
         properties: {
           from:  { type: 'STRING', description: 'Start point' },
           to:    { type: 'STRING', description: 'End point' },
-          color: { type: 'STRING', description: 'Wire color: red, yellow, green, blue, black, or white' },
+          color: { type: 'STRING', enum: BoardModel.WIRE_COLORS, description: 'Red for +, black for -.' },
         },
         required: ['from', 'to', 'color'],
+      },
+    },
+    {
+      name: 'remove_component',
+      description: 'Remove one part by id, e.g. "led_1". Wires in its holes stay.',
+      parameters: {
+        type: 'OBJECT',
+        properties: { id: { type: 'STRING', description: 'Part id, e.g. "resistor_0"' } },
+        required: ['id'],
+      },
+    },
+    {
+      name: 'remove_wire',
+      description: 'Remove the wire between two points, named as they appear in the board state.',
+      parameters: {
+        type: 'OBJECT',
+        properties: {
+          from: { type: 'STRING', description: 'One end, e.g. "tp_3"' },
+          to:   { type: 'STRING', description: 'The other end, e.g. "a3"' },
+        },
+        required: ['from', 'to'],
       },
     },
   ],
@@ -365,4 +364,4 @@ function main() {
 
 if (require.main === module) main();
 
-module.exports = { createServer, SYSTEM_PROMPT, CIRCUIT_TOOLS };
+module.exports = { createServer, SYSTEM_PROMPT, CIRCUIT_TOOLS, POWER_RECIPE, ledRecipe };

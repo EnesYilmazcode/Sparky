@@ -5,7 +5,9 @@
 const test   = require('node:test');
 const assert = require('node:assert');
 
-const { createServer } = require('../backend/server.js');
+const BM = require('../circuit3d/js/board-model.js');
+const { checkBuild } = require('../backend/verify.js');
+const { createServer, SYSTEM_PROMPT, CIRCUIT_TOOLS, POWER_RECIPE, ledRecipe } = require('../backend/server.js');
 
 const LED_BUILD = [
   ['delete_all', {}],
@@ -40,6 +42,23 @@ const post = (base, body, headers) => fetch(base + '/api/ask', {
   method: 'POST',
   headers: Object.assign({ 'Content-Type': 'application/json' }, headers),
   body: typeof body === 'string' ? body : JSON.stringify(body),
+});
+
+test('the recipe the prompt teaches keeps one lead per hole and lights every LED', () => {
+  const at = C => ledRecipe(n => C + n);
+  const r = checkBuild(BM.emptyBoard(), POWER_RECIPE.concat(at(3), at(11), at(19)));
+  assert.deepEqual(r.notes, [], 'nothing had to move');
+  assert.equal(r.verification.ok, true, r.verification.problems.join(' | '));
+  assert.equal(r.verification.summary, 'Checked in the simulator: all 3 LEDs light (14.9 mA each).');
+  assert.match(SYSTEM_PROMPT, /place_resistor holeA=c\{C\}, holeB=c\{C\+4\}/);
+});
+
+test('the tools let the model edit in place and choose values', () => {
+  const decl = Object.fromEntries(CIRCUIT_TOOLS[0].function_declarations.map(d => [d.name, d]));
+  assert.deepEqual(decl.remove_component.parameters.required, ['id']);
+  assert.deepEqual(decl.remove_wire.parameters.required, ['from', 'to']);
+  assert.equal(decl.place_resistor.parameters.properties.resistance.type, 'INTEGER');
+  assert.deepEqual(decl.place_led.parameters.properties.color.enum, ['red', 'yellow', 'green', 'blue', 'white']);
 });
 
 test('/api/ask builds, checks and returns the contract the editor reads', async () => {
