@@ -108,6 +108,20 @@ test('a model failure is a 502 that keeps the upstream detail out of the reply',
   });
 });
 
+test('a body over 200 KB is refused with a 413 before it is parsed', async () => {
+  let asked = 0;
+  const counting = async contents => { asked++; return stubModel(contents); };
+  await withServer({ generate: counting, model: 'stub' }, async base => {
+    const big = { message: 'Build it', board: { components: [], wires: [] }, pad: 'x'.repeat(210 * 1024) };
+    const res = await post(base, big);
+    assert.equal(res.status, 413);
+    assert.equal((await res.json()).reply, 'That request is too large.');
+    assert.equal(asked, 0);
+    // a normal board export is far below the limit
+    assert.equal((await post(base, { message: 'Build it', board: { components: [], wires: [] } })).status, 200);
+  });
+});
+
 test('the rate limit counts each client by its first X-Forwarded-For address', async () => {
   await withServer({ generate: stubModel, model: 'stub', rateLimit: { perClient: 2, total: 5 } }, async base => {
     const ask = ip => post(base, { message: 'hi' }, { 'X-Forwarded-For': `${ip}, 10.0.0.1` }).then(r => r.status);

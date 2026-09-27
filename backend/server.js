@@ -175,6 +175,9 @@ const CIRCUIT_TOOLS = [{
 // ── HTTP helpers ──────────────────────────────────────────────
 // One /api/ask may take this long in all, repairs included.
 const ASK_BUDGET_MS = 90000;
+// A full board export is a few KB, so this is generous, and it stops a
+// request from filling memory before it is even parsed.
+const MAX_BODY_BYTES = 200 * 1024;
 
 function setCORS(res) {
   res.setHeader('Access-Control-Allow-Origin',  '*');
@@ -191,10 +194,17 @@ function sendJSON(res, status, obj) {
 // Every /api/ask answer has the same shape, errors included.
 const askReply = reply => ({ reply, actions: [], notes: [], verification: null });
 
-function readBody(req) {
+function readBody(req, limit) {
   return new Promise((resolve, reject) => {
+    const tooLarge = () => Object.assign(new Error('request body too large'), { code: 'TOO_LARGE' });
+    if (Number(req.headers['content-length']) > limit) return reject(tooLarge());
     const chunks = [];
-    req.on('data', chunk => chunks.push(chunk));
+    let size = 0;
+    req.on('data', chunk => {
+      size += chunk.length;
+      if (size > limit) { chunks.length = 0; reject(tooLarge()); }
+      else chunks.push(chunk);
+    });
     req.on('end', () => resolve(Buffer.concat(chunks).toString('utf8')));
     req.on('error', reject);
   });
@@ -279,9 +289,18 @@ function createServer({ generate = null, model = '', rateLimit } = {}) {
     if (askRateLimited(req)) {
       return sendJSON(res, 429, askReply('Too many requests. Give Sparky a moment and try again.'));
     }
+    let raw;
+    try {
+      raw = await readBody(req, MAX_BODY_BYTES);
+    } catch (e) {
+      if (e.code !== 'TOO_LARGE') return sendJSON(res, 400, askReply('That request could not be read.'));
+      // The rest of the body is not read, so the connection cannot be reused.
+      res.setHeader('Connection', 'close');
+      return sendJSON(res, 413, askReply('That request is too large.'));
+    }
     let input;
     try {
-      input = JSON.parse((await readBody(req)) || '{}');
+      input = JSON.parse(raw || '{}');
     } catch {
       return sendJSON(res, 400, askReply('That request was not valid JSON.'));
     }
