@@ -1342,6 +1342,7 @@
     async function unshareFromSparks(docId) {
       const spark = _sparksCache.find(s => s._docId === docId);
       const name = (spark && spark.name) || 'this spark';
+      if (!confirm(`Remove "${name}" from Sparks? Other people will no longer see it.`)) return;
       const removed = await removeSpark(docId);
       await renderSparks();
       if (removed) showToast(`Removed "${name}" from Sparks.`);
