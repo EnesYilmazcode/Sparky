@@ -505,7 +505,7 @@
 
   // ─────────────────────────────────────────────────────────────
   //  BUZZER — 12 mm active piezo buzzer
-  //  pin 1 (hole B) is +, marked on the top.
+  //  Hole A is +, as in the simulator and the AI's tools; marked on the top.
   // ─────────────────────────────────────────────────────────────
   function buildBuzzer(holeA, holeB) {
     const { group, span } = frame(holeA, holeB);
@@ -526,7 +526,7 @@
     const plus = new THREE.Group();
     const bar = (w, d) => { const m = new THREE.Mesh(new THREE.BoxGeometry(w, 0.02, d), MAT.white); plus.add(m); };
     bar(0.16, 0.035); bar(0.035, 0.16);
-    plus.position.set(0.3, B + H + 0.005, 0.08);
+    plus.position.set(-0.3, B + H + 0.005, 0.08);
     group.add(plus);
 
     const LR = 0.026;
@@ -540,14 +540,14 @@
         group.userData._buzz = t => {
           const k = 0.012;
           shell.position.set(base.x + Math.sin(t * 91) * k, base.y, base.z + Math.cos(t * 83) * k);
-          plus.position.x = 0.3 + Math.sin(t * 91) * k;
+          plus.position.x = -0.3 + Math.sin(t * 91) * k;
         };
         App.addTicker?.(group.userData._buzz);
       } else if (!on && group.userData._buzz) {
         App.removeTicker?.(group.userData._buzz);
         group.userData._buzz = null;
         shell.position.set(0, 0, 0);
-        plus.position.x = 0.3;
+        plus.position.x = -0.3;
       }
     };
 
