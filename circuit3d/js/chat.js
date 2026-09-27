@@ -116,7 +116,7 @@
     const el = document.createElement('div');
     el.className = 'verify ' + (v.ok ? 'ok' : 'bad');
     const tries = v.attempts > 1 ? `Took ${v.attempts} tries` : '';
-    const moved = notes && notes.length ? `${notes.length} lead${notes.length > 1 ? 's' : ''} moved to free holes on the same strips` : '';
+    const moved = notes && notes.length ? `${notes.length} lead${notes.length > 1 ? 's' : ''} moved` : '';
     const verdict = splitVerdict(v.summary);
     el.innerHTML =
       `<div class="verify-head">${v.ok ? ICON_OK : ICON_WARN}<span>${escapeHtml(v.ok ? verdict.head || 'Checked in the simulator' : 'Not working yet')}</span></div>` +
@@ -310,13 +310,13 @@
     const actions = pending.actions;
     clearPreview();
     const r = execActions(actions);
-    addMsg(`Applied ${r.done} change${r.done !== 1 ? 's' : ''}. Press Run Simulation to see it work.`, 'system');
+    addMsg(`Applied ${r.done} change${r.done !== 1 ? 's' : ''}.`, 'system');
   }
 
   function decline() {
     if (!pending) return;
     clearPreview();
-    addMsg('Changes discarded.', 'system');
+    addMsg('Discarded.', 'system');
   }
 
   // ── Main ask ─────────────────────────────────────────────────

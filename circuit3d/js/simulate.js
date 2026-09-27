@@ -514,8 +514,16 @@
     }
     // The panel draws its own status marks, so emoji come out of the text.
     const clean = t => String(t).replace(/[\u{1F300}-\u{1FAFF}\u{2600}-\u{27BF}\u{2B55}\u{FE0F}]\s*/gu, '').trim();
-    box.innerHTML = '<div class="sim-head"><span class="sim-dot"></span>Simulation running</div>' + lines.map(l =>
-      `<div class="sim-line ${l.cls || ''}">${clean(l.text)}</div>`
+    // The battery's own voltage is known, and node voltages only matter
+    // when nothing lights. Buttons say what to do, briefly.
+    const lit = lines.some(l => /\b(LED|BUZZER) ON\b/.test(l.text));
+    const shown = lines
+      .filter(l => !/^\s*Battery \d+:/.test(l.text) && !(lit && /Node voltages/.test(l.text)))
+      .map(l => ({ ...l, text: clean(l.text)
+        .replace(/: CLOSED, current flowing$/, ': pressed')
+        .replace(/: OPEN, click it to press$/, ': click it to press') }));
+    box.innerHTML = '<div class="sim-head"><span class="sim-dot"></span>Simulation running</div>' + shown.map(l =>
+      `<div class="sim-line ${l.cls || ''}">${l.text}</div>`
     ).join('');
     box.style.display = 'block';
     document.body.classList.add('sim-open');
