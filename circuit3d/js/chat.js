@@ -100,15 +100,22 @@
   const ICON_OK   = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>';
   const ICON_WARN = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M12 9v4M12 17h.01"/><path d="M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z"/></svg>';
 
+  // "Checked in the simulator: the red LED lights." to a heading and a sentence.
+  function splitVerdict(summary) {
+    const m = /^(Checked in [^:]+): (.*)$/.exec(summary || '');
+    return m ? { head: m[1], body: m[2].charAt(0).toUpperCase() + m[2].slice(1) } : { head: null, body: summary || '' };
+  }
+
   // The simulator's verdict on a proposed build, shown under the reply.
   function addVerification(v, notes) {
     const el = document.createElement('div');
     el.className = 'verify ' + (v.ok ? 'ok' : 'bad');
     const tries = v.attempts > 1 ? `Took ${v.attempts} tries` : '';
     const moved = notes && notes.length ? `${notes.length} lead${notes.length > 1 ? 's' : ''} moved to free holes on the same strips` : '';
+    const verdict = splitVerdict(v.summary);
     el.innerHTML =
-      `<div class="verify-head">${v.ok ? ICON_OK : ICON_WARN}<span>${v.ok ? 'Checked in the simulator' : 'Not working yet'}</span></div>` +
-      `<div class="verify-body">${escapeHtml(v.summary || '')}</div>` +
+      `<div class="verify-head">${v.ok ? ICON_OK : ICON_WARN}<span>${escapeHtml(v.ok ? verdict.head || 'Checked in the simulator' : 'Not working yet')}</span></div>` +
+      `<div class="verify-body">${escapeHtml(verdict.body)}</div>` +
       (!v.ok && v.problems && v.problems.length
         ? '<ul class="verify-problems">' + v.problems.slice(0, 4).map(p => `<li>${escapeHtml(p)}</li>`).join('') + '</ul>' : '') +
       ((tries || moved) ? `<div class="verify-meta">${escapeHtml([tries, moved].filter(Boolean).join(' · '))}</div>` : '');
@@ -319,10 +326,12 @@
     try {
       const data = await askSparky(msg);
       typing.remove();
-      addMsg(data.reply || 'Done.', 'ai');
+      const v = data.actions.length ? (data.verification || localVerify(data.actions)) : null;
+      // The reply ends with the verdict; the card under it says it once.
+      const said = v && v.summary ? (data.reply || '').replace(v.summary, '').trim() : data.reply;
+      addMsg(said || 'Here is the build.', 'ai');
       history.push({ role: 'user', text: msg }, { role: 'model', text: data.reply || '' });
       if (data.actions.length) {
-        const v = data.verification || localVerify(data.actions);
         if (v) addVerification(v, data.notes);
         preview(data.actions);
       }
