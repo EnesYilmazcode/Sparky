@@ -439,7 +439,7 @@
       }
     }
 
-    return { status: 'ok', lines, ledsOn, buzzersOn, branches, nodeVoltages };
+    return { status: 'ok', lines, ledsOn, buzzersOn, branches, nodeVoltages, currents: sol.currents };
   }
 
   // ── Presentation ─────────────────────────────────────────────
@@ -493,41 +493,15 @@
   }
 
   // ── Visual: LED on/off ──────────────────────────────────────
-  const activeLights = [];
-
-  function lightUpLED(comp) {
-    comp.group.traverse(obj => {
-      if (!obj.isMesh || !obj.material.transparent) return;
-      obj.material = obj.material.clone();
-      obj.material.emissiveIntensity = 3.5;
-      obj.material.opacity = 1.0;
-    });
-
-    const ledColor = getDomeColor(comp) ?? 0xffffff;
-    const p0 = comp.pins[0], p1 = comp.pins[1];
-    const light = new THREE.PointLight(ledColor, 8.0, 10);
-    light.position.set((p0.x + p1.x) / 2, 3.0, (p0.z + p1.z) / 2);
-    App.scene.add(light);
-    activeLights.push(light);
-    comp._simLight = light;
+  //  The LED model owns its look (components.js setLit); brightness
+  //  follows the current, relative to the part's rated maximum.
+  function lightUpLED(comp, current) {
+    const max = propsOf(comp).maxCurrent || 0.02;
+    comp.group.userData.setLit?.(true, current ? current / max : 1);
   }
 
   function dimLED(comp) {
-    comp.group.traverse(obj => {
-      if (!obj.isMesh || !obj.material.transparent) return;
-      obj.material.emissiveIntensity = 0.45;
-      obj.material.opacity = 0.88;
-    });
-    if (comp._simLight) { App.scene.remove(comp._simLight); comp._simLight = null; }
-  }
-
-  function getDomeColor(comp) {
-    let col = null;
-    comp.group.traverse(obj => {
-      if (obj.isMesh && obj.material.transparent && col === null)
-        col = obj.material.color.getHex();
-    });
-    return col;
+    comp.group.userData.setLit?.(false);
   }
 
   // ── Results overlay ─────────────────────────────────────────
@@ -538,8 +512,10 @@
       box.id = 'sim-results';
       document.getElementById('canvas-wrap').appendChild(box);
     }
-    box.innerHTML = lines.map(l =>
-      `<div class="sim-line ${l.cls || ''}">${l.text}</div>`
+    // The panel draws its own status marks, so emoji come out of the text.
+    const clean = t => String(t).replace(/[\u{1F300}-\u{1FAFF}\u{2600}-\u{27BF}\u{2B55}\u{FE0F}]\s*/gu, '').trim();
+    box.innerHTML = '<div class="sim-head"><span class="sim-dot"></span>Simulation running</div>' + lines.map(l =>
+      `<div class="sim-line ${l.cls || ''}">${clean(l.text)}</div>`
     ).join('');
     box.style.display = 'block';
   }
@@ -595,11 +571,9 @@
 
   // ── Internal: clear visual state only (no button/UI reset) ──
   function clearSimVisuals() {
-    activeLights.forEach(l => App.scene.remove(l));
-    activeLights.length = 0;
     App.state.components.forEach(c => {
       if (c.type === 'led')    dimLED(c);
-      if (c.type === 'buzzer') deactivateBuzzer(c);
+      if (c.type === 'buzzer') { deactivateBuzzer(c); c.group.userData.setActive?.(false); }
     });
     stopAllBuzzers();
     hideResults();
@@ -619,8 +593,10 @@
     showResults(result.lines);
     if (result.status === 'empty') return;
 
-    result.ledsOn.forEach(lightUpLED);
-    result.buzzersOn.forEach(activateBuzzer);
+    const current = new Map();
+    components.forEach(c => { if (c._simId && result.currents) current.set(c, result.currents[c._simId]); });
+    result.ledsOn.forEach(c => lightUpLED(c, current.get(c)));
+    result.buzzersOn.forEach(c => { activateBuzzer(c); c.group.userData.setActive?.(true); });
 
     if (result.status === 'ok') {
       App.simRunning = true;
@@ -643,11 +619,9 @@
       if (!cap) return;
       if (cap.userData._animId) { cancelAnimationFrame(cap.userData._animId); cap.userData._animId = null; }
       cap.position.y = cap.userData.capRestY;
-      if (cap.userData.matCloned) {
-        cap.material.color.setHex(0xe8e8e8);
-        cap.material.emissive.setHex(0x000000);
-        cap.material.emissiveIntensity = 0;
-      }
+      cap.material.color.copy(App.lin(cap.userData.restColor ?? 0x2b2e35));
+      cap.material.emissive.setHex(0x000000);
+      cap.material.emissiveIntensity = 0;
     });
     App.simRunning = false;
     removeButtonClicks();
@@ -661,6 +635,7 @@
   function install(app) {
     App = app;
     App.PROPS          = PROPS;
+    App.simAnalyze     = analyze;
     App.runSimulation  = runSimulation;
     App.stopSimulation = stopSimulation;
   }
