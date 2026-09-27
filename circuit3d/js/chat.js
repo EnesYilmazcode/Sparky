@@ -19,9 +19,14 @@
 
   const $ = id => document.getElementById(id);
 
+  // The API runs on the Render service, which also serves these pages. The
+  // copy on Firebase Hosting has no server behind it, so it calls Render
+  // across origins; the server's CORS list names the web.app hosts.
+  const API_BASE = /\.web\.app$/.test(location.hostname) ? 'https://sparky-na2c.onrender.com' : '';
+
   // ── Server ───────────────────────────────────────────────────
   async function askSparky(message) {
-    const res = await fetch('/api/ask', {
+    const res = await fetch(API_BASE + '/api/ask', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
