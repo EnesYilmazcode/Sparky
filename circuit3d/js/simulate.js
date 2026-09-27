@@ -518,11 +518,13 @@
       `<div class="sim-line ${l.cls || ''}">${clean(l.text)}</div>`
     ).join('');
     box.style.display = 'block';
+    document.body.classList.add('sim-open');
   }
 
   function hideResults() {
     const b = document.getElementById('sim-results');
     if (b) b.style.display = 'none';
+    document.body.classList.remove('sim-open');
   }
 
   // ── Button click handler (active only during simulation) ─────

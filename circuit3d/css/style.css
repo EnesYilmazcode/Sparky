@@ -352,6 +352,7 @@ canvas {
   transition: opacity 0.2s;
 }
 .hint-hidden { opacity: 0; }
+.sim-open #hint-box { left: 14px; transform: none; max-width: calc(100% - 336px); }
 
 #hole-label {
   position: absolute;
