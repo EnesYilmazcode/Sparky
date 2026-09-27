@@ -1,5 +1,5 @@
-// backend/ai-providers.js: the Gemini call, and the providers that stand
-// in for it. No network: fetch is faked.
+// backend/ai-providers.js: the Gemini call's timeout and retry, and the
+// providers that stand in for it. No network: fetch is faked.
 // Run with:  node --test
 
 const test   = require('node:test');
@@ -34,9 +34,10 @@ function fakeFetch(...script) {
   return f;
 }
 
-const provider = fetchImpl => geminiProvider({
-  apiKey: 'k-123', model: 'gemini-flash-latest', systemPrompt: 'Be Sparky.', tools: [], fetchImpl,
-});
+const provider = (fetchImpl, extra) => geminiProvider(Object.assign({
+  apiKey: 'k-123', model: 'gemini-flash-latest', systemPrompt: 'Be Sparky.', tools: [],
+  fetchImpl, retryDelayMs: 1,
+}, extra));
 
 test('the key travels in a header, never in the URL', async () => {
   const f = fakeFetch(reply(200, { candidates: [{ content: TURN }] }));
@@ -54,9 +55,44 @@ test("the model's turn comes back untouched, thought signature included", async 
   assert.deepEqual(await provider(f)(CONTENTS), TURN);
 });
 
-test('an error status is an error, with the detail kept for the log', async () => {
-  const f = fakeFetch(reply(400, { error: 'bad request' }));
-  await assert.rejects(provider(f)(CONTENTS), /Gemini 400: .*bad request/);
+test('a 503 is retried once, then the answer is used', async () => {
+  const f = fakeFetch(reply(503, { error: 'overloaded' }), reply(200, { candidates: [{ content: TURN }] }));
+  assert.deepEqual(await provider(f)(CONTENTS), TURN);
+  assert.equal(f.calls.length, 2);
+});
+
+test('a 429 twice gives up after one retry', async () => {
+  const f = fakeFetch(reply(429, { error: 'quota' }), reply(429, { error: 'quota' }), reply(200, {}));
+  await assert.rejects(provider(f)(CONTENTS), /Gemini 429/);
+  assert.equal(f.calls.length, 2);
+});
+
+test('a 400 is not retried', async () => {
+  const f = fakeFetch(reply(400, { error: 'bad request' }), reply(200, { candidates: [{ content: TURN }] }));
+  await assert.rejects(provider(f)(CONTENTS), /Gemini 400/);
+  assert.equal(f.calls.length, 1);
+});
+
+test('a network failure is retried once', async () => {
+  const f = fakeFetch(() => { throw new TypeError('fetch failed'); }, reply(200, { candidates: [{ content: TURN }] }));
+  assert.deepEqual(await provider(f)(CONTENTS), TURN);
+});
+
+test('a call that hangs is cut off by the timeout, and not retried', async () => {
+  const hang = init => new Promise((resolve, reject) => {
+    init.signal.addEventListener('abort', () => reject(new Error('aborted')));
+  });
+  const f = fakeFetch(hang, reply(200, { candidates: [{ content: TURN }] }));
+  const started = Date.now();
+  await assert.rejects(provider(f, { timeoutMs: 50 })(CONTENTS), /no answer within/);
+  assert.ok(Date.now() - started < 2000);
+  assert.equal(f.calls.length, 1);
+});
+
+test('the request deadline shortens the timeout', async () => {
+  const f = fakeFetch(reply(200, { candidates: [{ content: TURN }] }));
+  await assert.rejects(provider(f)(CONTENTS, { deadline: Date.now() - 1 }), /out of time/);
+  assert.equal(f.calls.length, 0);
 });
 
 test('a blocked answer becomes a polite refusal', async () => {

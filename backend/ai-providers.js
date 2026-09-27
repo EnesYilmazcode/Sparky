@@ -32,10 +32,45 @@ const CLAUDE_TIMEOUT_MS = Number(process.env.CLAUDE_TIMEOUT_MS || 120000);
 const GEMINI_BASE = 'https://generativelanguage.googleapis.com/v1beta/models/';
 const BLOCKED_REPLY = "I can't help with that request. Try asking about building a circuit!";
 
+const sleep = ms => new Promise(resolve => setTimeout(resolve, ms));
+
 // ── Gemini ───────────────────────────────────────────────────
-function geminiProvider({ apiKey, model, systemPrompt, tools, fetchImpl = fetch }) {
+// One fetch, bounded by a timeout that also covers reading the body.
+async function fetchOnce(url, init, waitMs, fetchImpl) {
+  const ctl = new AbortController();
+  const timer = setTimeout(() => ctl.abort(), waitMs);
+  try {
+    const res = await fetchImpl(url, Object.assign({}, init, { signal: ctl.signal }));
+    if (res.ok) return { data: await res.json() };
+    // The body can carry quota detail, so it goes to the log, never the user.
+    const error = new Error(`Gemini ${res.status}: ${(await res.text()).slice(0, 500)}`);
+    return { error, retry: res.status === 429 || res.status >= 500 };
+  } catch (e) {
+    if (ctl.signal.aborted) return { error: new Error(`Gemini gave no answer within ${Math.round(waitMs / 1000)} s`), retry: false };
+    return { error: e, retry: true };                       // the network, not the model
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+// A 429 or 5xx is usually gone a second later, so it gets one retry.
+// A timeout does not: waiting as long again would leave the user
+// staring at the typing dots.
+async function postWithRetry(url, init, o) {
+  for (let attempt = 1; ; attempt++) {
+    const waitMs = Math.min(o.timeoutMs, (o.deadline || Infinity) - Date.now());
+    if (!(waitMs > 0)) throw new Error('Gemini: out of time for this request');
+    const r = await fetchOnce(url, init, waitMs, o.fetchImpl);
+    if (r.data) return r.data;
+    if (!r.retry || attempt === 2) throw r.error;
+    await sleep(o.retryDelayMs);
+  }
+}
+
+function geminiProvider({ apiKey, model, systemPrompt, tools, fetchImpl = fetch,
+                          timeoutMs = 40000, retryDelayMs = 1000 }) {
   const url = `${GEMINI_BASE}${encodeURIComponent(model)}:generateContent`;
-  return async function generate(contents) {
+  return async function generate(contents, opts = {}) {
     const body = JSON.stringify({
       system_instruction: { parts: [{ text: systemPrompt }] },
       contents,
@@ -46,10 +81,8 @@ function geminiProvider({ apiKey, model, systemPrompt, tools, fetchImpl = fetch 
       generation_config: { temperature: 0.3, max_output_tokens: 8192 },
     });
     // The key goes in a header so it never appears in a URL or a log line.
-    const res = await fetchImpl(url, { method: 'POST', headers: { 'Content-Type': 'application/json', 'x-goog-api-key': apiKey }, body });
-    // The body can carry quota detail, so it goes to the log, never the user.
-    if (!res.ok) throw new Error(`Gemini ${res.status}: ${(await res.text()).slice(0, 500)}`);
-    const data = await res.json();
+    const init = { method: 'POST', headers: { 'Content-Type': 'application/json', 'x-goog-api-key': apiKey }, body };
+    const data = await postWithRetry(url, init, { fetchImpl, timeoutMs, retryDelayMs, deadline: opts.deadline });
 
     const cand = data.candidates && data.candidates[0];
     if (!cand || cand.finishReason === 'SAFETY' || (data.promptFeedback && data.promptFeedback.blockReason)) {
