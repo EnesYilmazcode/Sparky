@@ -1036,10 +1036,11 @@
     const empty = !state.components.length && !state.wires.length;
     if (clearBtn) clearBtn.style.display = empty ? 'none' : 'flex';
     const es = document.getElementById('empty-state');
-    if (es) es.style.display = empty ? 'block' : 'none';
+    if (es) es.style.display = empty && !App.previewing ? 'block' : 'none';
 
     scheduleAutoSave();
   }
+  App.refreshCounts = refreshCounts;
 
   // ── Boot ─────────────────────────────────────────────────────
   // Must run AFTER all App.* methods are defined above.

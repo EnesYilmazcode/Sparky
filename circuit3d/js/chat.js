@@ -282,6 +282,8 @@
     }
     ghosts.forEach(g => App.scene.add(g));
     pending = { actions, ghosts, tinted };
+    App.previewing = true;
+    App.refreshCounts();
     const n = r.resolved.length;
     $('sparky-pending-count').textContent = `${n} change${n === 1 ? '' : 's'} ready`;
     $('sparky-pending-bar').style.display = 'flex';
@@ -293,6 +295,8 @@
     pending.ghosts.forEach(g => { App.scene.remove(g); App.disposeGroup(g); });
     pending.tinted.forEach(g => App.setHighlight(g, false));
     pending = null;
+    App.previewing = false;
+    App.refreshCounts();
     $('sparky-pending-bar').style.display = 'none';
   }
 
