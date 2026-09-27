@@ -302,6 +302,11 @@
     .preview.is-loaded .preview-status .when-loading { display: none; }
     .preview.is-loaded .preview-status .when-ready { display: inline; }
     .no-js .preview-status { display: none; }
+    /* Touch screens get a picture that turns, not a scroll trap. */
+    @media (hover: none), (pointer: coarse) {
+      .preview-stage iframe { pointer-events: none; }
+      .preview.is-loaded .preview-status { display: none; }
+    }
 
     /* ── Sections ────────────────────────────────────────── */
     .section { padding: clamp(3.5rem, 7vw, 6rem) 0; }
@@ -904,6 +909,11 @@
     function previewReady() {
       // The iframe's load fires before the first 3D frame is drawn.
       setTimeout(() => preview.classList.add('is-loaded'), 250);
+      // Stop the wheel reaching the 3D controls so the page scrolls over
+      // the preview instead of zooming it. Drag to orbit still works.
+      try {
+        frame.contentWindow.addEventListener('wheel', ev => ev.stopImmediatePropagation(), { capture: true, passive: true });
+      } catch (e) { /* not same-origin: leave it */ }
     }
     frame.addEventListener('load', previewReady);
     // The frame may have finished before this script ran.
