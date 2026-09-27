@@ -288,11 +288,47 @@ test('a pure question gets words only, and no verification', async () => {
 
 test('removing a part is checked but not repaired: the user asked for it', async () => {
   const board = BM.toExport(BM.applyActions(BM.emptyBoard(), POWER.concat(led(3))).board);
-  const generate = stub(modelTurn([{ tool: 'remove_component', id: 'resistor_0' }]));
+  const generate = stub(modelTurn([{ tool: 'remove_component', id: 'resistor_0' }]),
+                        { role: 'model', parts: [{ text: 'Removed it, your LED still works!' }] });
   const out = await answer({ generate, message: 'Remove the resistor', board });
-  assert.equal(generate.seen.length, 1);
+  assert.equal(generate.seen.length, 2, 'one turn to go on in case more was coming, no repair');
   assert.equal(out.verification.ok, false);
+  assert.equal(out.verification.attempts, 1);
+  // the model's claim is not passed on, since the check failed
   assert.equal(out.reply, 'I removed resistor_0. Checked in the simulator: the red LED stays dark because its anode is not connected to the + side.');
+});
+
+test('a build sent in parts, clearing first, is checked as one build', async () => {
+  const generate = stub(modelTurn([{ tool: 'delete_all' }]), modelTurn(POWER.slice(1).concat(led(3))));
+  const out = await answer({ generate, message: 'Make me an LED circuit', board: EMPTY_EXPORT });
+  assert.equal(out.verification.ok, true);
+  assert.equal(out.verification.attempts, 1);
+  assert.deepEqual(out.actions.map(a => a.tool).slice(0, 2), ['delete_all', 'place_battery']);
+  const [calls, going] = generate.seen[1].slice(-2);
+  assert.equal(calls.role, 'model');
+  assert.deepEqual(going.parts[0], { functionResponse: { name: 'delete_all', response: { result: 'recorded, not applied yet' } } });
+});
+
+test('clearing the board is fine, and the model says so in its own words', async () => {
+  const board = BM.toExport(BM.applyActions(BM.emptyBoard(), POWER.concat(led(3))).board);
+  const generate = stub(modelTurn([{ tool: 'delete_all' }]), { role: 'model', parts: [{ text: 'All clear, ready for a new build.' }] });
+  const out = await answer({ generate, message: 'Start over', board });
+  assert.equal(out.verification.ok, true);
+  assert.equal(out.verification.summary, 'Checked in the simulator: the board is empty.');
+  assert.deepEqual(out.actions, [{ tool: 'delete_all' }]);
+  assert.equal(out.reply, 'All clear, ready for a new build.');
+});
+
+test('the repair answers each call of the last turn, matched to the whole build', async () => {
+  const bad = [{ tool: 'delete_all' }, ...POWER.slice(1), { tool: 'place_led', holeA: 'z1', holeB: 'a3' }];
+  const generate = stub(modelTurn(bad.slice(0, 1)), modelTurn(bad.slice(1)), modelTurn(POWER.concat(led(3))));
+  const out = await answer({ generate, message: 'Build an LED circuit', board: EMPTY_EXPORT });
+  assert.equal(out.verification.ok, true);
+  assert.equal(out.verification.attempts, 2);
+  const fix = generate.seen[2][generate.seen[2].length - 1];
+  const responses = fix.parts.filter(p => p.functionResponse).map(p => p.functionResponse.response);
+  assert.equal(responses.length, 4);
+  assert.match(responses[3].error, /^action 5 \(place_led\)/);
 });
 
 test('a repair that cannot reach the model keeps the build it has', async () => {

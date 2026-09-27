@@ -21,6 +21,7 @@ const Sim        = require('../circuit3d/js/simulate.js');
 const MNA        = require('../circuit3d/js/mna.js');
 
 const MAX_ATTEMPTS  = 3;      // the first build and up to two repairs
+const MAX_CALLS     = 5;      // model calls in all, room for a build sent in parts
 // Batteries sit off the board, so nothing else bounds how many
 // solver unknowns one request can add.
 const MAX_BATTERIES = 20;
@@ -431,15 +432,28 @@ function readTurn(content) {
   return { text, calls, actions };
 }
 
+// Every function call in a model turn needs its own response, matched by id.
+function answerCall(c, response) {
+  const fr = { name: c.name, response };
+  if (c.id) fr.id = c.id;
+  return { functionResponse: fr };
+}
+
+// Calls that do not build anything yet, answered so the model can go on.
+function continueTurn(turn) {
+  const parts = turn.calls.map(c => answerCall(c, { result: 'recorded, not applied yet' }));
+  parts.push({ text: 'Recorded. Call the rest of the build now, or if that was everything, reply to the user in words.' });
+  return { role: 'user', parts };
+}
+
 // Each of the model's calls answered, then what the simulator found.
 // Nothing is applied between attempts: every attempt is a complete
 // build from the user's board, so the fix has to repeat every call.
-function repairTurn(turn, check) {
+// `offset` is where this turn's calls start in the checked build.
+function repairTurn(turn, check, offset) {
   const parts = turn.calls.map((c, i) => {
-    const err = check.errors.find(e => e.startsWith(`action ${i + 1} `));
-    const fr = { name: c.name, response: err ? { error: err } : { result: 'checked, not applied' } };
-    if (c.id) fr.id = c.id;
-    return { functionResponse: fr };
+    const err = check.errors.find(e => e.startsWith(`action ${offset + i + 1} `));
+    return answerCall(c, err ? { error: err } : { result: 'checked, not applied' });
   });
   const lines = ['SIMULATOR CHECK: that build does not work yet.'];
   check.verification.problems.forEach(p => lines.push('- ' + p));
@@ -505,7 +519,7 @@ const plain = v => v.summary.replace(/^Checked in the simulator: /, '').replace(
 function composeReply(best, tries, v) {
   const built = describeBuild(best.check.actions);
   if (v.ok) {
-    if (best.turn.text) return best.turn.text;
+    if (best.text) return best.text;
     // A fix can change what the user asked for (a 100 ohm resistor
     // becomes 470), so the reply says what the check caught.
     const caught = best === tries[0] ? '' : `My first try failed the simulator check (${plain(tries[0].check.verification)}).`;
@@ -527,26 +541,44 @@ async function answer({ generate, message, history, board, markdown, deadline = 
   addTurn(contents, 'user', { text: firstTurn(message, board == null ? null : start, markdown) });
 
   const tries = [];
-  for (let n = 1; n <= MAX_ATTEMPTS; n++) {
+  let pending = [];                        // the build so far, which can span turns
+  const settle = text => { tries.push({ text, check: checkBuild(start, pending) }); pending = []; };
+  const timeLeft = () => deadline - Date.now() >= REPAIR_MIN_MS;
+
+  for (let n = 1; n <= MAX_CALLS; n++) {
     let content;
     try {
       content = await generate(contents, { deadline });
     } catch (e) {
-      if (!tries.length) throw e;
-      console.warn(`[ask] repair ${n - 1} failed, keeping the best build so far: ${e.message}`);
+      if (!tries.length && !pending.length) throw e;
+      console.warn(`[ask] model call ${n} failed, keeping the build so far: ${e.message}`);
       break;
     }
     const turn = readTurn(content);
     if (!turn.actions.length) {
-      if (!tries.length) return { reply: turn.text || NO_ANSWER, actions: [], notes: [], verification: null };
-      break;                     // a repair answered in words only
+      // Words only: a plain answer, the end of a build sent in parts, or
+      // a repair turned down.
+      if (!tries.length && !pending.length) return { reply: turn.text || NO_ANSWER, actions: [], notes: [], verification: null };
+      if (pending.length) settle(turn.text);
+      break;
     }
-    const check = checkBuild(start, turn.actions);
-    tries.push({ turn, check });
-    // A removal can leave a circuit dark on purpose, so only builds are repaired.
-    if (check.verification.ok || !builds(turn.actions) || deadline - Date.now() < REPAIR_MIN_MS) break;
-    if (n < MAX_ATTEMPTS) contents.push({ role: 'model', parts: content.parts }, repairTurn(turn, check));
+    const offset = pending.length;
+    pending = pending.concat(turn.actions);
+    if (!builds(pending)) {
+      // A clear or a removal on its own is often the first half of a build
+      // (measured: delete_all alone, then the parts in the next turn), so
+      // the model goes on before anything is checked. A removal is never
+      // repaired: it can leave a circuit dark on purpose.
+      if (n === MAX_CALLS || !timeLeft()) break;
+      contents.push({ role: 'model', parts: content.parts }, continueTurn(turn));
+      continue;
+    }
+    settle(turn.text);
+    const check = tries[tries.length - 1].check;
+    if (check.verification.ok || tries.length === MAX_ATTEMPTS || n === MAX_CALLS || !timeLeft()) break;
+    contents.push({ role: 'model', parts: content.parts }, repairTurn(turn, check, offset));
   }
+  if (pending.length) settle('');
 
   const best = pickBest(tries);
   const verification = Object.assign({}, best.check.verification, { attempts: tries.length });
