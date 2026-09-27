@@ -301,6 +301,14 @@ function serveStatic(req, res) {
       }
     } catch { /* file not found, fall through to 404 */ }
   }
+  // A browser asking for a page gets the site's own 404, as on Firebase.
+  if (/text\/html/.test(req.headers.accept || '')) {
+    try {
+      const page = fs.readFileSync(path.join(STATIC_ROOT, '404.html'));
+      res.writeHead(404, { 'Content-Type': 'text/html' });
+      return res.end(page);
+    } catch { /* no 404 page: fall back to JSON */ }
+  }
   sendJSON(res, 404, { error: 'Not found' });
 }
 

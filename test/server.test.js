@@ -219,3 +219,15 @@ test('the static site is still served, and the removed auth and storage routes a
     }
   });
 });
+
+test('a missing page gets the 404 page in a browser and JSON otherwise', async () => {
+  await withServer({ generate: stubModel, model: 'stub' }, async base => {
+    const page = await fetch(base + '/no-such-page', { headers: { Accept: 'text/html,*/*' } });
+    assert.equal(page.status, 404);
+    assert.match(page.headers.get('content-type'), /text\/html/);
+    assert.match(await page.text(), /Sparky/);
+    const api = await fetch(base + '/no-such-page');
+    assert.equal(api.status, 404);
+    assert.deepEqual(await api.json(), { error: 'Not found' });
+  });
+});
