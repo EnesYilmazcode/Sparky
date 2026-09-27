@@ -220,6 +220,22 @@ test('the static site is still served, and the removed auth and storage routes a
   });
 });
 
+test('videos are served, in byte ranges when asked', async () => {
+  await withServer({ generate: stubModel, model: 'stub' }, async base => {
+    const whole = await fetch(base + '/media/place.mp4');
+    assert.equal(whole.status, 200);
+    assert.equal(whole.headers.get('content-type'), 'video/mp4');
+    const size = (await whole.arrayBuffer()).byteLength;
+    const part = await fetch(base + '/media/place.mp4', { headers: { Range: 'bytes=0-99' } });
+    assert.equal(part.status, 206);
+    assert.equal(part.headers.get('content-range'), `bytes 0-99/${size}`);
+    assert.equal((await part.arrayBuffer()).byteLength, 100);
+    const tail = await fetch(base + '/media/place.mp4', { headers: { Range: 'bytes=-10' } });
+    assert.equal(tail.headers.get('content-range'), `bytes ${size - 10}-${size - 1}/${size}`);
+    assert.equal((await fetch(base + '/media/place.mp4', { headers: { Range: `bytes=${size}-` } })).status, 416);
+  });
+});
+
 test('a missing page gets the 404 page in a browser and JSON otherwise', async () => {
   await withServer({ generate: stubModel, model: 'stub' }, async base => {
     const page = await fetch(base + '/no-such-page', { headers: { Accept: 'text/html,*/*' } });

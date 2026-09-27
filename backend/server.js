@@ -269,6 +269,7 @@ const MIME = {
   '.jpeg': 'image/jpeg', '.gif': 'image/gif', '.svg': 'image/svg+xml',
   '.ico': 'image/x-icon', '.woff': 'font/woff', '.woff2': 'font/woff2',
   '.glb': 'model/gltf-binary', '.sparky': 'application/octet-stream',
+  '.mp4': 'video/mp4',
 };
 // Server code, build sources and tooling. Mirrors the ignore list in firebase.json.
 const DENY_DIRS = new Set(['backend', 'src', 'out', 'functions', 'node_modules']);
@@ -295,7 +296,21 @@ function serveStatic(req, res) {
     try {
       const stat = fs.statSync(filePath);
       if (stat.isFile()) {
-        res.writeHead(200, { 'Content-Type': MIME[ext] });
+        // Safari will not play a video from a server without byte ranges.
+        const range = /^bytes=(\d*)-(\d*)$/.exec(req.headers.range || '');
+        if (range && (range[1] || range[2])) {
+          const start = range[1] ? Number(range[1]) : Math.max(0, stat.size - Number(range[2]));
+          const end = range[1] && range[2] ? Math.min(Number(range[2]), stat.size - 1) : stat.size - 1;
+          if (start > end || start >= stat.size) {
+            res.writeHead(416, { 'Content-Range': `bytes */${stat.size}` });
+            return res.end();
+          }
+          res.writeHead(206, { 'Content-Type': MIME[ext], 'Accept-Ranges': 'bytes',
+                               'Content-Range': `bytes ${start}-${end}/${stat.size}`, 'Content-Length': end - start + 1 });
+          fs.createReadStream(filePath, { start, end }).pipe(res);
+          return;
+        }
+        res.writeHead(200, { 'Content-Type': MIME[ext], 'Accept-Ranges': 'bytes', 'Content-Length': stat.size });
         fs.createReadStream(filePath).pipe(res);
         return;
       }
