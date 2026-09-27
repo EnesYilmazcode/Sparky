@@ -147,13 +147,16 @@ function toTurn(reply, actions) {
   return { role: 'model', parts };
 }
 
-function claudeProvider({ systemPrompt, tools, model = CLAUDE_MODEL, timeoutMs = CLAUDE_TIMEOUT_MS }) {
+// `model` in the shared context is the Gemini one, so the CLI's model has
+// its own name.
+function claudeProvider({ systemPrompt, tools, claudeModel = CLAUDE_MODEL, timeoutMs = CLAUDE_TIMEOUT_MS,
+                          execFileImpl = execFile }) {
   const system = claudeSystemPrompt(systemPrompt, tools);
   return function generate(contents) {
     return new Promise((resolve, reject) => {
-      const child = execFile(
+      const child = execFileImpl(
         'claude',
-        ['-p', transcript(contents), '--append-system-prompt', system, '--model', model],
+        ['-p', transcript(contents), '--append-system-prompt', system, '--model', claudeModel],
         { timeout: timeoutMs, maxBuffer: 4 * 1024 * 1024 },
         (err, stdout, stderr) => {
           if (err && !stdout) {

@@ -8,7 +8,7 @@ const fs     = require('fs');
 const os     = require('os');
 const path   = require('path');
 
-const { geminiProvider, fixtureProvider, recordFixtures, transcript, parseAgentJSON } = require('../backend/ai-providers.js');
+const { makeProvider, geminiProvider, fixtureProvider, recordFixtures, transcript, parseAgentJSON } = require('../backend/ai-providers.js');
 
 const TURN = { role: 'model', parts: [{ functionCall: { name: 'delete_all', args: {} }, thoughtSignature: 'abc' }] };
 const CONTENTS = [{ role: 'user', parts: [{ text: 'Build an LED circuit' }] }];
@@ -110,6 +110,22 @@ test('the Claude CLI sees the whole conversation, tool calls and answers include
   assert.equal(text, 'User: Build it\n\n' +
     'Assistant: (called place_led {"holeA":"e9","holeB":"e7"})\n\n' +
     'User: (place_led answered {"result":"checked, not applied"})\nIt is backwards.');
+});
+
+test('the Claude CLI runs its own model, not the Gemini one, and its JSON becomes a model turn', async () => {
+  let args = null;
+  const execFileImpl = (cmd, a, opts, done) => {
+    args = a;
+    setImmediate(() => done(null, '{"reply": "Built.", "actions": [{"tool": "place_led", "holeA": "e9", "holeB": "e7"}]}', ''));
+    return { stdin: { end() {} } };
+  };
+  const generate = makeProvider('claude', { apiKey: '', model: 'gemini-flash-latest', systemPrompt: 'Be Sparky.', tools: [], execFileImpl });
+  const turn = await generate(CONTENTS);
+  assert.equal(args[args.indexOf('--model') + 1], process.env.CLAUDE_MODEL || 'sonnet');
+  assert.deepEqual(turn, { role: 'model', parts: [
+    { text: 'Built.' },
+    { functionCall: { name: 'place_led', args: { holeA: 'e9', holeB: 'e7' } } },
+  ] });
 });
 
 test('an agent reply with no text stays empty, for the checked build to word', () => {

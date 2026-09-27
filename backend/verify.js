@@ -558,4 +558,4 @@ async function answer({ generate, message, history, board, markdown, deadline = 
   };
 }
 
-module.exports = { answer, checkBuild, verifyBoard, readTurn, describeBoard, parseBoard, MAX_ATTEMPTS };
+module.exports = { answer, checkBuild, verifyBoard, readTurn, parseBoard };

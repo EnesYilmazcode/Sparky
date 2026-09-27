@@ -398,12 +398,13 @@ function main() {
   const provider = (process.env.AI_PROVIDER || 'gemini').toLowerCase();
   const needsKey = provider !== 'claude' && provider !== 'fixture';
   const apiKey = process.env.GEMINI_API_KEY;
-  const model = needsKey ? (process.env.GEMINI_MODEL || 'gemini-flash-latest') : provider;
+  const geminiModel = process.env.GEMINI_MODEL || 'gemini-flash-latest';
+  const model = needsKey ? geminiModel : provider;          // what /api/health reports
   const port = process.env.PORT || 5001;
 
   let generate = null;
   if (!needsKey || apiKey) {
-    generate = makeProvider(provider, { apiKey, model, systemPrompt: SYSTEM_PROMPT, tools: CIRCUIT_TOOLS });
+    generate = makeProvider(provider, { apiKey, model: geminiModel, systemPrompt: SYSTEM_PROMPT, tools: CIRCUIT_TOOLS });
   } else {
     console.warn('Warning: GEMINI_API_KEY is not set, so /api/ask answers 503.');
   }
