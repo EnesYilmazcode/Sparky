@@ -108,6 +108,16 @@ test('a model failure is a 502 that keeps the upstream detail out of the reply',
   });
 });
 
+test('the rate limit counts each client by its first X-Forwarded-For address', async () => {
+  await withServer({ generate: stubModel, model: 'stub', rateLimit: { perClient: 2, total: 5 } }, async base => {
+    const ask = ip => post(base, { message: 'hi' }, { 'X-Forwarded-For': `${ip}, 10.0.0.1` }).then(r => r.status);
+    assert.deepEqual([await ask('1.1.1.1'), await ask('1.1.1.1'), await ask('1.1.1.1')], [200, 200, 429]);
+    assert.equal(await ask('2.2.2.2'), 200, 'another user behind the same proxy has their own count');
+    // Forged addresses still run into the cap on everyone together.
+    assert.deepEqual([await ask('3.3.3.3'), await ask('4.4.4.4'), await ask('5.5.5.5')], [200, 200, 429]);
+  });
+});
+
 test('the static site is still served, and the removed auth and storage routes are gone', async () => {
   await withServer({ generate: stubModel, model: 'stub' }, async base => {
     const page = await fetch(base + '/circuit3d/index.html');

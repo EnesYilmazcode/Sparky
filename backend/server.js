@@ -200,17 +200,27 @@ function readBody(req) {
   });
 }
 
-// /api/ask spends the Gemini key, so cap it per IP or it is an open proxy.
-function makeRateLimiter({ windowMs = 60000, max = 20 } = {}) {
+// /api/ask spends the Gemini key, so it is capped per client or it is an
+// open proxy. Behind Render's proxy the socket address is the proxy's, which
+// put every user in one bucket, so the client is the first X-Forwarded-For
+// address. That header can be forged to dodge the per-client cap, so a cap
+// on everyone together backs it up.
+function makeRateLimiter({ windowMs = 60000, perClient = 20, total = 120 } = {}) {
   const hits = new Map();
+  let all = [];
   return function limited(req) {
-    const ip = req.socket.remoteAddress || 'unknown';
+    const forwarded = String(req.headers['x-forwarded-for'] || '').split(',')[0].trim();
+    const client = forwarded || req.socket.remoteAddress || 'unknown';
     const now = Date.now();
     if (hits.size > 5000) hits.clear();
-    const mine = (hits.get(ip) || []).filter(t => now - t < windowMs);
+    const mine = (hits.get(client) || []).filter(t => now - t < windowMs);
     mine.push(now);
-    hits.set(ip, mine);
-    return mine.length > max;
+    hits.set(client, mine);
+    if (mine.length > perClient) return true;
+    all = all.filter(t => now - t < windowMs);
+    if (all.length >= total) return true;
+    all.push(now);
+    return false;
   };
 }
 
@@ -261,9 +271,9 @@ function serveStatic(req, res) {
 
 // ── The server ────────────────────────────────────────────────
 // `generate` is the model from ai-providers.js, or null when none is
-// configured. Tests pass a stub.
-function createServer({ generate = null, model = '' } = {}) {
-  const askRateLimited = makeRateLimiter();
+// configured. Tests pass a stub, and smaller rate limits.
+function createServer({ generate = null, model = '', rateLimit } = {}) {
+  const askRateLimited = makeRateLimiter(rateLimit);
 
   async function handleAsk(req, res) {
     if (askRateLimited(req)) {
