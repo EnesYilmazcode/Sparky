@@ -291,7 +291,7 @@
         }
         const fp = footprint(type);
         if (!fp || !fp.holeB) return;
-        if (!fp.ok) { App.setHint(`Can't place here: ${fp.why}. Each hole holds one lead.`, 2400); return; }
+        if (!fp.ok) { App.setHint(`Can't place here: ${fp.why}`, 2000); return; }
         if (type === 'resistor') App.placeResistor(fp.holeA, fp.holeB);
         if (type === 'led')      App.placeLED(fp.holeA, fp.holeB);
         if (type === 'buzzer')   App.placeBuzzer(fp.holeA, fp.holeB);
@@ -324,7 +324,7 @@
         if (!state.wireStart) {
           state.wireStart = end;
           if (t.pinMesh) t.pinMesh.userData.isWireStart = true;
-          App.setHint('Click another hole or a battery terminal to finish the wire · ESC to cancel');
+          App.setHint('Now click a second hole');
         } else {
           const s = state.wireStart;
           const same = (s.holeRef && end.holeRef && s.holeRef.col === end.holeRef.col && s.holeRef.row === end.holeRef.row) ||
@@ -353,7 +353,7 @@
         state.placementRotation = state.placementRotation === 0 ? 1 : 0;
         clearGhost();
         if (lastEvent) handleHover(lastEvent);
-        App.setHint(`Rotation: ${state.placementRotation === 0 ? 'along a row' : 'along a column'} · R to rotate`, 1800);
+        App.setHint(state.placementRotation === 0 ? 'Along a row' : 'Along a column', 1200);
         return;
       }
 

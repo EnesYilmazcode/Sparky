@@ -36,7 +36,6 @@
 }
 .sparky-title { flex: 1; min-width: 0; }
 .sparky-name { font-family: 'Space Grotesk', sans-serif; font-weight: 700; font-size: 14px; letter-spacing: -0.2px; }
-.sparky-role { font-size: 11px; color: var(--ink-3); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 
 /* ── Messages ─────────────────────────────────────────────── */
 #sparky-messages {
@@ -59,7 +58,6 @@
 }
 #sparky-welcome.hidden { display: none; }
 .sparky-welcome-title { font-family: 'Space Grotesk', sans-serif; font-size: 19px; font-weight: 700; letter-spacing: -0.4px; }
-.sparky-welcome-sub { font-size: 12.5px; line-height: 1.55; color: var(--ink-2); margin-bottom: 8px; }
 
 #sparky-suggestions { display: flex; flex-direction: column; gap: 7px; width: 100%; }
 .sparky-suggest-btn {
@@ -250,5 +248,4 @@
 }
 @media (max-width: 640px) {
   #sparky-panel { height: 30vh; }
-  .sparky-role { display: none; }
 }

@@ -267,9 +267,8 @@ button { font-family: inherit; }
 .comp-item-icon img { width: 100%; height: 100%; display: block; object-fit: contain; }
 .comp-item.active .comp-item-icon { box-shadow: 0 0 0 2px rgba(217,119,6,0.55); }
 
-.comp-item-text { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.comp-item-text { display: flex; flex-direction: column; min-width: 0; }
 .comp-item-name { font-size: 13px; font-weight: 600; color: var(--ink); }
-.comp-item-sub { font-size: 11px; color: var(--ink-3); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 
 .sidebar-divider { height: 1px; background: var(--line); margin: 6px 0; }
 
@@ -286,16 +285,6 @@ button { font-family: inherit; }
 .swatch:hover { transform: scale(1.12); }
 .swatch.active { box-shadow: 0 0 0 2px var(--ink); }
 
-.sidebar-help {
-  margin-top: auto;
-  padding: 12px 6px 2px;
-  border-top: 1px solid var(--line);
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-}
-.help-row { display: grid; grid-template-columns: auto 1fr auto 1fr; align-items: center; gap: 6px 8px; font-size: 11px; color: var(--ink-2); }
-.sidebar-help p { font-size: 10.5px; color: var(--ink-3); line-height: 1.5; margin-top: 2px; }
 
 kbd {
   display: inline-block;
@@ -521,7 +510,7 @@ canvas {
   .comp-item-icon { width: 38px; height: 38px; }
   #wire-color-row { flex-shrink: 0; }
   .color-swatches { flex-wrap: nowrap; padding: 0 6px; }
-  .sidebar-section-label, .sidebar-divider, .sidebar-help { display: none; }
+  .sidebar-section-label, .sidebar-divider { display: none; }
 }
 
 @media (max-width: 760px) {
@@ -612,9 +601,12 @@ canvas {
   left: 50%;
   bottom: 64px;
   transform: translateX(-50%);
-  width: min(420px, calc(100% - 40px));
-  padding: 14px 16px;
-  text-align: center;
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  max-width: calc(100% - 40px);
+  padding: 10px 10px 10px 18px;
+  white-space: nowrap;
   color: var(--glass-ink);
   background: var(--glass);
   border: 1px solid var(--glass-line);
@@ -622,6 +614,5 @@ canvas {
   backdrop-filter: blur(12px);
   -webkit-backdrop-filter: blur(12px);
 }
-.empty-title { font-family: 'Space Grotesk', sans-serif; font-weight: 700; font-size: 15px; margin-bottom: 4px; }
-#empty-state p { font-size: 12.5px; line-height: 1.5; color: var(--glass-ink-2); margin-bottom: 12px; }
-#empty-state .btn-secondary { margin: 0 auto; }
+.empty-title { font-family: 'Space Grotesk', sans-serif; font-weight: 700; font-size: 15px; }
+#empty-state .btn-secondary { margin: 0; }

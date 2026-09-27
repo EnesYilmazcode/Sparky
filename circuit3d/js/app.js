@@ -141,9 +141,9 @@
   // ── Mode ─────────────────────────────────────────────────────
 
   const MODE_HINTS = {
-    select: 'Click a component or wire to select it · DEL to delete',
-    place:  'Hover over the board to preview · Click to place · R to rotate · ESC to cancel',
-    wire:   'Click any hole or gold pin to start a wire · click again to complete',
+    select: '',
+    place:  'Click a hole to place it · R rotates',
+    wire:   'Click two holes to wire them',
   };
 
   App.setMode = function (m) {
@@ -625,7 +625,7 @@
     }
     if (data.id) state.circuitId = data.id;
 
-    App.setHint(`Loaded "${data.name || 'circuit'}" · ${data.components?.length ?? 0} components`, 3000);
+    App.setHint(`Opened "${data.name || 'circuit'}"`, 2000);
   };
 
   // Replaying a board re-runs the place/wire helpers, which would each record
@@ -708,7 +708,7 @@
       const text = await file.text();
       let data;
       try { data = JSON.parse(text); }
-      catch { App.setHint('⚠️ Invalid file', 2500); return; }
+      catch { App.setHint('Not a .sparky file', 2500); return; }
       _showLoadPreview(data);
     };
     inp.click();
@@ -963,14 +963,14 @@
     if (!undoStack.length) { App.setHint('Nothing to undo', 1500); return; }
     redoStack.push(snapshot());
     applySnapshot(undoStack.pop());
-    App.setHint('Undo · Ctrl+Shift+Z to redo', 1800);
+    App.setHint('Undone', 1200);
   };
 
   App.redo = function () {
     if (!redoStack.length) { App.setHint('Nothing to redo', 1500); return; }
     undoStack.push(snapshot());
     applySnapshot(redoStack.pop());
-    App.setHint('Redo', 1800);
+    App.setHint('Redone', 1200);
   };
 
   // ── Helpers ───────────────────────────────────────────────────
