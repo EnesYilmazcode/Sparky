@@ -286,7 +286,7 @@
     // epoxy: its own material so each LED can light independently
     // Unlit, the epoxy is a deep tint; lit, it glows with the die's colour.
     // It skips tone mapping so a lit red stays red instead of going orange.
-    const tint = colorName === 'white' ? lin(0xdfe9ff) : lin(hex).multiplyScalar(0.6);
+    const tint = colorName === 'white' ? lin(0xdfe9ff) : lin(hex).multiplyScalar(0.45);
     const epoxy = new THREE.MeshPhysicalMaterial({
       color: tint, emissive: lin(hex), emissiveIntensity: 0,
       roughness: 0.06, metalness: 0, clearcoat: 1, clearcoatRoughness: 0.04,
