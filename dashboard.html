@@ -2,719 +2,700 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Sparky — Dashboard</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Sparky: dashboard</title>
+  <meta name="theme-color" content="#FAF9F6" />
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath d='M13 2L3 14h9l-1 8 10-12h-9l1-8z' fill='%23D97706'/%3E%3C/svg%3E" />
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
+  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=Inter:wght@400;500;600&display=swap" rel="stylesheet" />
   <style>
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    [hidden] { display: none !important; }
 
     :root {
-      --bg:        #FAF9F6;
-      --bg-card:   #F3F1EC;
-      --bg-hover:  #EDEAE4;
-      --sidebar:   #F3F1EC;
-      --border:    #E0DCD5;
-      --border-lo: #E8E4DE;
-      --text:      #1A1814;
-      --text-sub:  #6B6560;
-      --text-dim:  #9C9690;
-      --accent:    #D97706;
-      --accent-hi: #B45309;
-      --accent-lo: #F59E0B;
-      --white:     #1A1814;
-      --danger:    #dc2626;
-      --sidebar-w: 220px;
+      --paper:      #FAF9F6;
+      --panel:      #F3F1EC;
+      --panel-hi:   #EAE6DF;
+      --line:       #E4DFD6;
+      --line-hi:    #D5CFC5;
+      --ink:        #1A1814;
+      --ink-2:      #57514B;
+      --ink-3:      #6E6862;
+      --amber:      #D97706;
+      --amber-lo:   #F59E0B;
+      --amber-ink:  #B45309;
+      --amber-deep: #92400E;
+      --amber-wash: #FEF3C7;
+      --stage:      #DCDAD4;
+      --night:      #1A1814;
+      --night-ink:  #E8E4DE;
+      --danger:     #B91C1C;
+
+      --side:   15.5rem;
+      --gutter: clamp(1rem, 3vw, 2.5rem);
+      --head:   'Space Grotesk', system-ui, sans-serif;
+      --body:   'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
     }
 
     body {
-      font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
-      background: var(--bg);
-      color: var(--text);
-      line-height: 1.5;
+      font-family: var(--body);
+      font-size: 0.9375rem;
+      line-height: 1.55;
+      color: var(--ink);
+      background: var(--paper);
       -webkit-font-smoothing: antialiased;
-      display: flex;
-      min-height: 100vh;
+    }
+    svg { flex-shrink: 0; }
+    button { font: inherit; color: inherit; }
+
+    :focus-visible {
+      outline: 2px solid var(--amber-ink);
+      outline-offset: 2px;
+      border-radius: 6px;
     }
 
-    /* ── Sidebar ─────────────────────────────────────────────── */
-    .sidebar {
-      position: fixed;
-      top: 0; left: 0; bottom: 0;
-      width: var(--sidebar-w);
-      background: var(--sidebar);
-      border-right: 1px solid var(--border);
+    .sr-only {
+      position: absolute; width: 1px; height: 1px; overflow: hidden;
+      clip: rect(0 0 0 0); clip-path: inset(50%); white-space: nowrap;
+    }
+    .skip {
+      position: absolute; left: 1rem; top: -3rem; z-index: 300;
+      background: var(--ink); color: var(--paper);
+      padding: 0.5rem 0.9rem; border-radius: 8px;
+      font-weight: 600; font-size: 0.875rem; text-decoration: none;
+    }
+    .skip:focus { top: 0.75rem; }
+
+    /* ── Buttons ─────────────────────────────────────────── */
+    .btn {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 0.45rem;
+      min-height: 2.5rem;
+      padding: 0 1rem;
+      border-radius: 9px;
+      border: 1px solid transparent;
+      font-family: var(--head);
+      font-size: 0.9375rem;
+      font-weight: 600;
+      letter-spacing: -0.01em;
+      white-space: nowrap;
+      text-decoration: none;
+      cursor: pointer;
+      transition: background-color 0.15s, border-color 0.15s, color 0.15s;
+    }
+    .btn-primary {
+      background: var(--amber-ink);
+      color: #fff;
+      box-shadow: inset 0 1px 0 rgba(255,255,255,0.18), 0 1px 2px rgba(146,64,14,0.25);
+    }
+    .btn-primary:hover { background: var(--amber-deep); }
+    .btn-primary[disabled] { opacity: 0.65; cursor: progress; }
+    .btn-quiet { background: #fff; color: var(--ink); border-color: var(--line-hi); }
+    .btn-quiet:hover { background: var(--panel); border-color: #BDB5A9; }
+    .btn-quiet[aria-pressed="true"] { background: var(--amber-wash); border-color: #F2C879; color: var(--amber-deep); }
+    .btn-sm { min-height: 2.125rem; padding: 0 0.75rem; font-size: 0.8125rem; border-radius: 8px; }
+    .btn-danger-text { background: transparent; color: var(--danger); }
+    .btn-danger-text:hover { background: #FDECEC; }
+    .icon-btn {
+      display: grid;
+      place-items: center;
+      width: 2.25rem;
+      height: 2.25rem;
+      border: 0;
+      border-radius: 8px;
+      background: transparent;
+      color: var(--ink-2);
+      cursor: pointer;
+      transition: background-color 0.15s, color 0.15s;
+    }
+    .icon-btn:hover { background: var(--panel-hi); color: var(--ink); }
+
+    /* ── Frame: sidebar and main ─────────────────────────── */
+    .app {
+      display: grid;
+      grid-template-columns: var(--side) minmax(0, 1fr);
+      min-height: 100vh;
+      /* The sidebar is sticky and one screen tall; paint its column too. */
+      background: linear-gradient(90deg, var(--panel) calc(var(--side) - 1px), var(--line) 0 var(--side), transparent 0);
+    }
+    .side {
+      position: sticky;
+      top: 0;
+      height: 100vh;
       display: flex;
       flex-direction: column;
-      z-index: 50;
+      gap: 1.25rem;
+      padding: 1rem 0.75rem;
+      background: var(--panel);
+      border-right: 1px solid var(--line);
     }
-
-    .sidebar-top {
-      height: 56px;
-      display: flex;
-      align-items: center;
-      padding: 0 1rem;
-      border-bottom: 1px solid var(--border-lo);
-      flex-shrink: 0;
-    }
-    .sidebar-logo {
-      display: flex;
+    .brand {
+      display: inline-flex;
       align-items: center;
       gap: 0.5rem;
-      font-family: 'Space Grotesk', sans-serif;
-      font-size: 1rem;
+      padding: 0.35rem 0.55rem;
+      font-family: var(--head);
+      font-size: 1.125rem;
       font-weight: 700;
-      color: var(--text);
-      text-decoration: none;
-      padding: 0.35rem 0.5rem;
-      border-radius: 6px;
       letter-spacing: -0.02em;
+      color: var(--ink);
+      text-decoration: none;
     }
-    .sidebar-logo .bolt { color: var(--accent); filter: drop-shadow(0 0 4px rgba(217,119,6,0.3)); }
-
-    .sidebar-nav {
-      flex: 1;
-      padding: 0.75rem 0.75rem;
-      display: flex;
-      flex-direction: column;
-      gap: 2px;
-    }
-    .sidebar-item {
+    .brand svg { color: var(--amber); }
+    .tabs { display: flex; flex-direction: column; gap: 2px; }
+    .tab {
       display: flex;
       align-items: center;
       gap: 0.65rem;
-      font-size: 0.9rem;
-      font-weight: 500;
-      color: var(--text-sub);
-      text-decoration: none;
-      padding: 0.55rem 0.75rem;
-      border-radius: 6px;
-      cursor: pointer;
-      border: none;
-      background: none;
       width: 100%;
+      padding: 0.55rem 0.65rem;
+      border: 0;
+      border-radius: 9px;
+      background: none;
+      font-size: 0.9375rem;
+      font-weight: 500;
+      color: var(--ink-2);
       text-align: left;
-      transition: background 0.1s, color 0.1s;
+      cursor: pointer;
+      transition: background-color 0.15s, color 0.15s;
     }
-    .sidebar-item:hover { background: var(--bg-hover); color: var(--text); }
-    .sidebar-item.active { background: var(--bg-hover); color: var(--text); font-weight: 600; }
-    .sidebar-icon { width: 15px; height: 15px; display: inline-flex; align-items: center; justify-content: center; flex-shrink: 0; color: currentColor; }
-
-    /* ── Main ───────────────────────────────────────────────── */
-    .main {
-      margin-left: var(--sidebar-w);
-      flex: 1;
-      min-height: 100vh;
+    .tab:hover { background: var(--panel-hi); color: var(--ink); }
+    .tab[aria-current="page"] {
+      background: #fff;
+      color: var(--ink);
+      font-weight: 600;
+      box-shadow: 0 0 0 1px var(--line), 0 1px 2px rgba(60, 40, 10, 0.06);
+    }
+    .tab-count {
+      margin-left: auto;
+      font-size: 0.75rem;
+      font-weight: 600;
+      color: var(--ink-3);
+      font-variant-numeric: tabular-nums;
+    }
+    .side-foot {
+      margin-top: auto;
       display: flex;
-      flex-direction: column;
+      align-items: center;
+      gap: 0.6rem;
+      padding: 0.75rem 0.4rem 0;
+      border-top: 1px solid var(--line);
     }
+    .avatar {
+      display: grid;
+      place-items: center;
+      width: 2rem;
+      height: 2rem;
+      border-radius: 50%;
+      background: var(--amber-wash);
+      color: var(--amber-deep);
+      font-family: var(--head);
+      font-size: 0.875rem;
+      font-weight: 700;
+    }
+    .who { min-width: 0; flex: 1; }
+    .who p {
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    .who-name { font-size: 0.875rem; font-weight: 600; }
+    .who-mail { font-size: 0.75rem; color: var(--ink-3); }
 
+    .main { min-width: 0; display: flex; flex-direction: column; }
     .topbar {
       display: flex;
       align-items: center;
       justify-content: space-between;
-      padding: 0 2rem;
-      height: 56px;
-      border-bottom: 1px solid var(--border);
-      flex-shrink: 0;
+      flex-wrap: wrap;
+      gap: 0.75rem 1rem;
+      padding: 1.75rem var(--gutter) 1.25rem;
     }
-    .topbar-title {
-      font-family: 'Space Grotesk', sans-serif;
-      font-size: 1rem;
+    .topbar h1 {
+      font-family: var(--head);
+      font-size: 1.75rem;
       font-weight: 700;
-      color: var(--white);
-      letter-spacing: -0.02em;
+      line-height: 1.15;
+      letter-spacing: -0.03em;
     }
-    .topbar-actions {
+    .topbar-actions { display: flex; flex-wrap: wrap; gap: 0.5rem; }
+    .content { flex: 1; padding: 0 var(--gutter) 4rem; }
+
+    /* ── Cards ───────────────────────────────────────────── */
+    .grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(13.5rem, 1fr));
+      gap: 1rem;
+    }
+    .grid.sparks { grid-template-columns: repeat(auto-fill, minmax(17rem, 1fr)); }
+
+    .card {
+      position: relative;
       display: flex;
+      flex-direction: column;
+      min-width: 0;
+      background: #fff;
+      border: 1px solid var(--line);
+      border-radius: 12px;
+      transition: border-color 0.15s, box-shadow 0.15s;
+    }
+    .card:hover { border-color: var(--line-hi); box-shadow: 0 10px 28px -18px rgba(90, 58, 20, 0.4); }
+    .thumb {
+      aspect-ratio: 16 / 10;
+      display: grid;
+      place-items: center;
+      overflow: hidden;
+      border-radius: 11px 11px 0 0;
+      border-bottom: 1px solid var(--line);
+      background-color: var(--stage);
+      background-image: radial-gradient(circle, rgba(60,52,40,0.16) 1.1px, transparent 1.5px);
+      background-size: 14px 14px;
+      color: #8A8176;
+    }
+    .thumb img { width: 100%; height: 100%; object-fit: cover; display: block; }
+    .card-body {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      gap: 0.2rem;
+      padding: 0.8rem 0.6rem 0.9rem 1rem;
+    }
+    .card-row {
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
       gap: 0.5rem;
     }
-
-    .content {
-      flex: 1;
-      padding: 2rem;
-    }
-
-    /* ── Buttons ────────────────────────────────────────────── */
-    .btn {
-      display: inline-flex;
-      align-items: center;
-      gap: 0.4rem;
-      font-family: 'Inter', -apple-system, sans-serif;
-      font-size: 0.8125rem;
-      font-weight: 500;
-      cursor: pointer;
-      border-radius: 6px;
-      border: 1px solid transparent;
-      padding: 0.4rem 0.9rem;
-      text-decoration: none;
-      transition: background 0.12s, border-color 0.12s, transform 0.1s;
-    }
-    .btn:active { transform: scale(0.98); }
-    .btn-primary { background: var(--accent); border-color: var(--accent); color: #ffffff; transition: background 0.15s, border-color 0.15s, transform 0.1s, box-shadow 0.15s; }
-    .btn-primary:hover { background: var(--accent-hi); border-color: var(--accent-hi); box-shadow: 0 2px 8px rgba(217,119,6,0.2); }
-    .btn-ghost { background: transparent; border-color: var(--border); color: var(--text-sub); }
-    .btn-ghost:hover { border-color: #c4c4c8; color: var(--text); background: var(--bg-hover); }
-    .btn-danger { background: transparent; border-color: transparent; color: var(--danger); }
-    .btn-danger:hover { background: rgba(220,38,38,0.08); }
-
-    /* ── Section headings ───────────────────────────────────── */
-    .section-head {
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      margin-bottom: 1.25rem;
-    }
-    .section-head h2 {
-      font-family: 'Space Grotesk', sans-serif;
-      font-size: 0.9375rem;
+    .card-title {
+      padding-top: 0.3rem;
+      font-family: var(--head);
+      font-size: 1rem;
       font-weight: 600;
-      color: var(--white);
-      letter-spacing: -0.01em;
+      line-height: 1.3;
+      letter-spacing: -0.015em;
+      overflow-wrap: anywhere;
     }
-
-    /* ── Circuit grid ───────────────────────────────────────── */
-    .circuit-grid {
-      display: grid;
-      grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
-      gap: 1rem;
-      margin-bottom: 2.5rem;
-    }
-
-    .circuit-card {
-      background: var(--bg-card);
-      border: 1px solid var(--border);
-      border-radius: 10px;
-      padding: 1.25rem;
-      display: flex;
-      flex-direction: column;
-      gap: 0.75rem;
+    /* The title button covers the card, so the whole card opens it. */
+    .card-open {
+      border: 0;
+      background: none;
+      padding: 0;
+      font: inherit;
+      text-align: left;
       cursor: pointer;
-      transition: background 0.12s, border-color 0.12s;
-      position: relative;
     }
-    .circuit-card:hover { background: var(--bg-hover); border-color: #ccc; }
-
-    /* New circuit card — same size as circuit cards */
-    .new-card {
-      display: flex;
-      flex-direction: column;
-      gap: 0.75rem;
-      background: transparent;
-      border: 1.5px dashed var(--border);
-      border-radius: 10px;
-      padding: 1.25rem;
-      cursor: pointer;
-      transition: background 0.12s, border-color 0.12s;
-    }
-    .new-card:hover { background: var(--bg-hover); border-color: #aaa; }
-    .new-card-thumb {
-      width: 100%;
-      aspect-ratio: 16/10;
-      border-radius: 6px;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      flex-shrink: 0;
-    }
-    .new-card-icon {
-      font-size: 1.6rem;
-      color: var(--text-dim);
-      line-height: 1;
-    }
-    .new-card-label {
-      font-family: 'Space Grotesk', sans-serif;
-      font-size: 0.875rem;
-      font-weight: 600;
-      color: var(--text-sub);
-    }
-    .new-card-sub {
-      font-size: 0.75rem;
-      color: var(--text-dim);
-    }
-
-    /* Normal circuit card */
-    .card-thumb {
-      width: 100%;
-      aspect-ratio: 16/10;
-      border-radius: 6px;
-      border: 1px solid var(--border);
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      font-size: 1.5rem;
-      overflow: hidden;
-      background: var(--bg);
-      flex-shrink: 0;
-    }
-    .card-thumb-grid {
-      width: 100%; height: 100%;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      position: relative;
-    }
-    .card-thumb-grid::before {
+    .card-open::after {
       content: '';
       position: absolute;
       inset: 0;
-      background-image:
-        linear-gradient(rgba(0,0,0,0.04) 1px, transparent 1px),
-        linear-gradient(90deg, rgba(0,0,0,0.04) 1px, transparent 1px);
-      background-size: 16px 16px;
+      border-radius: 12px;
     }
-    .card-thumb-emoji { position: relative; z-index: 1; font-size: 1.75rem; }
-
-    .card-name {
-      font-family: 'Space Grotesk', sans-serif;
+    .card-open:focus-visible { outline: none; }
+    .card-open:focus-visible::after { outline: 2px solid var(--amber-ink); outline-offset: 2px; }
+    .card-meta { font-size: 0.8125rem; color: var(--ink-3); padding-right: 0.4rem; }
+    .card-desc {
+      margin-top: 0.35rem;
+      padding-right: 0.4rem;
       font-size: 0.875rem;
-      font-weight: 600;
-      color: var(--white);
-      letter-spacing: -0.01em;
-      flex: 1;
+      color: var(--ink-2);
+      display: -webkit-box;
+      -webkit-line-clamp: 3;
+      -webkit-box-orient: vertical;
+      overflow: hidden;
+      overflow-wrap: anywhere;
     }
-    .card-meta {
-      font-size: 0.75rem;
-      color: var(--text-dim);
-    }
-
-    /* Card bottom row */
-    .card-row {
+    .card-foot {
       display: flex;
       align-items: center;
-      justify-content: space-between;
+      gap: 0.5rem;
+      padding: 0 1rem 1rem;
     }
 
-    /* Three-dot menu */
-    .card-menu-wrap {
-      position: relative;
-    }
-    .card-menu-btn {
-      background: none;
-      border: none;
+    .new-tile {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 0.35rem;
+      min-height: 12rem;
+      padding: 1.5rem 1rem;
+      border: 1.5px dashed var(--line-hi);
+      border-radius: 12px;
+      background: transparent;
+      color: var(--ink-2);
       cursor: pointer;
-      color: var(--text-dim);
-      font-size: 1.1rem;
-      padding: 0.15rem 0.3rem;
-      border-radius: 4px;
-      line-height: 1;
-      transition: background 0.1s, color 0.1s;
+      transition: border-color 0.15s, background-color 0.15s, color 0.15s;
     }
-    .card-menu-btn:hover { background: var(--bg-hover); color: var(--text-sub); }
-    .card-menu-btn:focus { outline: none; }
-    .card-dropdown {
+    .new-tile:hover { border-color: var(--amber-ink); background: rgba(254, 243, 199, 0.35); color: var(--amber-deep); }
+    .new-tile strong { font-family: var(--head); font-size: 1rem; font-weight: 600; color: var(--ink); }
+    .new-tile span { font-size: 0.8125rem; }
+    .new-tile-plus {
+      display: grid;
+      place-items: center;
+      width: 2.5rem;
+      height: 2.5rem;
+      margin-bottom: 0.35rem;
+      border-radius: 50%;
+      background: #fff;
+      border: 1px solid var(--line-hi);
+      color: var(--amber-ink);
+    }
+
+    /* Card actions menu (a disclosure: button plus list) */
+    .menu-wrap { position: relative; z-index: 2; }
+    .menu {
       position: absolute;
       right: 0;
       top: calc(100% + 4px);
-      background: var(--bg);
-      border: 1px solid var(--border);
-      border-radius: 8px;
-      padding: 0.35rem;
-      min-width: 130px;
-      box-shadow: 0 8px 24px rgba(0,0,0,0.10);
-      z-index: 200;
-      display: none;
-    }
-    .card-dropdown.open { display: block; }
-    .dropdown-item {
-      display: flex;
-      align-items: center;
-      gap: 0.5rem;
-      font-size: 0.8125rem;
-      font-weight: 500;
-      padding: 0.4rem 0.6rem;
-      border-radius: 5px;
-      cursor: pointer;
-      border: none;
-      background: none;
-      width: 100%;
-      text-align: left;
-      color: var(--text-sub);
-      transition: background 0.1s, color 0.1s;
-      font-family: 'Inter', sans-serif;
-    }
-    .dropdown-item:hover { background: var(--bg-hover); color: var(--text); }
-    .dropdown-item.danger { color: var(--danger); }
-    .dropdown-item.danger:hover { background: rgba(220,38,38,0.08); color: var(--danger); }
-
-    /* ── Empty state ────────────────────────────────────────── */
-    .empty-state {
-      padding: 5rem 2rem;
-      text-align: center;
-      color: var(--text-dim);
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      justify-content: center;
-      gap: 0.5rem;
-    }
-    .empty-state-icon { font-size: 2.5rem; opacity: 0.35; }
-    .empty-state-text { font-size: 0.875rem; line-height: 1.6; }
-
-    /* ── Sparks community cards ─────────────────────────────── */
-    .spark-grid {
-      display: grid;
-      grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
-      gap: 1rem;
-    }
-    .spark-card {
-      background: var(--bg-card);
-      border: 1px solid var(--border);
+      z-index: 20;
+      min-width: 11.5rem;
+      padding: 0.3rem;
+      background: #fff;
+      border: 1px solid var(--line-hi);
       border-radius: 10px;
-      padding: 1.25rem;
-      display: flex;
-      flex-direction: column;
-      gap: 0.75rem;
-      transition: background 0.12s, border-color 0.12s;
+      box-shadow: 0 18px 40px -14px rgba(26, 24, 20, 0.28);
     }
-    .spark-card:hover { background: var(--bg-hover); border-color: #ccc; }
-    .spark-thumb {
+    .menu button {
+      display: block;
       width: 100%;
-      aspect-ratio: 16/9;
+      padding: 0.5rem 0.65rem;
+      border: 0;
       border-radius: 6px;
-      border: 1px solid var(--border);
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      font-size: 2rem;
-      position: relative;
-      overflow: hidden;
-    }
-    .spark-thumb::before {
-      content: '';
-      position: absolute;
-      inset: 0;
-      background-image:
-        linear-gradient(rgba(255,255,255,0.025) 1px, transparent 1px),
-        linear-gradient(90deg, rgba(255,255,255,0.025) 1px, transparent 1px);
-      background-size: 14px 14px;
-    }
-    .spark-thumb-emoji { position: relative; z-index: 1; }
-    .spark-card-title {
-      font-family: 'Space Grotesk', sans-serif;
-      font-size: 0.9rem;
-      font-weight: 600;
-      color: var(--white);
-      letter-spacing: -0.01em;
-    }
-    .spark-card-author {
-      font-size: 0.75rem;
-      color: var(--text-dim);
-      margin-top: -0.4rem;
-    }
-    .spark-card-desc {
-      font-size: 0.8125rem;
-      color: var(--text-sub);
-      line-height: 1.55;
-      flex: 1;
-    }
-    .spark-card-footer {
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      gap: 0.5rem;
-    }
-
-    /* ── Publish modal ──────────────────────────────────────── */
-    #publish-modal {
-      position: fixed;
-      inset: 0;
-      background: rgba(26,24,20,0.5);
-      backdrop-filter: blur(4px);
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      z-index: 300;
-    }
-    .publish-card {
-      background: var(--bg);
-      border: 1px solid var(--border);
-      border-radius: 12px;
-      box-shadow: 0 8px 40px rgba(0,0,0,0.14);
-      width: 420px;
-      max-width: calc(100vw - 2rem);
-      display: flex;
-      flex-direction: column;
-      overflow: hidden;
-    }
-    .publish-header {
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      padding: 1rem 1.25rem 0.75rem;
-      border-bottom: 1px solid var(--border);
-    }
-    .publish-title-row {
-      font-family: 'Space Grotesk', sans-serif;
-      font-size: 0.9375rem;
-      font-weight: 700;
-      color: var(--text);
-      letter-spacing: -0.01em;
-    }
-    .publish-close {
       background: none;
-      border: none;
-      cursor: pointer;
-      color: var(--text-dim);
-      font-size: 0.9rem;
-      padding: 0.2rem 0.4rem;
-      border-radius: 4px;
-      line-height: 1;
-    }
-    .publish-close:hover { background: var(--bg-hover); color: var(--text); }
-    .publish-thumb {
-      width: 100%;
-      aspect-ratio: 16/7;
-      background: #1a1c24;
-      overflow: hidden;
-      flex-shrink: 0;
-    }
-    .publish-thumb img { width: 100%; height: 100%; object-fit: cover; display: block; }
-    .publish-fields {
-      display: flex;
-      flex-direction: column;
-      gap: 0.75rem;
-      padding: 1rem 1.25rem;
-    }
-    .publish-label {
-      display: flex;
-      flex-direction: column;
-      gap: 0.3rem;
-      font-size: 0.8rem;
-      font-weight: 600;
-      color: var(--text-sub);
-    }
-    .publish-input {
-      font-family: 'Inter', sans-serif;
       font-size: 0.875rem;
-      color: var(--text);
-      background: var(--bg-card);
-      border: 1px solid var(--border);
-      border-radius: 6px;
-      padding: 0.45rem 0.65rem;
-      outline: none;
-      transition: border-color 0.15s;
-    }
-    .publish-input:focus { border-color: var(--accent); box-shadow: 0 0 0 2px rgba(217,119,6,0.1); }
-    .publish-textarea {
-      resize: vertical;
-      min-height: 72px;
-      line-height: 1.5;
-    }
-    .publish-actions {
-      display: flex;
-      gap: 0.5rem;
-      padding: 0 1.25rem 1.25rem;
-    }
-    .publish-actions .btn { flex: 1; justify-content: center; }
-
-    /* ── Sparks toolbar ────────────────────────────────────── */
-    .sparks-toolbar {
-      display: flex;
-      gap: 0.5rem;
-      margin-bottom: 1.25rem;
-      align-items: center;
-    }
-    .sparks-search-input {
-      flex: 1;
-      font-family: 'Inter', sans-serif;
-      font-size: 0.8125rem;
-      color: var(--text);
-      background: var(--bg-card);
-      border: 1px solid var(--border);
-      border-radius: 6px;
-      padding: 0.4rem 0.75rem;
-      outline: none;
-      transition: border-color 0.15s;
-    }
-    .sparks-search-input:focus { border-color: var(--accent); box-shadow: 0 0 0 2px rgba(217,119,6,0.1); }
-    .sparks-fav-btn.active { background: #fef9c3; border-color: #fbbf24; color: #92400e; }
-    .sparks-fav-btn.active svg { stroke: #f59e0b; }
-
-    /* Star button on spark cards */
-    .star-btn {
-      background: none;
-      border: none;
-      cursor: pointer;
-      color: var(--text-dim);
-      padding: 0.2rem;
-      border-radius: 4px;
-      display: flex;
-      align-items: center;
-      transition: color 0.1s;
-      line-height: 1;
-      flex-shrink: 0;
-    }
-    .star-btn:hover { color: #f59e0b; }
-    .star-btn.starred { color: #f59e0b; }
-
-    /* Count badge in sidebar */
-    .nav-count {
-      font-size: 0.7rem;
-      background: var(--bg-hover);
-      color: var(--text-dim);
-      border-radius: 100px;
-      padding: 0.1rem 0.45rem;
-      margin-left: auto;
       font-weight: 500;
-      flex-shrink: 0;
+      text-align: left;
+      cursor: pointer;
     }
-    .nav-count:empty { display: none; }
+    .menu button:hover { background: var(--panel); }
+    .menu button:focus-visible { outline-offset: -2px; }
+    .menu .danger { color: var(--danger); }
+    .menu .danger:hover { background: #FDECEC; }
 
-    /* ── WIP Banner ────────────────────────────────────────── */
-    .wip-banner {
+    .star[aria-pressed="true"] { color: var(--amber); }
+    .star[aria-pressed="true"] svg { fill: currentColor; }
+
+    /* ── Sparks toolbar ──────────────────────────────────── */
+    .toolbar {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.5rem;
+      margin-bottom: 1.25rem;
+    }
+    .search {
+      flex: 1 1 16rem;
       display: flex;
       align-items: center;
-      gap: 0.75rem;
-      padding: 0.85rem 1.1rem;
-      margin-bottom: 1.25rem;
-      border-radius: 8px;
-      background: #FEF3C7;
-      border: 1px solid #FDE68A;
-      font-size: 0.8125rem;
-      color: #92400E;
-      line-height: 1.5;
+      gap: 0.5rem;
+      min-height: 2.5rem;
+      padding: 0 0.75rem;
+      background: #fff;
+      border: 1px solid var(--line-hi);
+      border-radius: 9px;
+      color: var(--ink-3);
     }
-    .wip-banner svg { flex-shrink: 0; }
-    .wip-banner strong { font-weight: 600; }
+    .search:focus-within { outline: 2px solid var(--amber-ink); outline-offset: 1px; }
+    .search input {
+      flex: 1;
+      min-width: 0;
+      border: 0;
+      outline: 0;
+      background: transparent;
+      font: inherit;
+      color: var(--ink);
+    }
+    .search input::placeholder { color: var(--ink-3); opacity: 1; }
 
-    /* ── Hidden file input ──────────────────────────────────── */
-    #import-input { display: none; }
+    /* ── Empty, error and loading states ─────────────────── */
+    .empty {
+      grid-column: 1 / -1;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 0.4rem;
+      padding: 3.5rem 1.5rem;
+      text-align: center;
+      border: 1.5px dashed var(--line-hi);
+      border-radius: 14px;
+      background: rgba(255, 255, 255, 0.55);
+    }
+    .empty-icon {
+      display: grid;
+      place-items: center;
+      width: 3rem;
+      height: 3rem;
+      margin-bottom: 0.5rem;
+      border-radius: 12px;
+      background: var(--panel);
+      color: var(--ink-2);
+    }
+    .empty.is-error .empty-icon { background: #FDECEC; color: var(--danger); }
+    .empty h2 { font-family: var(--head); font-size: 1.125rem; font-weight: 600; letter-spacing: -0.015em; }
+    .empty p { max-width: 30rem; color: var(--ink-2); overflow-wrap: anywhere; }
+    .empty-actions { display: flex; flex-wrap: wrap; justify-content: center; gap: 0.5rem; margin-top: 0.9rem; }
 
-    /* ── Tabs (hidden, controlled by JS) ───────────────────── */
-    .tab-panel { display: none; }
-    .tab-panel.active { display: block; }
+    .skeleton { pointer-events: none; }
+    .skeleton .thumb { background-image: none; background-color: var(--panel); }
+    .sk-line { height: 0.75rem; margin: 0.9rem 1rem 0; border-radius: 4px; background: var(--panel); }
+    .sk-line.short { width: 45%; margin-bottom: 1.25rem; }
 
-    /* ── Toast ──────────────────────────────────────────────── */
+    /* ── Publish dialog ──────────────────────────────────── */
+    .sheet {
+      width: min(30rem, calc(100vw - 2rem));
+      margin: auto;
+      padding: 0;
+      border: 1px solid var(--line);
+      border-radius: 16px;
+      background: var(--paper);
+      color: var(--ink);
+      box-shadow: 0 30px 80px -20px rgba(26, 24, 20, 0.35);
+      overflow: hidden;
+    }
+    .sheet::backdrop {
+      background: rgba(26, 24, 20, 0.5);
+      -webkit-backdrop-filter: blur(4px);
+      backdrop-filter: blur(4px);
+    }
+    .sheet-head {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0.9rem 0.75rem 0.9rem 1.25rem;
+    }
+    .sheet-head h2 { font-family: var(--head); font-size: 1.1875rem; font-weight: 700; letter-spacing: -0.02em; }
+    .sheet-thumb {
+      aspect-ratio: 16 / 7;
+      background-color: var(--stage);
+      background-image: radial-gradient(circle, rgba(60,52,40,0.16) 1.1px, transparent 1.5px);
+      background-size: 14px 14px;
+      border-block: 1px solid var(--line);
+    }
+    .sheet-thumb img { width: 100%; height: 100%; object-fit: cover; display: block; }
+    .sheet-body { display: grid; gap: 0.9rem; padding: 1.1rem 1.25rem; }
+    .field { display: grid; gap: 0.35rem; font-size: 0.8125rem; font-weight: 600; color: var(--ink-2); }
+    .field-row { display: flex; justify-content: space-between; gap: 1rem; }
+    .counter { font-weight: 500; color: var(--ink-3); font-variant-numeric: tabular-nums; }
+    .input {
+      width: 100%;
+      padding: 0.55rem 0.7rem;
+      border: 1px solid var(--line-hi);
+      border-radius: 8px;
+      background: #fff;
+      font: 400 0.9375rem/1.5 var(--body);
+      color: var(--ink);
+    }
+    .input:focus { outline: 2px solid var(--amber-ink); outline-offset: 0; border-color: transparent; }
+    .input::placeholder { color: var(--ink-3); opacity: 1; }
+    .input[readonly] { background: var(--panel); color: var(--ink-2); }
+    textarea.input { resize: vertical; min-height: 5.5rem; }
+    .sheet-note { font-size: 0.8125rem; color: var(--ink-3); }
+    .sheet-foot { display: flex; justify-content: flex-end; gap: 0.5rem; padding: 0 1.25rem 1.25rem; }
+
+    /* ── Toast ───────────────────────────────────────────── */
     .toast {
       position: fixed;
-      bottom: 1.5rem;
       left: 50%;
-      transform: translateX(-50%) translateY(8px);
-      background: #1A1814;
-      border: 1px solid #2A2722;
-      border-radius: 8px;
-      padding: 0.6rem 1.1rem;
-      font-size: 0.8125rem;
-      color: #E8E4DE;
-      box-shadow: 0 8px 24px rgba(0,0,0,0.15);
+      bottom: 1.25rem;
+      z-index: 500;
+      width: max-content;
+      max-width: calc(100vw - 2rem);
+      padding: 0.7rem 1rem;
+      border-radius: 10px;
+      background: var(--night);
+      color: var(--night-ink);
+      font-size: 0.875rem;
+      box-shadow: 0 12px 30px -10px rgba(26, 24, 20, 0.45);
       opacity: 0;
+      transform: translate(-50%, 8px);
       pointer-events: none;
       transition: opacity 0.2s, transform 0.2s;
-      z-index: 999;
-      white-space: nowrap;
     }
-    .toast.show {
-      opacity: 1;
-      transform: translateX(-50%) translateY(0);
-    }
+    .toast.show { opacity: 1; transform: translate(-50%, 0); }
 
-    /* Covers the page until Firebase reports an auth state */
-    .auth-gate {
+    /* ── Sign-in gate ────────────────────────────────────── */
+    .gate {
       position: fixed;
       inset: 0;
       z-index: 1000;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      background: var(--bg);
-      color: var(--text-dim);
-      font-size: 0.8125rem;
+      display: grid;
+      place-items: center;
+      padding: 1.5rem;
+      background: var(--paper);
+      text-align: center;
+    }
+    .gate-inner { display: flex; flex-direction: column; align-items: center; gap: 0.6rem; max-width: 24rem; }
+    .gate-inner svg { color: var(--amber); }
+    .gate-text { font-weight: 500; color: var(--ink-2); }
+
+    /* ── Motion ──────────────────────────────────────────── */
+    @keyframes breathe { 50% { opacity: 0.35; } }
+    @keyframes pop {
+      from { opacity: 0; transform: translateY(8px) scale(0.98); }
+      to   { opacity: 1; transform: none; }
+    }
+    @media (prefers-reduced-motion: no-preference) {
+      .gate-inner svg, .skeleton .thumb, .skeleton .sk-line { animation: breathe 1.4s ease-in-out infinite; }
+      .sheet[open] { animation: pop 0.22s cubic-bezier(0.2, 0.7, 0.2, 1); }
+    }
+    @media (prefers-reduced-motion: reduce) {
+      *, *::before, *::after { transition-duration: 0.01ms !important; }
+    }
+
+    /* ── Narrow screens: the sidebar becomes a top bar ───── */
+    @media (max-width: 899px) {
+      .app { grid-template-columns: minmax(0, 1fr); grid-template-rows: auto 1fr; background: none; }
+      .side {
+        position: sticky;
+        z-index: 50;
+        height: auto;
+        flex-direction: row;
+        flex-wrap: wrap;
+        align-items: center;
+        gap: 0.5rem;
+        padding: 0.6rem var(--gutter) 0.7rem;
+        border-right: 0;
+        border-bottom: 1px solid var(--line);
+      }
+      .brand { order: 1; }
+      .side-foot { order: 2; margin: 0 0 0 auto; padding: 0; border: 0; }
+      .who { display: none; }
+      .tabs {
+        order: 3;
+        flex: 1 1 100%;
+        flex-direction: row;
+        padding: 3px;
+        border-radius: 10px;
+        background: var(--panel-hi);
+      }
+      .tab { flex: 1; justify-content: center; }
+      .tab-count { margin-left: 0; }
+      .topbar { padding-top: 1.25rem; }
+      .topbar h1 { font-size: 1.5rem; }
+    }
+    @media (max-width: 520px) {
+      .grid { grid-template-columns: repeat(auto-fill, minmax(9.5rem, 1fr)); gap: 0.75rem; }
+      .grid.sparks { grid-template-columns: minmax(0, 1fr); }
+      .card-body { padding-left: 0.8rem; }
+      .card-meta { font-size: 0.75rem; }
+      .new-tile { min-height: 10rem; }
+      .topbar-actions { width: 100%; }
+      .topbar-actions .btn { flex: 1 1 auto; }
+      .sheet-foot .btn { flex: 1; }
     }
   </style>
 </head>
 <body>
+  <a class="skip" href="#main">Skip to content</a>
 
-  <div class="auth-gate" id="auth-gate">Checking sign-in…</div>
-
-  <!-- Sidebar -->
-  <aside class="sidebar">
-    <div class="sidebar-top">
-      <a href="landing.html" class="sidebar-logo">
-        <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" class="bolt"><path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/></svg>Sparky
-      </a>
+  <div class="gate" id="auth-gate" role="status">
+    <div class="gate-inner">
+      <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/></svg>
+      <p class="gate-text" id="gate-text">Checking your sign-in</p>
     </div>
-    <nav class="sidebar-nav">
-      <button class="sidebar-item active" id="nav-my" onclick="switchTab('my')">
-        <span class="sidebar-icon"><svg width="15" height="15" viewBox="0 0 15 15" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="1.5" y="1.5" width="4.5" height="4.5" rx="1"/><rect x="9" y="1.5" width="4.5" height="4.5" rx="1"/><rect x="1.5" y="9" width="4.5" height="4.5" rx="1"/><rect x="9" y="9" width="4.5" height="4.5" rx="1"/></svg></span>My Circuits<span id="circuits-count" class="nav-count"></span>
-      </button>
-      <button class="sidebar-item" id="nav-sparks" onclick="switchTab('sparks')">
-        <span class="sidebar-icon"><svg width="15" height="15" viewBox="0 0 15 15" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M9 2L4.5 8.5H8.5L6 13 11.5 6H7.5L9 2z"/></svg></span>Sparks
-      </button>
-      <div style="flex:1;"></div>
-      <div id="user-info" style="font-size:0.75rem; color:var(--text-dim); padding:0.4rem 0.75rem; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;"></div>
-      <button class="sidebar-item" onclick="logout()">
-        <span class="sidebar-icon"><svg width="15" height="15" viewBox="0 0 15 15" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M5.5 3H3a1 1 0 00-1 1v7a1 1 0 001 1h2.5"/><path d="M9 5.5l3 2-3 2"/><line x1="12" y1="7.5" x2="6" y2="7.5"/></svg></span>Log Out
-      </button>
-    </nav>
-  </aside>
+  </div>
 
-  <!-- Main -->
-  <div class="main">
-    <header class="topbar">
-      <span class="topbar-title" id="topbar-title">My Circuits</span>
-      <div class="topbar-actions" id="topbar-actions">
-        <button class="btn btn-ghost" onclick="triggerImport()">↑ Import .sparky</button>
-        <button class="btn btn-primary" onclick="newCircuit()">+ New Circuit</button>
-      </div>
-    </header>
-
-    <div class="content">
-      <!-- MY CIRCUITS TAB -->
-      <div class="tab-panel active" id="tab-my">
-        <div class="circuit-grid" id="circuits-grid">
-          <!-- Populated by JS -->
+  <div class="app">
+    <aside class="side" aria-label="Sparky">
+      <a href="landing.html" class="brand">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/></svg>
+        Sparky
+      </a>
+      <nav class="tabs" aria-label="Dashboard">
+        <button class="tab" id="nav-my" type="button" aria-current="page">
+          <svg width="16" height="16" viewBox="0 0 15 15" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="1.5" y="1.5" width="4.5" height="4.5" rx="1"/><rect x="9" y="1.5" width="4.5" height="4.5" rx="1"/><rect x="1.5" y="9" width="4.5" height="4.5" rx="1"/><rect x="9" y="9" width="4.5" height="4.5" rx="1"/></svg>
+          My circuits
+          <span class="tab-count" id="circuits-count"></span>
+        </button>
+        <button class="tab" id="nav-sparks" type="button">
+          <svg width="16" height="16" viewBox="0 0 15 15" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 2L4.5 8.5H8.5L6 13 11.5 6H7.5L9 2z"/></svg>
+          Sparks
+        </button>
+      </nav>
+      <div class="side-foot">
+        <span class="avatar" id="avatar" aria-hidden="true"></span>
+        <div class="who">
+          <p class="who-name" id="who-name"></p>
+          <p class="who-mail" id="who-mail"></p>
         </div>
+        <button class="icon-btn" id="signout-btn" type="button" aria-label="Sign out" title="Sign out">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><path d="M16 17l5-5-5-5"/><path d="M21 12H9"/></svg>
+        </button>
       </div>
+    </aside>
 
-      <!-- SPARKS TAB -->
-      <div class="tab-panel" id="tab-sparks">
-        <div class="sparks-toolbar">
-          <input type="search" id="sparks-search" class="sparks-search-input" placeholder="Search sparks..." oninput="renderSparksFromCache()">
-          <button class="btn btn-ghost sparks-fav-btn" id="sparks-fav-btn" onclick="toggleFavFilter()">
-            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>
-            Favorites
+    <main class="main" id="main">
+      <header class="topbar">
+        <h1 id="page-title">My circuits</h1>
+        <div class="topbar-actions" id="my-actions">
+          <button class="btn btn-quiet" type="button" id="import-btn">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 15V3M7 8l5-5 5 5"/><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/></svg>
+            Import .sparky
+          </button>
+          <button class="btn btn-primary" type="button" id="new-btn">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>
+            New circuit
           </button>
         </div>
-        <div class="spark-grid" id="sparks-grid">
-          <!-- Populated by JS -->
-        </div>
+      </header>
+
+      <div class="content">
+        <section id="tab-my" aria-labelledby="page-title">
+          <div class="grid" id="circuits-grid"></div>
+        </section>
+
+        <section id="tab-sparks" aria-labelledby="page-title" hidden>
+          <div class="toolbar">
+            <label class="search">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="M20 20l-3.5-3.5"/></svg>
+              <span class="sr-only">Search Sparks</span>
+              <input type="search" id="sparks-search" placeholder="Search by title, author or description" autocomplete="off" />
+            </label>
+            <button class="btn btn-quiet" id="sparks-fav-btn" type="button" aria-pressed="false">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>
+              Favorites
+            </button>
+          </div>
+          <div class="grid sparks" id="sparks-grid"></div>
+        </section>
       </div>
-    </div>
+    </main>
   </div>
 
-  <!-- Hidden import input -->
-  <input type="file" id="import-input" accept=".sparky,.json" multiple />
+  <input type="file" id="import-input" accept=".sparky,.json" multiple hidden />
 
-  <!-- Publish Modal -->
-  <div id="publish-modal" style="display:none">
-    <div class="publish-card">
-      <div class="publish-header">
-        <div class="publish-title-row">Publish to Sparks</div>
-        <button class="publish-close" onclick="closePublishModal()">✕</button>
+  <dialog class="sheet" id="publish-modal" aria-labelledby="publish-title">
+    <form id="publish-form">
+      <div class="sheet-head">
+        <h2 id="publish-title">Publish to Sparks</h2>
+        <button class="icon-btn" type="button" id="publish-close" aria-label="Close">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg>
+        </button>
       </div>
-      <div id="publish-thumb" class="publish-thumb"></div>
-      <div class="publish-fields">
-        <label class="publish-label">Title
-          <input id="publish-name" class="publish-input" type="text" maxlength="80" placeholder="Circuit name…">
+      <div class="sheet-thumb" id="publish-thumb"></div>
+      <div class="sheet-body">
+        <label class="field">Title
+          <input id="publish-name" class="input" type="text" maxlength="80" required placeholder="Name your circuit" />
         </label>
-        <label class="publish-label">Your name
-          <input id="publish-author" class="publish-input" type="text" maxlength="80" placeholder="e.g. @yourname">
+        <label class="field">Published as
+          <input id="publish-author" class="input" type="text" maxlength="80" placeholder="Your name" />
         </label>
-        <label class="publish-label">Description
-          <textarea id="publish-desc" class="publish-input publish-textarea" maxlength="500" placeholder="What does this circuit do? What will others learn?"></textarea>
+        <label class="field">
+          <span class="field-row"><span>Description</span><span class="counter" id="desc-count">0 / 500</span></span>
+          <textarea id="publish-desc" class="input" maxlength="500" rows="3" aria-describedby="desc-count" placeholder="What does it do? What should people try?"></textarea>
         </label>
+        <p class="sheet-note">Anyone signed in to Sparky can see and fork what you publish.</p>
       </div>
-      <div class="publish-actions">
-        <button class="btn btn-primary" onclick="submitPublish()">Publish</button>
-        <button class="btn btn-ghost" onclick="closePublishModal()">Cancel</button>
+      <div class="sheet-foot">
+        <button class="btn btn-quiet" type="button" id="publish-cancel">Cancel</button>
+        <button class="btn btn-primary" type="submit" id="publish-submit">Publish</button>
       </div>
-    </div>
-  </div>
+    </form>
+  </dialog>
 
-  <!-- Toast -->
-  <div class="toast" id="toast"></div>
+  <div class="toast" id="toast" role="status" aria-live="polite"></div>
 
   <!-- Firebase SDKs (compat for vanilla JS) -->
   <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
@@ -729,13 +710,94 @@
       messagingSenderId: "596770160500",
       appId: "1:596770160500:web:8b3761e163291ab759f621"
     };
-    firebase.initializeApp(firebaseConfig);
-    const auth = firebase.auth();
-    const db   = firebase.firestore();
 
+    let auth = null;
+    let db   = null;
     let _currentUser = null;
     let _authUsername = null;
 
+    // ── DOM helpers ─────────────────────────────────────────────
+    // Every card is built from nodes. Strings become text nodes or
+    // attribute values, never markup, so stored data cannot run script.
+    function h(tag, props, ...kids) {
+      const el = document.createElement(tag);
+      for (const [k, v] of Object.entries(props || {})) {
+        if (v == null || v === false) continue;
+        if (k === 'class') el.className = v;
+        else if (k.startsWith('on')) el.addEventListener(k.slice(2), v);
+        else el.setAttribute(k, v === true ? '' : String(v));
+      }
+      for (const kid of kids.flat()) if (kid != null && kid !== false && kid !== '') el.append(kid);
+      return el;
+    }
+
+    // Icon markup is constant. Nothing from storage or Firestore goes here.
+    const ICONS = {
+      board: '<svg viewBox="0 0 36 25" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"><rect x="1" y="4" width="34" height="17" rx="1.5"/><path d="M7 4v17M13 4v17M18 4v17M23 4v17M29 4v17M4 1.5V4M10 1.5V4M15 1.5V4M20 1.5V4M26 1.5V4M31 1.5V4M4 21v2.5M10 21v2.5M15 21v2.5M20 21v2.5M26 21v2.5M31 21v2.5"/></svg>',
+      dots:  '<svg viewBox="0 0 24 24" fill="currentColor"><circle cx="5" cy="12" r="1.8"/><circle cx="12" cy="12" r="1.8"/><circle cx="19" cy="12" r="1.8"/></svg>',
+      star:  '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>',
+      plus:  '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>',
+      search:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="M20 20l-3.5-3.5"/></svg>',
+      alert: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l10 18H2z"/><path d="M12 10v5M12 18h.01"/></svg>',
+    };
+    function icon(name, size) {
+      const t = document.createElement('template');
+      t.innerHTML = ICONS[name];
+      const svg = t.content.firstElementChild;
+      svg.setAttribute('width', size);
+      svg.setAttribute('height', size);
+      svg.setAttribute('aria-hidden', 'true');
+      return svg;
+    }
+
+    function button(label, onclick, cls) {
+      return h('button', { class: 'btn ' + (cls || 'btn-quiet'), type: 'button', onclick }, label);
+    }
+
+    function emptyState({ iconName, title, text, actions, error }) {
+      return h('div', { class: 'empty' + (error ? ' is-error' : '') },
+        h('span', { class: 'empty-icon' }, icon(iconName || 'board', iconName === 'board' ? 34 : 22)),
+        h('h2', null, title),
+        text && h('p', null, text),
+        actions && actions.length && h('div', { class: 'empty-actions' }, actions));
+    }
+
+    function fmtDate(ms) {
+      if (!ms) return '';
+      const d = new Date(ms);
+      if (isNaN(d)) return '';
+      const opts = { month: 'short', day: 'numeric' };
+      if (d.getFullYear() !== new Date().getFullYear()) opts.year = 'numeric';
+      return d.toLocaleDateString(undefined, opts);
+    }
+
+    // ── Safe thumbnail image ────────────────────────────────────────────
+    // Thumbnails come from other users' sparks and from imported files. Only a
+    // base64 PNG, JPEG or WebP data URL is kept: no remote URL (a tracking
+    // pixel for every viewer), no SVG, nothing else.
+    const THUMB_RE  = /^data:image\/(png|jpeg|webp);base64,[A-Za-z0-9+/]+={0,2}$/;
+    const THUMB_MAX = 300 * 1024;
+    function safeThumb(src) {
+      return typeof src === 'string' && src.length <= THUMB_MAX && THUMB_RE.test(src) ? src : null;
+    }
+    function makeThumbImg(src) {
+      const ok = safeThumb(src);
+      if (!ok) return null;
+      const img = document.createElement('img');
+      img.src = ok;
+      img.alt = '';
+      img.decoding = 'async';
+      return img;
+    }
+    function thumb(src) {
+      return h('div', { class: 'thumb' }, makeThumbImg(src) || icon('board', 40));
+    }
+
+    // Circuit data can come from a file or another user's spark, so anything
+    // that should be a list is checked before its length is used.
+    function listOf(v) { return Array.isArray(v) ? v : []; }
+
+    // ── Auth ────────────────────────────────────────────────────
     // Circuits live in localStorage, so a sign-out has to wipe them or the next
     // person on this browser opens the previous user's work.
     function clearAppStorage() {
@@ -751,30 +813,23 @@
         window.location.href = 'landing.html';
       }).catch(e => {
         console.error('Sign out failed:', e);
-        showToast('Sign out failed — check your connection.');
+        showToast('Could not sign out. Check your connection.');
       });
     }
 
-    // Auth gate — the page stays covered until Firebase confirms a session,
-    // and visitors without one go back to the landing page.
-    auth.onAuthStateChanged(user => {
-      if (!user) {
-        window.location.replace('landing.html#signin');
-        return;
-      }
-      _currentUser = user;
-      _authUsername = user.email ? user.email.split('@')[0] : (user.displayName || '');
-      localStorage.setItem('sparky_username', _authUsername);
-      document.getElementById('user-info').textContent = _authUsername;
-      document.getElementById('auth-gate').style.display = 'none';
-    });
+    function showUser(user) {
+      const name = user.displayName || _authUsername || 'Signed in';
+      document.getElementById('who-name').textContent = name;
+      document.getElementById('who-mail').textContent = user.email || '';
+      document.getElementById('avatar').textContent = (name.trim()[0] || '?').toUpperCase();
+    }
 
     // ── Local project storage ─────────────────────────────────────
     const LS_KEY = 'sparky_local_projects';
     let _circuitsCache = [];
 
     function loadCircuits() {
-      try { _circuitsCache = JSON.parse(localStorage.getItem(LS_KEY) || '[]'); }
+      try { _circuitsCache = listOf(JSON.parse(localStorage.getItem(LS_KEY) || '[]')); }
       catch { _circuitsCache = []; }
       return _circuitsCache;
     }
@@ -791,6 +846,10 @@
       localStorage.setItem(LS_KEY, JSON.stringify(projects));
     }
 
+    function newId() {
+      return Date.now().toString(36) + Math.random().toString(36).slice(2);
+    }
+
     // ── Sparks (Firestore community collection) ──────────────────
     let _sparksCache = []; // local cache of fetched sparks
     let _sparksError = null; // last fetch failure, null when the fetch worked
@@ -800,10 +859,10 @@
     function firestoreErrorText(e, action) {
       const code = (e && e.code) || '';
       if (code === 'permission-denied' || code === 'unauthenticated')
-        return `Not allowed to ${action} — try signing out and back in.`;
+        return `Not allowed to ${action}. Sign out and back in, then try again.`;
       if (code === 'unavailable' || code === 'deadline-exceeded')
-        return `Could not ${action} — check your connection.`;
-      return `Could not ${action} — ${escHtml(code || 'unexpected error')}.`;
+        return `Could not ${action}. Check your connection.`;
+      return `Could not ${action} (${code || 'unexpected error'}).`;
     }
 
     // sharedAt is a server Timestamp on new sparks and an ISO string on older
@@ -850,38 +909,40 @@
       }
     }
 
-    // ── Publish modal ──────────────────────────────────────────
+    // ── Publish dialog ─────────────────────────────────────────
+    const publishModal = document.getElementById('publish-modal');
     let _publishIdx = null;
+
+    function updateDescCount() {
+      const n = document.getElementById('publish-desc').value.length;
+      document.getElementById('desc-count').textContent = `${n} / 500`;
+    }
 
     function openPublishModal(idx) {
       const c = _circuitsCache[idx];
       if (!c) return;
       _publishIdx = idx;
 
-      // Pre-fill fields
-      document.getElementById('publish-name').value = c.name || '';
+      document.getElementById('publish-name').value = String(c.name || '').slice(0, 80);
       document.getElementById('publish-desc').value = '';
+      updateDescCount();
 
+      // Signed-in users publish under their account name.
       const authorEl = document.getElementById('publish-author');
-      const knownUser = _authUsername || localStorage.getItem('sparky_username') || '';
-      authorEl.value    = knownUser;
+      authorEl.value    = _authUsername || localStorage.getItem('sparky_username') || '';
       authorEl.readOnly = !!_authUsername;
-      authorEl.style.background = _authUsername ? 'var(--bg-hover)' : '';
-      authorEl.style.color      = _authUsername ? 'var(--text-sub)' : '';
-      authorEl.style.cursor     = _authUsername ? 'default' : '';
 
-      // Thumbnail preview
       const th = document.getElementById('publish-thumb');
-      th.innerHTML = '';
-      const thumbImg = makeThumbImg(c.thumbnail);
-      if (thumbImg) th.appendChild(thumbImg);
+      th.replaceChildren();
+      const img = makeThumbImg(c.thumbnail);
+      if (img) { img.alt = 'Circuit thumbnail'; th.append(img); }
 
-      document.getElementById('publish-modal').style.display = 'flex';
+      if (!publishModal.open) publishModal.showModal();
       document.getElementById('publish-name').focus();
     }
 
     function closePublishModal() {
-      document.getElementById('publish-modal').style.display = 'none';
+      if (publishModal.open) publishModal.close();
       _publishIdx = null;
     }
 
@@ -890,7 +951,7 @@
       if (!c) return;
 
       if (!_currentUser) {
-        showToast('You must be signed in to publish.');
+        showToast('Sign in to publish.');
         return;
       }
 
@@ -909,6 +970,9 @@
       // Persist username for next time (only if not locked to auth account)
       if (!_authUsername) localStorage.setItem('sparky_username', author);
 
+      const submit = document.getElementById('publish-submit');
+      submit.disabled = true;
+      submit.textContent = 'Publishing…';
       const published = await saveSpark({
         id:         c.id,
         uid:        _currentUser.uid,
@@ -920,120 +984,138 @@
         components,
         wires,
       });
+      submit.disabled = false;
+      submit.textContent = 'Publish';
 
       if (!published) return; // saveSpark already said why
 
       closePublishModal();
-      showToast(`"${name}" published to Sparks!`);
-      if (document.getElementById('tab-sparks').classList.contains('active')) renderSparks();
+      showToast(`Published "${name}" to Sparks.`);
+      if (!document.getElementById('tab-sparks').hidden) renderSparks();
     }
 
-    // Close modal on backdrop click
-    document.getElementById('publish-modal').addEventListener('click', function(e) {
-      if (e.target === this) closePublishModal();
+    document.getElementById('publish-form').addEventListener('submit', e => {
+      e.preventDefault();
+      submitPublish();
+    });
+    document.getElementById('publish-desc').addEventListener('input', updateDescCount);
+    document.getElementById('publish-close').addEventListener('click', closePublishModal);
+    document.getElementById('publish-cancel').addEventListener('click', closePublishModal);
+    // A click on the backdrop lands on the dialog itself, outside its box.
+    publishModal.addEventListener('click', e => {
+      if (e.target !== publishModal) return;
+      const r = publishModal.getBoundingClientRect();
+      if (e.clientX < r.left || e.clientX > r.right || e.clientY < r.top || e.clientY > r.bottom) closePublishModal();
     });
 
-
-    // ── Tab switching ──────────────────────────────────────────
+    // ── Tabs ───────────────────────────────────────────────────
     function switchTab(tab) {
-      document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
-      document.querySelectorAll('.sidebar-item').forEach(b => b.classList.remove('active'));
-      document.getElementById('tab-' + tab).classList.add('active');
-      document.getElementById('nav-' + tab).classList.add('active');
+      const isMy = tab !== 'sparks';
+      document.getElementById('tab-my').hidden = !isMy;
+      document.getElementById('tab-sparks').hidden = isMy;
+      document.getElementById('my-actions').hidden = !isMy;
+      for (const [id, on] of [['nav-my', isMy], ['nav-sparks', !isMy]]) {
+        const b = document.getElementById(id);
+        if (on) b.setAttribute('aria-current', 'page'); else b.removeAttribute('aria-current');
+      }
+      const title = isMy ? 'My circuits' : 'Sparks';
+      document.getElementById('page-title').textContent = title;
+      document.title = `Sparky: ${title}`;
+      history.replaceState(null, '', location.pathname + location.search + (isMy ? '' : '#sparks'));
 
-      const title = tab === 'my' ? 'My Circuits' : 'Sparks';
-      document.getElementById('topbar-title').textContent = title;
-      document.getElementById('topbar-actions').style.display = tab === 'my' ? 'flex' : 'none';
+      if (!isMy && _currentUser) renderSparks(); // always re-fetch, others publish too
+    }
+    document.getElementById('nav-my').addEventListener('click', () => switchTab('my'));
+    document.getElementById('nav-sparks').addEventListener('click', () => switchTab('sparks'));
 
-      if (tab === 'sparks') renderSparks(); // always re-render (user sparks change)
+    // ── Card menu (button plus a list of actions) ───────────────
+    function closeMenus(except) {
+      document.querySelectorAll('.menu-wrap.open').forEach(w => {
+        if (w === except) return;
+        w.classList.remove('open');
+        w.querySelector('.menu').hidden = true;
+        w.querySelector('.menu-btn').setAttribute('aria-expanded', 'false');
+      });
     }
 
-    // ── Render MY CIRCUITS ─────────────────────────────────────
+    function actionsMenu(label, items) {
+      const list = h('div', { class: 'menu', hidden: true },
+        items.map(([text, fn, cls]) => h('button', { type: 'button', class: cls, onclick: () => { closeMenus(); fn(); } }, text)));
+      const wrap = h('div', { class: 'menu-wrap' });
+      const btn = h('button', {
+        class: 'icon-btn menu-btn', type: 'button', 'aria-label': label, 'aria-expanded': 'false',
+        onclick: e => {
+          e.stopPropagation();
+          const open = !wrap.classList.contains('open');
+          closeMenus(wrap);
+          wrap.classList.toggle('open', open);
+          list.hidden = !open;
+          btn.setAttribute('aria-expanded', String(open));
+          if (open) list.querySelector('button').focus();
+        },
+      }, icon('dots', 18));
+      wrap.append(btn, list);
+      return wrap;
+    }
+
+    document.addEventListener('click', e => { if (!e.target.closest('.menu-wrap')) closeMenus(); });
+    document.addEventListener('keydown', e => {
+      if (e.key !== 'Escape') return;
+      const open = document.querySelector('.menu-wrap.open');
+      if (!open) return;
+      closeMenus();
+      open.querySelector('.menu-btn').focus();
+    });
+
+    // ── My circuits ─────────────────────────────────────────────
     function renderMyCircuits() {
       const circuits = loadCircuits();
-      const grid  = document.getElementById('circuits-grid');
-      const count = document.getElementById('circuits-count');
-      let emptyEl = document.getElementById('circuits-empty');
+      const grid = document.getElementById('circuits-grid');
+      document.getElementById('circuits-count').textContent = circuits.length ? String(circuits.length) : '';
+      grid.replaceChildren();
 
-      if (count) count.textContent = circuits.length > 0 ? String(circuits.length) : '';
-
-      grid.innerHTML = '';
-
-      // New circuit card — full card size
-      const newCard = document.createElement('button');
-      newCard.className = 'new-card';
-      newCard.onclick = newCircuit;
-      newCard.innerHTML = `
-        <div class="new-card-thumb"><span class="new-card-icon">＋</span></div>
-        <div class="new-card-label">New Circuit</div>
-        <div class="new-card-sub">Start from scratch</div>
-      `;
-      grid.appendChild(newCard);
-
-      if (circuits.length === 0) {
-        if (!emptyEl) {
-          emptyEl = document.createElement('div');
-          emptyEl.id = 'circuits-empty';
-          emptyEl.className = 'empty-state';
-          emptyEl.innerHTML = `
-            <div class="empty-state-icon">📂</div>
-            <div class="empty-state-text">No saved circuits yet.<br>Create one or import a <code>.sparky</code> file.</div>
-          `;
-          grid.parentNode.insertBefore(emptyEl, grid.nextSibling);
-        }
-        emptyEl.style.display = 'flex';
+      if (!circuits.length) {
+        grid.append(emptyState({
+          iconName: 'board',
+          title: 'No circuits yet',
+          text: 'Circuits you build in the editor show up here on their own. Start a blank one, import a .sparky file, or open the demo.',
+          actions: [
+            button('New circuit', newCircuit, 'btn-primary'),
+            button('Import .sparky', triggerImport),
+            button('Open the demo', openWithDemo),
+          ],
+        }));
         return;
       }
 
-      if (emptyEl) emptyEl.style.display = 'none';
-
-      circuits.forEach((c, idx) => {
-        grid.appendChild(makeCircuitCard(c, idx));
-      });
+      grid.append(h('button', { class: 'new-tile', id: 'new-tile', type: 'button', onclick: newCircuit },
+        h('span', { class: 'new-tile-plus' }, icon('plus', 18)),
+        h('strong', null, 'New circuit'),
+        h('span', null, 'Start from a blank board')));
+      circuits.forEach((c, idx) => grid.append(makeCircuitCard(c, idx)));
     }
 
     function makeCircuitCard(c, idx) {
-      const card = document.createElement('div');
-      card.className = 'circuit-card';
-
+      const name = String(c.name || 'Untitled');
       // A crafted file or spark can make .length a string of markup.
-      const compCount = listOf(c.components ?? c.circuit?.components).length;
-      const wireCount = listOf(c.wires      ?? c.circuit?.wires     ).length;
-      const saved = c.updatedAt ? new Date(c.updatedAt).toLocaleDateString() : '';
+      const parts = listOf(c.components ?? c.circuit?.components).length;
+      const wires = listOf(c.wires      ?? c.circuit?.wires     ).length;
+      const saved = fmtDate(sharedMillis(c.updatedAt));
 
-      const thumbImg  = makeThumbImg(c.thumbnail, 'width:100%;height:100%;object-fit:cover;display:block;');
-      const thumbHtml = thumbImg
-        ? ''
-        : `<div class="card-thumb-grid"><span class="card-thumb-emoji" style="color:var(--text-dim)"><svg width="36" height="25" viewBox="0 0 36 25" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"><rect x="1" y="4" width="34" height="17" rx="1.5"/><line x1="7" y1="4" x2="7" y2="21"/><line x1="13" y1="4" x2="13" y2="21"/><line x1="18" y1="4" x2="18" y2="21"/><line x1="23" y1="4" x2="23" y2="21"/><line x1="29" y1="4" x2="29" y2="21"/><line x1="4" y1="1.5" x2="4" y2="4"/><line x1="10" y1="1.5" x2="10" y2="4"/><line x1="15" y1="1.5" x2="15" y2="4"/><line x1="20" y1="1.5" x2="20" y2="4"/><line x1="26" y1="1.5" x2="26" y2="4"/><line x1="31" y1="1.5" x2="31" y2="4"/><line x1="4" y1="21" x2="4" y2="23.5"/><line x1="10" y1="21" x2="10" y2="23.5"/><line x1="15" y1="21" x2="15" y2="23.5"/><line x1="20" y1="21" x2="20" y2="23.5"/><line x1="26" y1="21" x2="26" y2="23.5"/><line x1="31" y1="21" x2="31" y2="23.5"/></svg></span></div>`;
-
-      card.innerHTML = `
-        <div class="card-thumb">${thumbHtml}</div>
-        <div>
-          <div class="card-name">${escHtml(c.name || 'Untitled')}</div>
-          <div class="card-meta">${compCount} component${compCount !== 1 ? 's' : ''} · ${wireCount} wire${wireCount !== 1 ? 's' : ''}</div>
-        </div>
-        <div class="card-row">
-          <span class="card-meta">${saved}</span>
-          <div class="card-menu-wrap">
-            <button class="card-menu-btn" title="Options" onclick="toggleMenu(event, 'menu-${idx}')">···</button>
-            <div class="card-dropdown" id="menu-${idx}">
-              <button class="dropdown-item" onclick="openCircuit(${idx})">Open</button>
-              <button class="dropdown-item" onclick="openPublishModal(${idx})">Publish</button>
-              <button class="dropdown-item" onclick="downloadCircuit(${idx})">Download</button>
-              <button class="dropdown-item danger" onclick="deleteCircuit(${idx})">Delete</button>
-            </div>
-          </div>
-        </div>
-      `;
-
-      if (thumbImg) card.querySelector('.card-thumb').appendChild(thumbImg);
-
-      card.addEventListener('click', e => {
-        if (e.target.closest('.card-menu-wrap')) return;
-        openCircuit(idx);
-      });
-
-      return card;
+      return h('article', { class: 'card' },
+        thumb(c.thumbnail),
+        h('div', { class: 'card-body' },
+          h('div', { class: 'card-row' },
+            h('h3', { class: 'card-title' },
+              h('button', { class: 'card-open', type: 'button', onclick: () => openCircuit(idx) }, name)),
+            actionsMenu(`More actions for ${name}`, [
+              ['Open', () => openCircuit(idx)],
+              ['Publish to Sparks', () => openPublishModal(idx)],
+              ['Download .sparky', () => downloadCircuit(idx)],
+              ['Delete', () => deleteCircuit(idx), 'danger'],
+            ])),
+          h('p', { class: 'card-meta' }, `${parts} part${parts === 1 ? '' : 's'}, ${wires} wire${wires === 1 ? '' : 's'}`),
+          saved && h('p', { class: 'card-meta' }, `Saved ${saved}`)));
     }
 
     function openCircuit(idx) {
@@ -1053,20 +1135,22 @@
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url;
-      a.download = `${(c.name || 'circuit').replace(/\s+/g, '_')}.sparky`;
+      a.download = `${String(c.name || 'circuit').replace(/[\\/:*?"<>|]+/g, '').trim().replace(/\s+/g, '_') || 'circuit'}.sparky`;
       a.click();
       URL.revokeObjectURL(url);
-      showToast(`Downloaded "${c.name}"`);
+      showToast(`Downloaded "${c.name || 'circuit'}".`);
     }
 
     function deleteCircuit(idx) {
       const c = _circuitsCache[idx];
       if (!c) return;
-      const name = c.name || 'circuit';
-      if (!confirm(`Delete "${name}"?`)) return;
+      const name = c.name || 'this circuit';
+      if (!confirm(`Delete "${name}"? This cannot be undone.`)) return;
       deleteCircuitLocal(c.id);
       renderMyCircuits();
-      showToast(`Deleted "${name}"`);
+      showToast(`Deleted "${name}".`);
+      const next = document.getElementById('new-tile') || document.querySelector('#circuits-grid button');
+      if (next) next.focus();
     }
 
     function newCircuit() {
@@ -1074,25 +1158,21 @@
       window.location.href = 'circuit3d/index.html';
     }
 
-    // ── Toggle card dropdown ───────────────────────────────────
-    function toggleMenu(e, id) {
-      e.stopPropagation();
-      const menu = document.getElementById(id);
-      const isOpen = menu.classList.contains('open');
-      // Close all
-      document.querySelectorAll('.card-dropdown').forEach(m => m.classList.remove('open'));
-      if (!isOpen) menu.classList.add('open');
+    function openWithDemo() {
+      fetch('demo.sparky')
+        .then(r => r.json())
+        .then(data => sessionStorage.setItem('sparky_load_circuit', JSON.stringify(data)))
+        .catch(() => {})
+        .finally(() => { window.location.href = 'circuit3d/index.html'; });
     }
 
-    // Close menus on outside click
-    document.addEventListener('click', () => {
-      document.querySelectorAll('.card-dropdown').forEach(m => m.classList.remove('open'));
-    });
+    document.getElementById('new-btn').addEventListener('click', newCircuit);
 
     // ── Import .sparky ─────────────────────────────────────────
     function triggerImport() {
       document.getElementById('import-input').click();
     }
+    document.getElementById('import-btn').addEventListener('click', triggerImport);
 
     document.getElementById('import-input').addEventListener('change', async function () {
       const files = Array.from(this.files);
@@ -1109,7 +1189,7 @@
           // shared it, and a file passed between two people gave both the
           // same spark id, so the second one could never publish it.
           saveCircuitLocal({
-            id:        Date.now().toString(36) + Math.random().toString(36).slice(2),
+            id:        newId(),
             name,
             thumbnail: safeThumb(data.thumbnail),
             updatedAt: new Date().toISOString(),
@@ -1122,10 +1202,12 @@
 
       this.value = '';
       renderMyCircuits();
-      showToast(imported === 1 ? 'Circuit imported!' : `${imported} circuits imported!`);
+      if (!imported) showToast(files.length === 1 ? 'That file is not a circuit Sparky can read.' : 'None of those files could be read.');
+      else if (imported < files.length) showToast(`Imported ${imported} of ${files.length} files. The rest could not be read.`);
+      else showToast(imported === 1 ? 'Imported 1 circuit.' : `Imported ${imported} circuits.`);
     });
 
-    // ── Starred sparks ─────────────────────────────────────────
+    // ── Favorites ───────────────────────────────────────────────
     const STARRED_KEY = 'sparky_starred';
     let _favOnly = false;
 
@@ -1134,114 +1216,118 @@
     }
 
     function toggleStar(id, e) {
-      e.stopPropagation();
+      if (e) e.stopPropagation();
       const starred = getStarred();
-      if (starred.has(id)) starred.delete(id); else starred.add(id);
+      const on = !starred.has(id);
+      if (on) starred.add(id); else starred.delete(id);
       localStorage.setItem(STARRED_KEY, JSON.stringify([...starred]));
-      renderSparksFromCache();
+      // Update in place so keyboard focus stays on the star.
+      const btn = e && e.currentTarget;
+      if (btn && !_favOnly) {
+        btn.setAttribute('aria-pressed', String(on));
+        btn.title = on ? 'Remove from favorites' : 'Add to favorites';
+      } else {
+        renderSparksFromCache();
+      }
     }
 
     function toggleFavFilter() {
       _favOnly = !_favOnly;
-      const btn = document.getElementById('sparks-fav-btn');
-      if (btn) btn.classList.toggle('active', _favOnly);
+      document.getElementById('sparks-fav-btn').setAttribute('aria-pressed', String(_favOnly));
       renderSparksFromCache();
     }
+    document.getElementById('sparks-fav-btn').addEventListener('click', toggleFavFilter);
+    document.getElementById('sparks-search').addEventListener('input', () => renderSparksFromCache());
 
-    // ── Render SPARKS ──────────────────────────────────────────
+    // ── Sparks ─────────────────────────────────────────────────
+    function skeletonCard() {
+      return h('div', { class: 'card skeleton', 'aria-hidden': 'true' },
+        h('div', { class: 'thumb' }), h('div', { class: 'sk-line' }), h('div', { class: 'sk-line short' }));
+    }
+
     async function renderSparks() {
       const grid = document.getElementById('sparks-grid');
-      if (!_sparksCache.length) {
-        grid.innerHTML = '<div class="empty-state" style="grid-column:1/-1"><div class="empty-state-text">Loading sparks...</div></div>';
-      }
+      if (!_sparksCache.length) grid.replaceChildren(skeletonCard(), skeletonCard(), skeletonCard());
+      grid.setAttribute('aria-busy', 'true');
       await fetchSparks();
+      grid.removeAttribute('aria-busy');
       renderSparksFromCache();
     }
 
     function renderSparksFromCache() {
       const grid = document.getElementById('sparks-grid');
       const starred = getStarred();
-      const query = (document.getElementById('sparks-search')?.value || '').toLowerCase().trim();
+      const search = document.getElementById('sparks-search');
+      const query = (search.value || '').toLowerCase().trim();
 
       let sparks = [..._sparksCache];
-
       if (query) sparks = sparks.filter(s =>
-        (s.name || '').toLowerCase().includes(query) ||
-        (s.author || '').toLowerCase().includes(query) ||
-        (s.desc || '').toLowerCase().includes(query)
+        String(s.name || '').toLowerCase().includes(query) ||
+        String(s.author || '').toLowerCase().includes(query) ||
+        String(s.desc || '').toLowerCase().includes(query)
       );
       if (_favOnly) sparks = sparks.filter(s => starred.has(s._docId));
 
-      grid.innerHTML = '';
+      grid.replaceChildren();
 
       if (!sparks.length) {
-        let icon = '✦';
-        let text;
         if (_sparksError && !_sparksCache.length) {
-          icon = '⚠';
-          text = firestoreErrorText(_sparksError, 'load Sparks');
+          grid.append(emptyState({ iconName: 'alert', error: true, title: 'Sparks did not load',
+            text: firestoreErrorText(_sparksError, 'load Sparks'),
+            actions: [button('Try again', renderSparks)] }));
+        } else if (query) {
+          grid.append(emptyState({ iconName: 'search', title: 'No matches',
+            text: `Nothing in ${_favOnly ? 'your favorites' : 'Sparks'} matches "${search.value.trim()}".`,
+            actions: [button('Clear search', () => { search.value = ''; renderSparksFromCache(); search.focus(); })] }));
         } else if (_favOnly) {
-          text = 'No starred sparks yet.<br>Star a spark to find it here.';
+          grid.append(emptyState({ iconName: 'star', title: 'No favorites yet',
+            text: 'Tap the star on a spark to keep it here.',
+            actions: [button('Show all sparks', toggleFavFilter)] }));
         } else {
-          text = 'No sparks yet.<br>Publish one of your circuits using the ··· menu.';
+          grid.append(emptyState({ iconName: 'board', title: 'No sparks yet',
+            text: 'Publish one of your circuits from its menu in My circuits and it shows up here for everyone.',
+            actions: [button('Go to My circuits', () => switchTab('my'))] }));
         }
-        grid.innerHTML = `
-          <div class="empty-state" style="grid-column:1/-1">
-            <div class="empty-state-icon" style="font-size:1.5rem;opacity:0.35">${icon}</div>
-            <div class="empty-state-text">${text}</div>
-          </div>`;
         return;
       }
 
       const myUid = _currentUser?.uid;
-      const BOARD_SVG = `<svg width="40" height="28" viewBox="0 0 36 25" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"><rect x="1" y="4" width="34" height="17" rx="1.5"/><line x1="7" y1="4" x2="7" y2="21"/><line x1="13" y1="4" x2="13" y2="21"/><line x1="18" y1="4" x2="18" y2="21"/><line x1="23" y1="4" x2="23" y2="21"/><line x1="29" y1="4" x2="29" y2="21"/><line x1="4" y1="1.5" x2="4" y2="4"/><line x1="10" y1="1.5" x2="10" y2="4"/><line x1="15" y1="1.5" x2="15" y2="4"/><line x1="20" y1="1.5" x2="20" y2="4"/><line x1="26" y1="1.5" x2="26" y2="4"/><line x1="31" y1="1.5" x2="31" y2="4"/><line x1="4" y1="21" x2="4" y2="23.5"/><line x1="10" y1="21" x2="10" y2="23.5"/><line x1="15" y1="21" x2="15" y2="23.5"/><line x1="20" y1="21" x2="20" y2="23.5"/><line x1="26" y1="21" x2="26" y2="23.5"/><line x1="31" y1="21" x2="31" y2="23.5"/></svg>`;
+      sparks.forEach(spark => grid.append(makeSparkCard(spark, starred, myUid)));
+    }
 
-      sparks.forEach((spark) => {
-        // Actions key on the Firestore doc id, not the id field inside the doc.
-        const docId = spark._docId;
-        const when  = sharedMillis(spark.sharedAt);
-        const isStarred = starred.has(docId);
-        const starFill   = isStarred ? '#f59e0b' : 'none';
-        const starStroke = isStarred ? '#f59e0b' : 'currentColor';
-        const thumbImg  = makeThumbImg(spark.thumbnail, 'width:100%;height:100%;object-fit:cover;display:block;');
-        const thumbHtml = thumbImg ? '' : `<span style="color:#555">${BOARD_SVG}</span>`;
-        const isOwn = myUid && spark.uid === myUid;
+    function makeSparkCard(spark, starred, myUid) {
+      // Actions key on the Firestore doc id, not the id field inside the doc.
+      const docId  = spark._docId;
+      const name   = String(spark.name || 'Untitled');
+      const author = typeof spark.author === 'string' ? spark.author : '';
+      const desc   = typeof spark.desc === 'string' ? spark.desc : '';
+      const when   = fmtDate(sharedMillis(spark.sharedAt));
+      const on     = starred.has(docId);
+      const isOwn  = !!myUid && spark.uid === myUid;
+      const byline = [author && `by ${author}`, when].filter(Boolean).join(', ');
 
-        const card = document.createElement('div');
-        card.className = 'spark-card';
-        card.innerHTML = `
-          <div class="spark-thumb" style="background:#1a1c24">${thumbHtml}</div>
-          <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:0.5rem;">
-            <div>
-              <div class="spark-card-title">${escHtml(spark.name || 'Untitled')}</div>
-              <div class="spark-card-author">${spark.author ? escHtml(spark.author) : ''}${when ? ' · ' + new Date(when).toLocaleDateString() : ''}</div>
-            </div>
-            <button class="star-btn ${isStarred ? 'starred' : ''}" title="${isStarred ? 'Unstar' : 'Star'}">
-              <svg width="15" height="15" viewBox="0 0 24 24" fill="${starFill}" stroke="${starStroke}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>
-            </button>
-          </div>
-          ${spark.desc ? `<div class="spark-card-desc">${escHtml(spark.desc)}</div>` : ''}
-          <div class="spark-card-footer">
-            <button class="btn btn-ghost spark-fork-btn" style="font-size:0.75rem;">Fork to My Circuits</button>
-            ${isOwn ? '<button class="btn btn-danger spark-remove-btn" style="font-size:0.75rem;">Remove</button>' : ''}
-          </div>
-        `;
-
-        if (thumbImg) card.querySelector('.spark-thumb').appendChild(thumbImg);
-        card.querySelector('.star-btn').addEventListener('click', e => toggleStar(docId, e));
-        card.querySelector('.spark-fork-btn').addEventListener('click', () => forkSpark(docId));
-        const removeBtn = card.querySelector('.spark-remove-btn');
-        if (removeBtn) removeBtn.addEventListener('click', () => unshareFromSparks(docId));
-
-        grid.appendChild(card);
-      });
+      return h('article', { class: 'card spark-card' },
+        thumb(spark.thumbnail),
+        h('div', { class: 'card-body' },
+          h('div', { class: 'card-row' },
+            h('h3', { class: 'card-title' }, name),
+            h('button', {
+              class: 'icon-btn star', type: 'button', 'aria-pressed': String(on),
+              'aria-label': `Favorite ${name}`, title: on ? 'Remove from favorites' : 'Add to favorites',
+              onclick: e => toggleStar(docId, e),
+            }, icon('star', 18))),
+          byline && h('p', { class: 'card-meta' }, byline),
+          desc && h('p', { class: 'card-desc' }, desc)),
+        h('div', { class: 'card-foot' },
+          h('button', { class: 'btn btn-sm btn-quiet', type: 'button', onclick: () => forkSpark(docId) }, 'Fork to my circuits'),
+          isOwn && h('button', { class: 'btn btn-sm btn-danger-text', type: 'button', onclick: () => unshareFromSparks(docId) }, 'Remove')));
     }
 
     function forkSpark(docId) {
       const spark = _sparksCache.find(s => s._docId === docId);
       if (!spark) return;
       saveCircuitLocal({
-        id:        Date.now().toString(36) + Math.random().toString(36).slice(2),
+        id:        newId(),
         name:      String(spark.name || 'Untitled'),
         thumbnail: safeThumb(spark.thumbnail),
         updatedAt: new Date().toISOString(),
@@ -1250,13 +1336,15 @@
       });
       switchTab('my');
       renderMyCircuits();
-      showToast(`Forked "${spark.name}" to your circuits!`);
+      showToast(`Forked "${spark.name || 'Untitled'}" to your circuits.`);
     }
 
-    async function unshareFromSparks(id) {
-      const removed = await removeSpark(id);
+    async function unshareFromSparks(docId) {
+      const spark = _sparksCache.find(s => s._docId === docId);
+      const name = (spark && spark.name) || 'this spark';
+      const removed = await removeSpark(docId);
       await renderSparks();
-      if (removed) showToast('Removed from Sparks.');
+      if (removed) showToast(`Removed "${name}" from Sparks.`);
     }
 
     // ── Toast ──────────────────────────────────────────────────
@@ -1266,44 +1354,32 @@
       t.textContent = msg;
       t.classList.add('show');
       clearTimeout(_toastTimer);
-      _toastTimer = setTimeout(() => t.classList.remove('show'), 2400);
+      _toastTimer = setTimeout(() => t.classList.remove('show'), 3200);
     }
 
-    // ── Safe thumbnail image ────────────────────────────────────────────
-    // Thumbnails come from other users' sparks and from imported files. Only a
-    // base64 PNG, JPEG or WebP data URL is kept: no remote URL (a tracking
-    // pixel for every viewer), no SVG, nothing else.
-    const THUMB_RE  = /^data:image\/(png|jpeg|webp);base64,[A-Za-z0-9+/]+={0,2}$/;
-    const THUMB_MAX = 300 * 1024;
-    function safeThumb(src) {
-      return typeof src === 'string' && src.length <= THUMB_MAX && THUMB_RE.test(src) ? src : null;
-    }
-    function makeThumbImg(src, style) {
-      const ok = safeThumb(src);
-      if (!ok) return null;
-      const img = document.createElement('img');
-      img.src = ok;
-      img.alt = '';
-      if (style) img.style.cssText = style;
-      return img;
-    }
-
-    // Circuit data can come from a file or another user's spark, so anything
-    // that should be a list is checked before its length is used.
-    function listOf(v) { return Array.isArray(v) ? v : []; }
-
-    // ── Escape HTML ────────────────────────────────────────────
-    function escHtml(s) {
-      return String(s)
-        .replace(/&/g, '&amp;')
-        .replace(/</g, '&lt;')
-        .replace(/>/g, '&gt;')
-        .replace(/"/g, '&quot;')
-        .replace(/'/g, '&#39;');
-    }
-
-    // ── Init ───────────────────────────────────────────────────
+    // ── Start ──────────────────────────────────────────────────
+    document.getElementById('signout-btn').addEventListener('click', logout);
     renderMyCircuits();
+    switchTab(location.hash === '#sparks' ? 'sparks' : 'my');
+
+    // Auth gate: the page stays covered until Firebase confirms a session,
+    // and visitors without one go to the landing page's sign-in.
+    firebase.initializeApp(firebaseConfig);
+    auth = firebase.auth();
+    db   = firebase.firestore();
+
+    auth.onAuthStateChanged(user => {
+      if (!user) {
+        window.location.replace('landing.html#signin');
+        return;
+      }
+      _currentUser = user;
+      _authUsername = user.email ? user.email.split('@')[0] : (user.displayName || '');
+      localStorage.setItem('sparky_username', _authUsername);
+      showUser(user);
+      document.getElementById('auth-gate').hidden = true;
+      if (!document.getElementById('tab-sparks').hidden) renderSparks();
+    });
   </script>
 </body>
 </html>
