@@ -159,6 +159,12 @@
 
       <div id="rotate-badge"><kbd>R</kbd> rotate</div>
 
+      <div id="empty-state" style="display:none">
+        <div class="empty-title">An empty board</div>
+        <p>Pick a part on the left and click a hole to place it, or ask Sparky to build a circuit for you.</p>
+        <button class="btn-secondary" id="load-demo-btn">Open the demo circuit</button>
+      </div>
+
       <div class="view-tools">
         <button id="clear-all-btn" title="Clear the board" style="display:none" onclick="App.clearAll()">
           <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M9 6V4h6v2"/></svg>
@@ -257,6 +263,7 @@
 <script src="js/mna.js"></script>
 <script src="js/simulate.js"></script>
 <script src="js/app.js"></script>
+<script src="js/inspector.js"></script>
 <script src="js/chat.js"></script>
 <script src="js/thumbs.js"></script>
 

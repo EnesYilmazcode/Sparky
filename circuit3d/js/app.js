@@ -52,7 +52,7 @@
 
   // ── Render Loop ─────────────────────────────────────────────
 
-  const _defaultCamPos = { x: 0, y: 22, z: 30 };
+  const _defaultCamPos = { x: 0, y: 18, z: 24 };
   const _defaultCamTgt = { x: 0, y: 0, z: 0 };
   const _camThreshold = 0.5;
 
@@ -443,11 +443,8 @@
   App.selectItem = function (item, kind) {
     App.deselect();
     state.selected = { item, kind };
-    if (kind === 'component') {
-      const label = App.formatValue(item);
-      App.setHint(label ? `${item.type} · ${label}` : item.type, 4000);
-    }
     if (item.group) App.setHighlight(item.group, true);
+    App.showInspector?.(item, kind);
   };
 
   App.deselect = function () {
@@ -455,6 +452,31 @@
     const { item } = state.selected;
     if (item.group) App.setHighlight(item.group, false);
     state.selected = null;
+    App.hideInspector?.();
+  };
+
+  // Give a placed part new values (resistance, LED colour). The model is
+  // rebuilt in place, because a resistor's colour bands are geometry.
+  App.setComponentValues = function (comp, patch) {
+    if (!comp || !comp.holeRefs) return;
+    pushHistory();
+    const wasSelected = state.selected?.item === comp;
+    if (wasSelected) App.setHighlight(comp.group, false);
+    comp.values = App.componentValues(comp.type, Object.assign({}, comp.values, patch,
+      comp.type === 'led' && patch.color ? { forwardVoltage: undefined } : {}));
+    if (comp.type === 'led' && comp.values.forwardVoltage == null) comp.values = App.componentValues('led', { color: comp.values.color });
+    const hA = state.breadboard.getHole(comp.holeRefs[0].col, comp.holeRefs[0].row);
+    const hB = state.breadboard.getHole(comp.holeRefs[1].col, comp.holeRefs[1].row);
+    const built = comp.type === 'resistor' ? App.buildResistor(hA, hB, comp.values.resistance)
+                : comp.type === 'led'      ? App.buildLED(hA, hB, comp.values.color) : null;
+    if (!built) return;
+    App.scene.remove(comp.group);
+    App.disposeGroup(comp.group);
+    comp.group = built.group;
+    App.scene.add(comp.group);
+    if (wasSelected) App.setHighlight(comp.group, true);
+    refreshCounts();
+    if (App.simRunning) App.runSimulation();
   };
 
   // Run many board edits as one undo step (an AI build is one change).
@@ -1003,8 +1025,10 @@
     if (wc) wc.textContent = state.wires.length;
 
     const clearBtn = document.getElementById('clear-all-btn');
-    if (clearBtn) clearBtn.style.display =
-      (state.components.length || state.wires.length) ? 'flex' : 'none';
+    const empty = !state.components.length && !state.wires.length;
+    if (clearBtn) clearBtn.style.display = empty ? 'none' : 'flex';
+    const es = document.getElementById('empty-state');
+    if (es) es.style.display = empty ? 'block' : 'none';
 
     scheduleAutoSave();
   }
@@ -1017,6 +1041,15 @@
   initSidebar();
   setMode('select');
   animate();
+
+  document.getElementById('load-demo-btn')?.addEventListener('click', () => {
+    fetch('../demo.sparky').then(r => r.json()).then(data => {
+      data.name = 'Demo';
+      delete data.id;
+      App.loadCircuitData(data);
+    }).catch(() => App.setHint('Could not load the demo circuit', 2500));
+  });
+  refreshCounts();
 
   // Auto-load circuit passed from dashboard via sessionStorage
   const _pending = sessionStorage.getItem('sparky_load_circuit');

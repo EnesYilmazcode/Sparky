@@ -19,7 +19,7 @@
 
   // ── Camera ─────────────────────────────────────────────────
   const camera = new THREE.PerspectiveCamera(38, 1, 0.1, 300);
-  camera.position.set(0, 22, 30);
+  camera.position.set(0, 18, 24);
   camera.lookAt(0, 0, 0);
 
   // ── Renderer ───────────────────────────────────────────────
