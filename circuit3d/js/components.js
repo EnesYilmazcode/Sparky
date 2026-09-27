@@ -331,23 +331,19 @@
     glow.visible = false;
     group.add(glow);
 
-    let light = null;
+    // The light exists from the start at zero intensity: adding and removing
+    // lights changes the light count, and every material recompiles its
+    // shader, which stalled the first frame of every simulation run.
+    const light = new THREE.PointLight(lin(hex), 0, 5, 2);
+    light.position.set(0, top, 0);
+    group.add(light);
     group.userData.setLit = function (on, level) {
       const k = Math.max(0.35, Math.min(1.4, level == null ? 1 : level));
       epoxy.emissiveIntensity = on ? 0.85 * k : 0.05;
       epoxy.opacity = on ? 0.95 : 0.78;
       glow.visible = on;
       glow.material.opacity = on ? 0.42 * k : 0;
-      if (on && !light) {
-        light = new THREE.PointLight(lin(hex), 1.2 * k, 5, 2);
-        light.position.set(0, top, 0);
-        group.add(light);
-      } else if (!on && light) {
-        group.remove(light);
-        light = null;
-      } else if (light) {
-        light.intensity = 1.6 * k;
-      }
+      light.intensity = on ? 1.2 * k : 0;
     };
     group.userData.epoxy = epoxy;
 
