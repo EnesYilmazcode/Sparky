@@ -938,6 +938,23 @@
     const googleBtn = document.getElementById('google-btn');
     const authError = document.getElementById('auth-error');
 
+    // Firebase error codes, said plainly. A closed popup is not an error.
+    function signInErrorText(err) {
+      switch (err && err.code) {
+        case 'auth/popup-closed-by-user':
+        case 'auth/cancelled-popup-request':
+          return '';
+        case 'auth/popup-blocked':
+          return 'Your browser blocked the sign-in window. Allow pop-ups for this site and try again.';
+        case 'auth/network-request-failed':
+          return 'Could not reach Google. Check your connection and try again.';
+        case 'auth/unauthorized-domain':
+          return 'Sign-in is not set up for this address. Try the site at its usual address.';
+        default:
+          return 'Sign-in did not work. Try again in a moment.';
+      }
+    }
+
     if (!window.firebase) {
       googleBtn.addEventListener('click', () => {
         authError.textContent = 'Sign-in is unavailable right now. You can still use the editor without an account.';
@@ -951,7 +968,7 @@
         googleBtn.disabled = true;
         auth.signInWithPopup(new firebase.auth.GoogleAuthProvider())
           .then(() => { window.location.href = 'dashboard.html'; })
-          .catch(err => { authError.textContent = err.message; })
+          .catch(err => { authError.textContent = signInErrorText(err); })
           .finally(() => { googleBtn.disabled = false; });
       });
 
