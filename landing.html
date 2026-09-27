@@ -6,7 +6,7 @@
   <title>Sparky: 3D circuit workbench</title>
   <meta name="description" content="A free 3D breadboard in your browser. Place parts, wire them up, simulate the circuit, and ask an AI tutor what is going on." />
   <meta name="theme-color" content="#FAF9F6" />
-  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath d='M13 2L3 14h9l-1 8 10-12h-9l1-8z' fill='%23D97706'/%3E%3C/svg%3E" />
+  <link rel="icon" href="logo.svg" type="image/svg+xml" />
   <script>document.documentElement.className = 'js';</script>
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
@@ -147,7 +147,7 @@
       letter-spacing: -0.02em;
       text-decoration: none;
     }
-    .brand svg { color: var(--amber); }
+    .brand img { display: block; }
     .nav-links {
       display: flex;
       align-items: center;
@@ -257,13 +257,6 @@
       font-weight: 600;
       letter-spacing: -0.01em;
     }
-    .preview-file {
-      font-size: 0.8125rem;
-      color: var(--ink-3);
-      overflow: hidden;
-      text-overflow: ellipsis;
-      white-space: nowrap;
-    }
     .preview-open { margin-left: auto; }
 
     .preview-stage {
@@ -298,9 +291,7 @@
       color: var(--ink-2);
       pointer-events: none;
     }
-    .preview-status .when-ready { display: none; }
-    .preview.is-loaded .preview-status .when-loading { display: none; }
-    .preview.is-loaded .preview-status .when-ready { display: inline; }
+    .preview.is-loaded .preview-status { display: none; }
     .no-js .preview-status { display: none; }
     /* Touch screens get a picture that turns, not a scroll trap. */
     @media (hover: none), (pointer: coarse) {
@@ -327,174 +318,36 @@
     }
     #how { scroll-margin-top: 5rem; }
 
-    /* How it works: four steps, one board. Hairlines, not cards. */
-    .steps {
+    /* Four things it does, a few words each. */
+    .features {
       list-style: none;
       display: grid;
-      grid-template-columns: repeat(2, minmax(0, 1fr));
-      gap: 1px;
-      background: var(--line);
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+      gap: 1rem;
+    }
+    .features li {
+      padding: 1.5rem;
       border: 1px solid var(--line);
       border-radius: 16px;
-      overflow: hidden;
-    }
-    .step {
-      display: flex;
-      flex-direction: column;
-      gap: 1.5rem;
-      padding: clamp(1.5rem, 3vw, 2.25rem);
-      background: var(--paper);
-    }
-    .step-head {
-      display: grid;
-      grid-template-columns: auto 1fr;
-      column-gap: 0.9rem;
-      align-items: baseline;
-    }
-    .step-num {
-      font-family: var(--head);
-      font-size: 1rem;
-      font-weight: 700;
-      color: var(--amber-ink);
-      font-variant-numeric: tabular-nums;
-    }
-    .step h3 {
-      font-family: var(--head);
-      font-size: 1.3125rem;
-      font-weight: 600;
-      letter-spacing: -0.02em;
-      line-height: 1.25;
-    }
-    .step p {
-      grid-column: 2;
-      margin-top: 0.5rem;
-      color: var(--ink-2);
-      max-width: 34rem;
-    }
-    .step-visual { margin-left: 1.9rem; }
-
-    /* Step 1: the parts bin */
-    .parts {
-      list-style: none;
-      display: flex;
-      flex-wrap: wrap;
-      gap: 0.5rem;
-    }
-    .part {
-      display: inline-flex;
-      align-items: center;
-      gap: 0.5rem;
-      padding: 0.4rem 0.75rem 0.4rem 0.55rem;
-      border: 1px solid var(--line-hi);
-      border-radius: 8px;
       background: #fff;
-      font-size: 0.875rem;
-      font-weight: 500;
     }
-    .part svg { color: var(--ink-2); }
-
-    /* Step 2: jumper wires on a strip of board */
-    .wires svg { display: block; width: 100%; max-width: 340px; height: auto; }
-
-    /* Step 3: simulator readout, real numbers from the demo circuit */
-    .readout {
-      max-width: 340px;
-      border: 1px solid var(--line-hi);
-      border-radius: 10px;
-      background: #fff;
-      font-size: 0.875rem;
-      overflow: hidden;
-    }
-    .ro-head {
-      padding: 0.45rem 0.8rem;
-      background: var(--panel);
-      border-bottom: 1px solid var(--line);
-      font-size: 0.75rem;
-      font-weight: 600;
-      color: var(--ink-3);
-    }
-    .ro-head + .ro-row { padding-top: 0.55rem; }
-    .ro-row {
-      display: flex;
-      justify-content: space-between;
-      gap: 1rem;
-      padding: 0.2rem 0.8rem;
-      font-variant-numeric: tabular-nums;
-    }
-    .ro-row:last-child { padding-bottom: 0.6rem; }
-    .ro-row .v { color: var(--ink-2); }
-    .ro-on { color: var(--ok); font-weight: 600; }
-    .ro-on .v { color: var(--ok); }
-    .ro-warn { color: var(--amber-ink); font-weight: 600; }
-    .ro-head.ro-split { border-top: 1px solid var(--line); margin-top: 0.4rem; }
-
-    /* Step 4: the tutor's input, with its real suggestion buttons */
-    .chat { max-width: 360px; }
-    .chat-input {
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      gap: 0.75rem;
-      padding: 0.65rem 0.65rem 0.65rem 0.9rem;
-      border: 1px solid var(--line-hi);
-      border-radius: 12px;
-      background: #fff;
-      color: var(--ink-3);
-      font-size: 0.9375rem;
-    }
-    .chat-send {
+    .f-icon {
+      width: 2.5rem;
+      height: 2.5rem;
       display: grid;
       place-items: center;
-      width: 2rem;
-      height: 2rem;
-      border-radius: 8px;
-      background: var(--amber-ink);
-      color: #fff;
-    }
-    .chat-chips {
-      display: flex;
-      flex-wrap: wrap;
-      gap: 0.4rem;
-      margin-top: 0.6rem;
-    }
-    .chat-chips span {
-      padding: 0.3rem 0.65rem;
-      border-radius: 999px;
+      border-radius: 10px;
       background: var(--amber-wash);
-      color: var(--amber-deep);
-      font-size: 0.8125rem;
-      font-weight: 500;
+      color: var(--amber-ink);
     }
-
-    /* Save, share, undo */
-    .extras {
-      display: grid;
-      grid-template-columns: repeat(3, minmax(0, 1fr));
-      gap: clamp(1.5rem, 3vw, 2.5rem);
-    }
-    .extra {
-      padding-top: 1.25rem;
-      border-top: 1px solid var(--line-hi);
-    }
-    .extra h3 {
+    .features h3 {
+      margin-top: 1rem;
       font-family: var(--head);
-      font-size: 1.125rem;
+      font-size: 1.1875rem;
       font-weight: 600;
-      letter-spacing: -0.015em;
+      letter-spacing: -0.02em;
     }
-    .extra p { margin-top: 0.4rem; color: var(--ink-2); }
-    kbd {
-      font-family: var(--body);
-      font-size: 0.8125rem;
-      font-weight: 600;
-      padding: 0.05rem 0.35rem;
-      border: 1px solid var(--line-hi);
-      border-bottom-width: 2px;
-      border-radius: 5px;
-      background: #fff;
-      color: var(--ink);
-    }
-    .keys { white-space: nowrap; }
+    .features p { margin-top: 0.25rem; color: var(--ink-2); }
 
     /* ── Footer ──────────────────────────────────────────── */
     .footer {
@@ -502,44 +355,19 @@
       color: var(--night-ink);
     }
     .footer :focus-visible { outline-color: var(--amber-lo); }
-    .footer-cta {
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      flex-wrap: wrap;
-      gap: 1.5rem;
-      padding: clamp(3rem, 6vw, 4.5rem) 0;
-      border-bottom: 1px solid var(--night-2);
-    }
-    .footer-cta h2 {
-      font-family: var(--head);
-      font-size: clamp(1.75rem, 1.4vw + 1.2rem, 2.25rem);
-      font-weight: 700;
-      letter-spacing: -0.035em;
-      line-height: 1.1;
-    }
-    .footer-cta p { margin-top: 0.5rem; color: var(--night-sub); }
-    .footer-actions { display: flex; flex-wrap: wrap; gap: 0.75rem; }
-    .footer .btn-quiet {
-      background: transparent;
-      color: var(--night-ink);
-      border-color: #4A453E;
-    }
-    .footer .btn-quiet:hover { background: var(--night-2); border-color: #6A645B; }
     .footer-meta {
       display: flex;
       align-items: center;
       justify-content: space-between;
       flex-wrap: wrap;
       gap: 0.75rem 1.5rem;
-      padding: 1.5rem 0 2rem;
+      padding: 1.75rem 0 2rem;
       font-size: 0.875rem;
       color: var(--night-sub);
     }
     .footer-meta .brand { font-size: 1rem; color: var(--night-ink); }
     .footer-meta a { color: var(--night-ink); text-underline-offset: 3px; }
     .footer-meta a:hover { color: var(--amber-lo); }
-    .footer-links { display: flex; gap: 1.25rem; }
 
     /* ── Sign-in dialog ──────────────────────────────────── */
     .auth {
@@ -643,17 +471,10 @@
       .hero-copy { max-width: 40rem; }
     }
     @media (max-width: 899px) {
-      .steps  { grid-template-columns: minmax(0, 1fr); }
-      .extras { grid-template-columns: minmax(0, 1fr); }
-      .step-visual { margin-left: 0; }
+      .features { grid-template-columns: repeat(2, minmax(0, 1fr)); }
     }
     @media (max-width: 640px) {
-      .nav-link.hide-sm { display: none; }
-      .step p { grid-column: 1 / -1; }
-      .preview-file { display: none; }
       .hero-actions .btn { flex: 1 1 auto; }
-      .footer-actions { width: 100%; }
-      .footer-actions .btn { flex: 1 1 auto; }
       .auth { padding: 1.5rem; }
     }
     @media (max-width: 380px) {
@@ -668,11 +489,10 @@
   <header class="nav">
     <div class="wrap nav-inner">
       <a href="landing.html" class="brand">
-        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/></svg>
-        Sparky
-      </a>
+          <img src="logo.svg" width="28" height="28" alt="" />
+          Sparky
+        </a>
       <nav class="nav-links" aria-label="Main">
-        <a href="#how" class="nav-link hide-sm">How it works</a>
         <a href="https://github.com/EnesYilmazcode/Sparky" class="nav-link" target="_blank" rel="noopener">GitHub</a>
         <a href="dashboard.html" class="btn btn-sm btn-primary" id="nav-cta" data-action="signin">Sign in</a>
       </nav>
@@ -684,19 +504,18 @@
       <div class="wrap hero-grid">
         <div class="hero-copy">
           <h1>Your 3D circuit workbench</h1>
-          <p class="lede">Put resistors, LEDs and a 9V battery on a virtual breadboard, wire them up, and run the circuit. When an LED stays dark, the AI tutor reads your board and tells you why.</p>
+          <p class="lede">Build real circuits in your browser, with an AI tutor that checks its work.</p>
           <div class="hero-actions">
             <a href="dashboard.html" class="btn btn-primary" id="hero-cta" data-action="signin">Start building</a>
             <a href="circuit3d/index.html" class="btn btn-quiet" data-action="demo">Try the demo</a>
           </div>
-          <p class="hero-note">Free, in your browser. The demo needs no account.</p>
+          <p class="hero-note">Free. No account needed to try it.</p>
         </div>
 
         <figure class="preview" id="preview">
           <div class="preview-bar">
             <span class="preview-led" aria-hidden="true"></span>
             <span class="preview-title">Live preview</span>
-            <span class="preview-file">demo.sparky</span>
             <a href="circuit3d/index.html" class="btn btn-sm btn-primary preview-open" data-action="demo">Open in editor</a>
           </div>
           <div class="preview-stage">
@@ -704,7 +523,6 @@
               title="3D preview of the demo circuit: a 9V battery, a resistor, an LED and a push button on a breadboard"></iframe>
             <p class="preview-status" aria-hidden="true">
               <span class="when-loading">Loading the 3D board</span>
-              <span class="when-ready">Drag to orbit</span>
             </p>
           </div>
           <figcaption class="sr-only">The demo circuit turning slowly on a 3D breadboard. Open it in the editor to change it.</figcaption>
@@ -712,143 +530,28 @@
       </div>
     </section>
 
-    <section class="section" id="how" aria-labelledby="how-title">
+    <section class="section" aria-label="What Sparky does">
       <div class="wrap">
-        <div class="section-head">
-          <h2 id="how-title">Place, wire, simulate, learn.</h2>
-          <p>The same steps as a real breadboard, minus the burnt LEDs.</p>
-        </div>
-
-        <ol class="steps">
-          <li class="step">
-            <div class="step-head">
-              <span class="step-num">1</span>
-              <h3>Place parts</h3>
-              <p>Drop parts onto a 700-hole breadboard with power rails along the top and bottom. Orbit and zoom to see exactly where each lead lands.</p>
-            </div>
-            <div class="step-visual" aria-hidden="true">
-              <ul class="parts">
-                <li class="part"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M1.5 12h4l1.5-4 3 8 3-8 3 8 1.5-4h4"/></svg>Resistor</li>
-                <li class="part"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M2 13h6M16 13h6"/><path d="M8 8.5v9l7-4.5z"/><path d="M15 8.5v9"/><path d="M14 6l3-3M17 3h-2.2M17 3v2.2"/><path d="M17.5 7.5l3-3M20.5 4.5h-2.2M20.5 4.5v2.2"/></svg>LED</li>
-                <li class="part"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M2 12h8M14 12h8"/><path d="M10 6v12"/><path d="M14 9v6"/><path d="M5 5h3M6.5 3.5v3"/></svg>9V battery</li>
-                <li class="part"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M6 14a6 6 0 0 1 12 0z"/><path d="M9 14v6M15 14v6"/><path d="M12 4v2"/></svg>Buzzer</li>
-                <li class="part"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M2 17h4M18 17h4"/><circle cx="7" cy="17" r="1.2"/><circle cx="17" cy="17" r="1.2"/><path d="M5.5 12.5h13"/><path d="M12 12.5V6M9 6h6"/></svg>Push button</li>
-              </ul>
-            </div>
-          </li>
-
-          <li class="step">
-            <div class="step-head">
-              <span class="step-num">2</span>
-              <h3>Wire it up</h3>
-              <p>Click a hole or a pin, then click another, and a jumper wire drops in between. Pick from six wire colors.</p>
-            </div>
-            <div class="step-visual wires" aria-hidden="true">
-              <svg viewBox="0 0 340 118" width="340" height="118">
-                <rect x="1" y="80" width="338" height="37" rx="6" fill="#EDE8DF" stroke="#DDD5C8"/>
-                <g fill="#5A5249" opacity="0.55">
-                  <rect x="16" y="89" width="4" height="4" rx="1"/><rect x="36" y="89" width="4" height="4" rx="1"/><rect x="56" y="89" width="4" height="4" rx="1"/><rect x="76" y="89" width="4" height="4" rx="1"/><rect x="96" y="89" width="4" height="4" rx="1"/><rect x="116" y="89" width="4" height="4" rx="1"/><rect x="136" y="89" width="4" height="4" rx="1"/><rect x="156" y="89" width="4" height="4" rx="1"/><rect x="176" y="89" width="4" height="4" rx="1"/><rect x="196" y="89" width="4" height="4" rx="1"/><rect x="216" y="89" width="4" height="4" rx="1"/><rect x="236" y="89" width="4" height="4" rx="1"/><rect x="256" y="89" width="4" height="4" rx="1"/><rect x="276" y="89" width="4" height="4" rx="1"/><rect x="296" y="89" width="4" height="4" rx="1"/><rect x="316" y="89" width="4" height="4" rx="1"/>
-                  <rect x="16" y="104" width="4" height="4" rx="1"/><rect x="36" y="104" width="4" height="4" rx="1"/><rect x="56" y="104" width="4" height="4" rx="1"/><rect x="76" y="104" width="4" height="4" rx="1"/><rect x="96" y="104" width="4" height="4" rx="1"/><rect x="116" y="104" width="4" height="4" rx="1"/><rect x="136" y="104" width="4" height="4" rx="1"/><rect x="156" y="104" width="4" height="4" rx="1"/><rect x="176" y="104" width="4" height="4" rx="1"/><rect x="196" y="104" width="4" height="4" rx="1"/><rect x="216" y="104" width="4" height="4" rx="1"/><rect x="236" y="104" width="4" height="4" rx="1"/><rect x="256" y="104" width="4" height="4" rx="1"/><rect x="276" y="104" width="4" height="4" rx="1"/><rect x="296" y="104" width="4" height="4" rx="1"/><rect x="316" y="104" width="4" height="4" rx="1"/>
-                </g>
-                <g fill="none" stroke-width="4" stroke-linecap="round">
-                  <path d="M18 91 C18 52, 78 52, 78 91" stroke="#EF4444"/>
-                  <path d="M38 91 C38 30, 138 30, 138 91" stroke="#FBBF24"/>
-                  <path d="M98 91 C98 50, 178 50, 178 91" stroke="#22C55E"/>
-                  <path d="M158 91 C158 22, 258 22, 258 91" stroke="#3B82F6"/>
-                  <path d="M198 91 C198 44, 298 44, 298 91" stroke="#2B2622"/>
-                  <path d="M278 91 C278 62, 318 62, 318 91" stroke="#A89F92" stroke-width="6"/>
-                  <path d="M278 91 C278 62, 318 62, 318 91" stroke="#F7F4EE"/>
-                </g>
-              </svg>
-            </div>
-          </li>
-
-          <li class="step">
-            <div class="step-head">
-              <span class="step-num">3</span>
-              <h3>Simulate</h3>
-              <p>Press play and the solver works out every node voltage and current with Modified Nodal Analysis. It flags backwards LEDs and shorts, and when a part runs over its current rating it tells you which resistor to add.</p>
-            </div>
-            <div class="step-visual">
-              <div class="readout">
-                <p class="ro-head">Demo circuit, button pressed</p>
-                <p class="ro-row ro-on"><span>LED on</span><span class="v">14.9 mA</span></p>
-                <p class="ro-row"><span>Node a7</span><span class="v">2.00 V</span></p>
-                <p class="ro-row"><span>+ rail</span><span class="v">9.00 V</span></p>
-                <p class="ro-head ro-split">Same circuit, LED flipped</p>
-                <p class="ro-row ro-warn"><span>LED is backwards. Flip it around.</span></p>
-              </div>
-            </div>
-          </li>
-
-          <li class="step">
-            <div class="step-head">
-              <span class="step-num">4</span>
-              <h3>Ask the tutor</h3>
-              <p>The AI tutor reads your parts and wires, so it can explain what your circuit is doing or build one for you. Its changes show up as a preview you accept or decline, and every build is checked in the simulator first.</p>
-            </div>
-            <div class="step-visual chat" aria-hidden="true">
-              <div class="chat-input">
-                <span>Ask Sparky anything…</span>
-                <span class="chat-send"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 19V5M5 12l7-7 7 7"/></svg></span>
-              </div>
-              <div class="chat-chips">
-                <span>Build an LED circuit</span>
-                <span>Analyze my circuit</span>
-                <span>What should I add?</span>
-              </div>
-            </div>
-          </li>
-        </ol>
-      </div>
-    </section>
-
-    <section class="section" aria-labelledby="keep-title">
-      <div class="wrap">
-        <div class="section-head">
-          <h2 id="keep-title">Save it, share it, undo it.</h2>
-        </div>
-        <div class="extras">
-          <div class="extra">
-            <h3>Save as .sparky</h3>
-            <p>Download any circuit as a file. Open it again later, or send it to a friend.</p>
-          </div>
-          <div class="extra">
-            <h3>Share to Sparks</h3>
-            <p>Sign in to keep your circuits on a dashboard and publish them to Sparks, a community gallery where you can browse, favorite and fork other people's circuits.</p>
-          </div>
-          <div class="extra">
-            <h3>Undo and redo</h3>
-            <p><span class="keys"><kbd>Ctrl</kbd> + <kbd>Z</kbd></span> steps back through placements, wires, deletes and file opens. <span class="keys"><kbd>Ctrl</kbd> + <kbd>Shift</kbd> + <kbd>Z</kbd></span> brings them back.</p>
-          </div>
-        </div>
+        <ul class="features">
+          <li><span class="f-icon"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M1.5 12h4l1.5-4 3 8 3-8 3 8 1.5-4h4"/></svg></span><h3>Place</h3><p>Real parts, to scale.</p></li>
+          <li><span class="f-icon"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 16c0-8 14-8 14 0"/><circle cx="5" cy="17.5" r="1.6"/><circle cx="19" cy="17.5" r="1.6"/></svg></span><h3>Wire</h3><p>Click two holes.</p></li>
+          <li><span class="f-icon"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 12h4l2-6 4 12 2-6h6"/></svg></span><h3>Simulate</h3><p>Real circuit math.</p></li>
+          <li><span class="f-icon"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 5h14v10H10l-5 4z"/></svg></span><h3>Ask Sparky</h3><p>It builds and checks for you.</p></li>
+        </ul>
       </div>
     </section>
   </main>
 
   <footer class="footer">
     <div class="wrap">
-      <div class="footer-cta">
-        <div>
-          <h2>Build your first circuit.</h2>
-          <p>Start from the demo, or ask the tutor to build an LED circuit for you.</p>
-        </div>
-        <div class="footer-actions">
-          <a href="dashboard.html" class="btn btn-primary" data-action="signin">Start building</a>
-          <a href="circuit3d/index.html" class="btn btn-quiet" data-action="demo">Try the demo</a>
-        </div>
-      </div>
-      <div class="footer-meta">
-        <a href="landing.html" class="brand" aria-label="Sparky home">
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#D97706" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/></svg>
-          Sparky
-        </a>
-        <p>Made by <a href="https://enes.web.app" target="_blank" rel="noopener">Enes Yilmaz</a> and <a href="https://github.com/ColinL-code" target="_blank" rel="noopener">Colin Lee</a></p>
-        <div class="footer-links">
-          <a href="circuit3d/index.html">Open the editor</a>
-          <a href="https://github.com/EnesYilmazcode/Sparky" target="_blank" rel="noopener">GitHub</a>
-        </div>
-      </div>
+    <div class="footer-meta">
+      <a href="landing.html" class="brand" aria-label="Sparky home">
+        <img src="logo.svg" width="24" height="24" alt="" />
+        Sparky
+      </a>
+      <p>By <a href="https://enes.web.app" target="_blank" rel="noopener">Enes Yilmaz</a> and <a href="https://github.com/ColinL-code" target="_blank" rel="noopener">Colin Lee</a></p>
+      <a href="https://github.com/EnesYilmazcode/Sparky" target="_blank" rel="noopener">GitHub</a>
+    </div>
     </div>
   </footer>
 
@@ -859,7 +562,7 @@
       </button>
     </form>
     <h2 id="auth-title">Sign in to Sparky</h2>
-    <p class="auth-sub" id="auth-sub">Keep your circuits on a dashboard and share them to Sparks.</p>
+    <p class="auth-sub" id="auth-sub">Save your circuits and share them.</p>
     <button class="btn-google" id="google-btn" type="button" autofocus>
       <svg width="18" height="18" viewBox="0 0 18 18" aria-hidden="true"><path fill="#4285F4" d="M17.64 9.2c0-.637-.057-1.251-.164-1.84H9v3.481h4.844a4.14 4.14 0 0 1-1.796 2.716v2.259h2.908c1.702-1.567 2.684-3.875 2.684-6.615Z"/><path fill="#34A853" d="M9 18c2.43 0 4.467-.806 5.956-2.18l-2.908-2.259c-.806.54-1.837.86-3.048.86-2.344 0-4.328-1.584-5.036-3.711H.957v2.332A8.997 8.997 0 0 0 9 18Z"/><path fill="#FBBC05" d="M3.964 10.71A5.41 5.41 0 0 1 3.682 9c0-.593.102-1.17.282-1.71V4.958H.957A8.997 8.997 0 0 0 0 9c0 1.452.348 2.827.957 4.042l3.007-2.332Z"/><path fill="#EA4335" d="M9 3.58c1.321 0 2.508.454 3.44 1.345l2.582-2.58C13.463.891 11.426 0 9 0A8.997 8.997 0 0 0 .957 4.958L3.964 6.29C4.672 4.163 6.656 2.58 9 2.58Z"/></svg>
       Continue with Google
