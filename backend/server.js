@@ -1,20 +1,24 @@
 /**
- * Sparky AI Backend — Node.js (zero npm dependencies, CommonJS)
- * Requires Node 18+
+ * Sparky backend: Node 18+, zero npm dependencies, CommonJS.
  *
  * Run from backend/:  node server.js
  *
- * POST /api/ask            { markdown, message }  →  { reply, actions[] }
- * GET  /api/health
+ * POST /api/ask     { message, history, board, markdown }
+ *                   -> { reply, actions, notes, verification }
+ * GET  /api/health  -> { status, model }
  *
- * Sign-in and saved circuits live in Firebase Auth and Firestore, called
- * from the pages, so this server holds no user data.
+ * Everything else is the static site from the repo root. Sign-in and saved
+ * circuits live in Firebase Auth and Firestore, called from the pages, so
+ * this server holds no user data.
  */
+
+'use strict';
 
 const http = require('http');
 const fs   = require('fs');
 const path = require('path');
-const { makeAsk } = require('./ai-providers');
+const { makeProvider } = require('./ai-providers');
+const { answer } = require('./verify');
 
 // ── Load .env ─────────────────────────────────────────────────
 function loadEnv() {
@@ -28,16 +32,6 @@ function loadEnv() {
       if (k && !(k in process.env)) process.env[k] = v;
     });
   } catch { /* .env optional */ }
-}
-loadEnv();
-
-const GEMINI_KEY   = process.env.GEMINI_API_KEY;
-const GEMINI_MODEL = process.env.GEMINI_MODEL || 'gemini-flash-latest';
-const GEMINI_URL   = `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent`;
-const PORT         = process.env.PORT || 5001;
-
-if (!GEMINI_KEY) {
-  console.warn('Warning: GEMINI_API_KEY not set — /api/ask will fail');
 }
 
 // ── Gemini system prompt ─────────────────────────────────────
@@ -179,186 +173,10 @@ const CIRCUIT_TOOLS = [{
   ],
 }];
 
-// ── Validate actions ─ report problems, never rewrite ────────
-// Reports what is wrong with the proposed circuit and returns the actions
-// untouched. Patching them silently hides the model's mistake and can turn a
-// backwards LED into a guaranteed-dead one, or short past a component the
-// model deliberately put in series.
+// ── HTTP helpers ──────────────────────────────────────────────
+// One /api/ask may take this long in all, repairs included.
+const ASK_BUDGET_MS = 90000;
 
-// Holes in the same column and same half share a node. Each power rail is one
-// node along its whole length.
-function nodeKey(hole) {
-  if (!hole) return null;
-  const rail = /^(tp|tn|bp|bn)_\d+$/.exec(hole);
-  if (rail) return rail[1];
-  const body = /^([a-j])(\d+)$/i.exec(hole);
-  if (body) return (body[1].toLowerCase() <= 'e' ? 'top' : 'bot') + body[2];
-  return hole;   // battery pins and anything unrecognised stay as themselves
-}
-
-// LEDs are left out of the graph below: they only conduct one way, so
-// treating one as a plain connection would bridge power to ground.
-const CONDUCTORS = ['place_resistor', 'place_button', 'place_buzzer'];
-
-function findCircuitProblems(actions) {
-  if (!Array.isArray(actions) || actions.length === 0) return [];
-  const problems = [];
-  const wires = actions.filter(a => a.tool === 'add_wire');
-  const wired = pin => wires.some(w => w.from === pin || w.to === pin);
-
-  let batIdx = 0;
-  for (const a of actions) {
-    if (a.tool !== 'place_battery') continue;
-    const pin0 = `battery_${batIdx}_pin0`, pin1 = `battery_${batIdx}_pin1`;
-    if (!wired(pin0)) problems.push(`${pin0} is not wired to a positive rail (tp_N), so nothing on the board is powered.`);
-    if (!wired(pin1)) problems.push(`${pin1} is not wired to a ground rail (tn_N), so the circuit has no return path.`);
-    batIdx++;
-  }
-
-  const edges = [];
-  for (const w of wires) edges.push([nodeKey(w.from), nodeKey(w.to)]);
-  for (const c of actions) {
-    if (CONDUCTORS.includes(c.tool)) edges.push([nodeKey(c.holeA), nodeKey(c.holeB)]);
-  }
-
-  function reach(seed) {
-    const seen = new Set([seed]), queue = [seed];
-    while (queue.length) {
-      const at = queue.shift();
-      for (const [x, y] of edges) {
-        if (!x || !y) continue;
-        const next = x === at ? y : (y === at ? x : null);
-        if (next && !seen.has(next)) { seen.add(next); queue.push(next); }
-      }
-    }
-    return seen;
-  }
-
-  const pos = reach('battery_0_pin0'), neg = reach('battery_0_pin1');
-
-  // holeA is the cathode (-), holeB is the anode (+).
-  for (const led of actions.filter(a => a.tool === 'place_led')) {
-    const cathode = nodeKey(led.holeA), anode = nodeKey(led.holeB);
-    const forward  = pos.has(anode) && neg.has(cathode);
-    const reversed = pos.has(cathode) && neg.has(anode);
-    // Any other complete branch makes every node reachable from both terminals,
-    // so orientation is undecidable there. Prefer saying nothing over accusing a
-    // correctly wired LED of being backwards.
-    if (!forward && reversed) {
-      problems.push(`The LED at ${led.holeA}/${led.holeB} is backwards: its cathode ${led.holeA} is on the power side and its anode ${led.holeB} is on the ground side. Swap holeA and holeB.`);
-    } else if (!forward) {
-      problems.push(`The LED at ${led.holeA}/${led.holeB} is not connected between power and ground, so it cannot light.`);
-    }
-  }
-
-  return problems;
-}
-
-// ── Call Gemini ──────────────────────────────────────────────
-const ask = makeAsk(
-  (markdown, userMsg, history) => askGemini(markdown, userMsg, history),
-  { SYSTEM_PROMPT, CIRCUIT_TOOLS }
-);
-
-async function askGemini(markdown, userMsg, history) {
-  const msg = userMsg || 'Analyze my circuit and tell me what to do next.';
-  const boardState = markdown || '**Board is EMPTY — no components or wires placed.**';
-
-  // Build multi-turn contents from conversation history
-  const contents = [];
-  if (Array.isArray(history) && history.length) {
-    for (const h of history) {
-      const role = h.role === 'model' ? 'model' : 'user';
-      if (h.text) contents.push({ role, parts: [{ text: h.text }] });
-    }
-  }
-
-  // Current user message with board state
-  contents.push({
-    role: 'user',
-    parts: [{ text: `BOARD STATE:\n${boardState}\n\nQUESTION: ${msg}` }],
-  });
-
-  const body = {
-    system_instruction: { parts: [{ text: SYSTEM_PROMPT }] },
-    contents,
-    tools: CIRCUIT_TOOLS,
-    tool_config: { function_calling_config: { mode: 'AUTO' } },
-    generation_config: { temperature: 0.3, max_output_tokens: 2048 },
-  };
-
-  const res = await fetch(`${GEMINI_URL}?key=${GEMINI_KEY}`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(body),
-  });
-
-  if (!res.ok) {
-    const err = await res.text();
-    throw new Error(`Gemini ${res.status}: ${err}`);
-  }
-
-  const data = await res.json();
-  const candidate = data.candidates?.[0];
-
-  // Handle blocked / empty responses
-  if (!candidate || candidate.finishReason === 'SAFETY') {
-    return { reply: "I can't help with that request. Try asking about building a circuit!", actions: [] };
-  }
-
-  const parts = candidate.content?.parts || [];
-  let reply = '';
-  let actions = [];
-
-  for (const part of parts) {
-    if (part.text) reply += part.text;
-    if (part.functionCall) {
-      const fc = part.functionCall;
-      actions.push({ tool: fc.name, ...(fc.args || {}) });
-    }
-  }
-
-  reply = reply.trim();
-
-  // If model returned only function calls with no text, provide a default
-  if (!reply && actions.length > 0) {
-    reply = "Here you go! I've built the circuit for you. Hit Run Simulation to test it out!";
-  } else if (!reply) {
-    reply = '(no response)';
-  }
-
-  // Fallback: also check text for JSON actions block (in case model embeds JSON in text)
-  if (actions.length === 0) {
-    const match = reply.match(/```(?:actions|json)\s*([\s\S]*?)```/);
-    if (match) {
-      try {
-        const parsed = JSON.parse(match[1].trim());
-        if (Array.isArray(parsed)) actions = parsed;
-        reply = reply.slice(0, match.index).trim();
-      } catch { /* ignore parse errors */ }
-    }
-  }
-
-  // Filter out malformed actions (missing required fields)
-  actions = actions.filter(a => {
-    if (a.tool === 'add_wire' && (!a.from || !a.to)) return false;
-    if (['place_resistor','place_led','place_buzzer','place_button'].includes(a.tool)
-        && (!a.holeA || !a.holeB)) return false;
-    return true;
-  });
-
-  // Report problems instead of patching them, so a wrong circuit is visible
-  // rather than rewritten into a different one.
-  const problems = findCircuitProblems(actions);
-  if (problems.length) {
-    console.warn('[validate] ' + problems.join(' | '));
-    reply += `\n\nHeads up, this build has a problem:\n- ${problems.join('\n- ')}\n\nAsk me to fix it and I will rebuild the circuit.`;
-  }
-
-  return { reply, actions };
-}
-
-// ── HTTP server ───────────────────────────────────────────────
 function setCORS(res) {
   res.setHeader('Access-Control-Allow-Origin',  '*');
   res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
@@ -371,114 +189,180 @@ function sendJSON(res, status, obj) {
   res.end(JSON.stringify(obj));
 }
 
-// /api/ask spends the Gemini key, so cap it per IP or it is an open proxy.
-const ASK_WINDOW_MS = 60000;
-const ASK_MAX_PER_WINDOW = 20;
-const askHits = new Map();
+// Every /api/ask answer has the same shape, errors included.
+const askReply = reply => ({ reply, actions: [], notes: [], verification: null });
 
-function askRateLimited(req) {
-  const ip = req.socket.remoteAddress || 'unknown';
-  const now = Date.now();
-  if (askHits.size > 5000) askHits.clear();
-  const hits = (askHits.get(ip) || []).filter(t => now - t < ASK_WINDOW_MS);
-  hits.push(now);
-  askHits.set(ip, hits);
-  return hits.length > ASK_MAX_PER_WINDOW;
+function readBody(req) {
+  return new Promise((resolve, reject) => {
+    const chunks = [];
+    req.on('data', chunk => chunks.push(chunk));
+    req.on('end', () => resolve(Buffer.concat(chunks).toString('utf8')));
+    req.on('error', reject);
+  });
 }
 
-const server = http.createServer(async (req, res) => {
-  setCORS(res);
-  if (req.method === 'OPTIONS') { res.writeHead(204); res.end(); return; }
-
-  if (req.method === 'GET' && req.url === '/api/health') {
-    return sendJSON(res, 200, { status: 'ok', model: GEMINI_MODEL });
-  }
-
-  if (req.method === 'POST' && req.url === '/api/ask') {
-    if (askRateLimited(req)) {
-      return sendJSON(res, 429, { reply: 'Too many requests. Give Sparky a moment and try again.', actions: [] });
-    }
-    let body = '';
-    req.on('data', chunk => (body += chunk));
-    req.on('end', async () => {
-      try {
-        const { markdown = '', message = '', history = [] } = JSON.parse(body || '{}');
-        const { reply, actions } = await ask(markdown, message, history);
-        console.log(`[ask] "${message.slice(0,60)}" → ${actions.length} action(s)`);
-        return sendJSON(res, 200, { reply, actions });
-      } catch (e) {
-        // Upstream body can contain key/quota detail, so it stays in the log.
-        console.error('[ask] failed:', e.message);
-        return sendJSON(res, 502, { reply: 'Sparky could not reach the AI service. Please try again in a moment.', actions: [] });
-      }
-    });
-    return;
-  }
-
-  // ── Static file serving ───────────────────────────────────
-  const STATIC_ROOT = path.join(__dirname, '..');
-  // Doubles as the extension allowlist: anything not listed here is never served.
-  // .json is deliberately absent, every .json in this repo is build config.
-  const MIME = {
-    '.html': 'text/html', '.css': 'text/css', '.js': 'application/javascript',
-    '.png': 'image/png', '.jpg': 'image/jpeg',
-    '.jpeg': 'image/jpeg', '.gif': 'image/gif', '.svg': 'image/svg+xml',
-    '.ico': 'image/x-icon', '.woff': 'font/woff', '.woff2': 'font/woff2',
-    '.glb': 'model/gltf-binary', '.sparky': 'application/octet-stream',
+// /api/ask spends the Gemini key, so cap it per IP or it is an open proxy.
+function makeRateLimiter({ windowMs = 60000, max = 20 } = {}) {
+  const hits = new Map();
+  return function limited(req) {
+    const ip = req.socket.remoteAddress || 'unknown';
+    const now = Date.now();
+    if (hits.size > 5000) hits.clear();
+    const mine = (hits.get(ip) || []).filter(t => now - t < windowMs);
+    mine.push(now);
+    hits.set(ip, mine);
+    return mine.length > max;
   };
-  // Server code, build sources and tooling. Mirrors the ignore list in firebase.json.
-  const DENY_DIRS = new Set(['backend', 'src', 'out', 'functions', 'node_modules']);
+}
 
-  if (req.method === 'GET') {
-    let urlPath;
+// ── Static file serving ───────────────────────────────────────
+const STATIC_ROOT = path.join(__dirname, '..');
+// Doubles as the extension allowlist: anything not listed here is never served.
+// .json is deliberately absent, every .json in this repo is build config.
+const MIME = {
+  '.html': 'text/html', '.css': 'text/css', '.js': 'application/javascript',
+  '.png': 'image/png', '.jpg': 'image/jpeg',
+  '.jpeg': 'image/jpeg', '.gif': 'image/gif', '.svg': 'image/svg+xml',
+  '.ico': 'image/x-icon', '.woff': 'font/woff', '.woff2': 'font/woff2',
+  '.glb': 'model/gltf-binary', '.sparky': 'application/octet-stream',
+};
+// Server code, build sources and tooling. Mirrors the ignore list in firebase.json.
+const DENY_DIRS = new Set(['backend', 'src', 'out', 'functions', 'node_modules']);
+
+function serveStatic(req, res) {
+  let urlPath;
+  try {
+    urlPath = decodeURIComponent(req.url.split('?')[0]);
+  } catch {
+    return sendJSON(res, 400, { error: 'Bad request path' });
+  }
+  if (urlPath === '/') urlPath = '/index.html';
+  const filePath = path.join(STATIC_ROOT, urlPath);
+  const rel = path.relative(STATIC_ROOT, filePath);
+  if (rel === '' || rel.startsWith('..') || path.isAbsolute(rel)) {
+    return sendJSON(res, 403, { error: 'Forbidden' });
+  }
+  const segments = rel.split(path.sep);
+  const ext = path.extname(filePath).toLowerCase();
+  const servable = MIME[ext] &&
+    !DENY_DIRS.has(segments[0].toLowerCase()) &&
+    !segments.some(seg => seg.startsWith('.'));
+  if (servable) {
     try {
-      urlPath = decodeURIComponent(req.url.split('?')[0]);
+      const stat = fs.statSync(filePath);
+      if (stat.isFile()) {
+        res.writeHead(200, { 'Content-Type': MIME[ext] });
+        fs.createReadStream(filePath).pipe(res);
+        return;
+      }
+    } catch { /* file not found, fall through to 404 */ }
+  }
+  sendJSON(res, 404, { error: 'Not found' });
+}
+
+// ── The server ────────────────────────────────────────────────
+// `generate` is the model from ai-providers.js, or null when none is
+// configured. Tests pass a stub.
+function createServer({ generate = null, model = '' } = {}) {
+  const askRateLimited = makeRateLimiter();
+
+  async function handleAsk(req, res) {
+    if (askRateLimited(req)) {
+      return sendJSON(res, 429, askReply('Too many requests. Give Sparky a moment and try again.'));
+    }
+    let input;
+    try {
+      input = JSON.parse((await readBody(req)) || '{}');
     } catch {
-      return sendJSON(res, 400, { error: 'Bad request path' });
+      return sendJSON(res, 400, askReply('That request was not valid JSON.'));
     }
-    if (urlPath === '/') urlPath = '/index.html';
-    const filePath = path.join(STATIC_ROOT, urlPath);
-    const rel = path.relative(STATIC_ROOT, filePath);
-    if (rel === '' || rel.startsWith('..') || path.isAbsolute(rel)) {
-      return sendJSON(res, 403, { error: 'Forbidden' });
+    if (!input || typeof input !== 'object' || Array.isArray(input)) {
+      return sendJSON(res, 400, askReply('That request was not valid JSON.'));
     }
-    const segments = rel.split(path.sep);
-    const ext = path.extname(filePath).toLowerCase();
-    const servable = MIME[ext] &&
-      !DENY_DIRS.has(segments[0].toLowerCase()) &&
-      !segments.some(seg => seg.startsWith('.'));
-    if (servable) {
-      try {
-        const stat = fs.statSync(filePath);
-        if (stat.isFile()) {
-          res.writeHead(200, { 'Content-Type': MIME[ext] });
-          fs.createReadStream(filePath).pipe(res);
-          return;
-        }
-      } catch { /* file not found — fall through to 404 */ }
+    if (!generate) {
+      return sendJSON(res, 503, askReply('The AI tutor is not set up on this server yet.'));
+    }
+
+    const message = typeof input.message === 'string' ? input.message.slice(0, 4000) : '';
+    try {
+      const out = await answer({
+        generate,
+        message,
+        history: input.history,
+        board: input.board,
+        markdown: typeof input.markdown === 'string' ? input.markdown.slice(0, 20000) : '',
+        deadline: Date.now() + ASK_BUDGET_MS,
+      });
+      const v = out.verification;
+      console.log(`[ask] "${message.slice(0, 60)}" -> ${out.actions.length} action(s)` +
+                  (v ? `, ${v.attempts} attempt(s), ${v.ok ? 'works' : 'does not work'}` : ''));
+      return sendJSON(res, 200, out);
+    } catch (e) {
+      if (e.code === 'BAD_BOARD') return sendJSON(res, 400, askReply(`That board could not be read: ${e.message}.`));
+      // Upstream detail can include quota information, so it stays in the log.
+      console.error('[ask] failed:', e.message);
+      return sendJSON(res, 502, askReply('Sparky could not reach the AI service. Please try again in a moment.'));
     }
   }
 
-  sendJSON(res, 404, { error: 'Not found' });
-});
+  const server = http.createServer((req, res) => {
+    setCORS(res);
+    if (req.method === 'OPTIONS') { res.writeHead(204); res.end(); return; }
+    const url = req.url.split('?')[0];
 
-// Malformed HTTP from a client must not be fatal.
-server.on('clientError', (err, socket) => {
-  if (socket.writable) socket.end('HTTP/1.1 400 Bad Request\r\n\r\n');
-  else socket.destroy();
-});
+    if (req.method === 'GET' && url === '/api/health') {
+      return sendJSON(res, 200, { status: 'ok', model });
+    }
+    if (req.method === 'POST' && url === '/api/ask') {
+      handleAsk(req, res).catch(e => {
+        console.error('[ask] crashed:', e && e.stack ? e.stack : e);
+        if (!res.headersSent) sendJSON(res, 500, askReply('Something went wrong on the server.'));
+      });
+      return;
+    }
+    if (req.method === 'GET') return serveStatic(req, res);
+    sendJSON(res, 404, { error: 'Not found' });
+  });
 
-// Last resort: log and keep serving rather than exiting on a single bad request.
-process.on('uncaughtException', err => {
-  console.error('Uncaught exception:', err && err.stack ? err.stack : err);
-});
-process.on('unhandledRejection', err => {
-  console.error('Unhandled rejection:', err && err.stack ? err.stack : err);
-});
+  // Malformed HTTP from a client must not be fatal.
+  server.on('clientError', (err, socket) => {
+    if (socket.writable) socket.end('HTTP/1.1 400 Bad Request\r\n\r\n');
+    else socket.destroy();
+  });
+  return server;
+}
 
-server.listen(PORT, () => {
-  console.log(`⚡ Sparky AI  →  http://localhost:${PORT}`);
-  console.log(`   AI    : ${process.env.AI_PROVIDER || 'gemini'}`);
-  console.log(`   Model : ${GEMINI_MODEL}`);
-  console.log(`   Health: http://localhost:${PORT}/api/health`);
-});
+function main() {
+  loadEnv();
+  const provider = (process.env.AI_PROVIDER || 'gemini').toLowerCase();
+  const needsKey = provider !== 'claude' && provider !== 'fixture';
+  const apiKey = process.env.GEMINI_API_KEY;
+  const model = needsKey ? (process.env.GEMINI_MODEL || 'gemini-flash-latest') : provider;
+  const port = process.env.PORT || 5001;
+
+  let generate = null;
+  if (!needsKey || apiKey) {
+    generate = makeProvider(provider, { apiKey, model, systemPrompt: SYSTEM_PROMPT, tools: CIRCUIT_TOOLS });
+  } else {
+    console.warn('Warning: GEMINI_API_KEY is not set, so /api/ask answers 503.');
+  }
+
+  // Last resort: log and keep serving rather than exiting on a single bad request.
+  process.on('uncaughtException', err => {
+    console.error('Uncaught exception:', err && err.stack ? err.stack : err);
+  });
+  process.on('unhandledRejection', err => {
+    console.error('Unhandled rejection:', err && err.stack ? err.stack : err);
+  });
+
+  createServer({ generate, model }).listen(port, () => {
+    console.log(`Sparky on http://localhost:${port}`);
+    console.log(`   AI    : ${provider}`);
+    console.log(`   Model : ${model}`);
+    console.log(`   Health: http://localhost:${port}/api/health`);
+  });
+}
+
+if (require.main === module) main();
+
+module.exports = { createServer, SYSTEM_PROMPT, CIRCUIT_TOOLS };
