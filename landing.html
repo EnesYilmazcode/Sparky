@@ -975,6 +975,11 @@
       auth.onAuthStateChanged(user => {
         signedIn = !!user;
         document.getElementById('nav-cta').textContent = user ? 'Dashboard' : 'Sign in';
+        // The dashboard sends signed-out visitors here with #signin.
+        if (!user && location.hash === '#signin') {
+          history.replaceState(null, '', location.pathname + location.search);
+          openModal();
+        }
       });
     }
   </script>

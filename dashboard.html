@@ -759,7 +759,7 @@
     // and visitors without one go back to the landing page.
     auth.onAuthStateChanged(user => {
       if (!user) {
-        window.location.replace('landing.html');
+        window.location.replace('landing.html#signin');
         return;
       }
       _currentUser = user;
