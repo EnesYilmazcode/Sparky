@@ -1099,8 +1099,7 @@
 
       grid.append(h('button', { class: 'new-tile', id: 'new-tile', type: 'button', onclick: newCircuit },
         h('span', { class: 'new-tile-plus' }, icon('plus', 18)),
-        h('strong', null, 'New circuit'),
-        h('span', null, 'Start from a blank board')));
+        h('strong', null, 'New circuit')));
       circuits.forEach((c, idx) => grid.append(makeCircuitCard(c, idx)));
     }
 
