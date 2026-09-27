@@ -34,13 +34,24 @@
     const bb = App.createBreadboard();
     App.scene.add(bb.group);
 
-    // A slow orbit around the circuit, which the visitor can grab.
-    // Framed on the battery and the first two LEDs, wider on wide frames.
-    const wide = Math.max(1, Math.min(1.8, innerWidth / innerHeight));
-    App.camera.position.set(-10 + 2 * wide, 9 + 2.2 * wide, 12 + 3.5 * wide);
-    App.controls.target.set(-5.5, 0.4, 0.2);
-    App.controls.autoRotate = true;
-    App.controls.autoRotateSpeed = 0.4;
+    // A slow sway round a three-quarter view of the whole circuit, battery
+    // included. A drag hands the camera to the visitor.
+    const wide = Math.max(1, Math.min(2, innerWidth / innerHeight));
+    const target = new THREE.Vector3(-5.2, 0.1, -0.4);
+    const dist = 12 + 12 / wide;
+    const tilt = 0.6;
+    const yaw0 = -0.34;
+    let swaying = true;
+    function sway(t) {
+      const yaw = yaw0 + Math.sin(t * 0.21) * 0.3;
+      App.camera.position.set(
+        target.x + dist * Math.cos(tilt) * Math.sin(yaw),
+        target.y + dist * Math.sin(tilt),
+        target.z + dist * Math.cos(tilt) * Math.cos(yaw));
+    }
+    App.controls.target.copy(target);
+    App.controls.addEventListener('start', () => { swaying = false; });
+    sway(0);
     App.controls.update();
 
     const tickers = new Set();
@@ -98,6 +109,7 @@
       requestAnimationFrame(animate);
       const t = performance.now() / 1000;
       tickers.forEach(fn => fn(t));
+      if (swaying) sway(t);
       App.controls.update();
       App.renderer.render(App.scene, App.camera);
     }
