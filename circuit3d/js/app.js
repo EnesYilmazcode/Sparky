@@ -52,7 +52,14 @@
 
   // ── Render Loop ─────────────────────────────────────────────
 
-  const _defaultCamPos = { x: 0, y: 18, z: 24 };
+  // Narrow screens need the camera further back to fit the board's width.
+  const _aspect = () => Math.max(0.45, App.camera.aspect || 1.6);
+  const _defaultCamPos = {};
+  function _fitDefault() {
+    const k = Math.max(1, 1.55 / _aspect());
+    Object.assign(_defaultCamPos, { x: 0, y: 18 * k, z: 24 * k });
+  }
+  _fitDefault();
   const _defaultCamTgt = { x: 0, y: 0, z: 0 };
   const _camThreshold = 0.5;
 
@@ -84,6 +91,7 @@
 
   // Glide the camera back to the default view.
   App.resetView = function () {
+    _fitDefault();
     const cam = App.camera, ctl = App.controls;
     const p0 = cam.position.clone(), t0 = ctl.target.clone();
     const p1 = new THREE.Vector3(_defaultCamPos.x, _defaultCamPos.y, _defaultCamPos.z);
@@ -1035,6 +1043,7 @@
 
   // ── Boot ─────────────────────────────────────────────────────
   // Must run AFTER all App.* methods are defined above.
+  App.camera.position.set(_defaultCamPos.x, _defaultCamPos.y, _defaultCamPos.z);
   state.breadboard = App.createBreadboard();
   App.scene.add(state.breadboard.group);
   App.initInteraction();
