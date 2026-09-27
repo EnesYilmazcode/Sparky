@@ -366,16 +366,6 @@
       .hero-content, .hero-preview { animation: none; }
     }
 
-    /* Scroll-triggered fade for features */
-    .features {
-      opacity: 0;
-      transform: translateY(20px);
-      transition: opacity 0.5s ease, transform 0.5s ease;
-    }
-    .features.visible {
-      opacity: 1;
-      transform: translateY(0);
-    }
 
     /* ── Auth Modal ────────────────────────────────────────── */
     .modal-overlay {
@@ -682,18 +672,6 @@
         navCta.onclick = function() { window.location.href = 'dashboard.html'; };
       }
     });
-
-    // ── Scroll reveal ────────────────────────────────────────
-    const observer = new IntersectionObserver((entries) => {
-      entries.forEach(entry => {
-        if (entry.isIntersecting) {
-          entry.target.classList.add('visible');
-          observer.unobserve(entry.target);
-        }
-      });
-    }, { threshold: 0.15 });
-
-    document.querySelectorAll('.features').forEach(el => observer.observe(el));
   </script>
 </body>
 </html>
