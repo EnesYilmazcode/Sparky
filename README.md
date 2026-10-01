@@ -4,9 +4,20 @@
 Place parts, wire them up and run the circuit. Ask Sparky to build something and it tests the build in the same simulator before you see it.</p>
 
 <p align="center">
-  <a href="https://buildwithsparky.web.app"><img src="docs/editor.jpg" width="860" alt="The Sparky editor: a 9V battery, a push button, a 470 ohm resistor and a lit red LED on a breadboard, next to Sparky's reply and its simulator check"></a><br>
+  <a href="https://buildwithsparky.web.app"><img src="docs/sparky.gif" width="760" alt="Asking Sparky to make a button turn on an LED: it places a 470 ohm resistor and a red LED, checks the build in the simulator, and the LED lights at 14.9 mA"></a><br>
   <a href="https://buildwithsparky.web.app"><b>Open Sparky</b></a>
 </p>
+
+<table align="center">
+  <tr>
+    <td align="center"><img src="docs/place.gif" width="380" alt="Placing parts"><br>Place parts</td>
+    <td align="center"><img src="docs/wire.gif" width="380" alt="Wiring"><br>Wire them</td>
+  </tr>
+  <tr>
+    <td align="center"><img src="docs/simulate.gif" width="380" alt="Simulating"><br>Run the circuit</td>
+    <td align="center"><img src="docs/ask.gif" width="380" alt="Asking Sparky"><br>Ask Sparky</td>
+  </tr>
+</table>
 
 ## What it does
 
@@ -39,6 +50,8 @@ flowchart LR
 The server sends your board and the conversation to Gemini, which answers with tool calls such as `place_led(holeA: "c13", holeB: "c11")`. [`board-model.js`](circuit3d/js/board-model.js) replays them against your board: a lead aimed at a taken hole moves along its strip to a free one, so parts never stack. [`backend/verify.js`](backend/verify.js) then runs the result through the same simulator the editor uses. If an LED stays dark or burns out, the reason goes back to the model and it tries again, twice at most. The reply says what the first try got wrong.
 
 The editor replays the same actions through the same board model, so the preview, the parts you apply and the server's check always agree.
+
+<p align="center"><img src="docs/editor.jpg" width="860" alt="The Sparky editor: a 9V battery, a push button, a 470 ohm resistor and a lit red LED on a breadboard, next to Sparky's reply and its simulator check"></p>
 
 ## Run it locally
 
