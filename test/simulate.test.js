@@ -3,10 +3,11 @@
 // Run with:  node --test
 // No dependencies: node's built-in test runner only.
 //
-// Tests marked WRONG TODAY assert the behaviour the engine currently has,
-// so that the solver replacement produces a visible diff. Each one is
-// paired with a skipped test holding the analytically correct answer and
-// the issue that will unskip it.
+// The solver is Modified Nodal Analysis (circuit3d/js/mna.js), so every
+// expectation below is the analytic answer. Issues #8, #9 and #11 tracked
+// the three cases the old path-walking engine got wrong; the tests that
+// pinned that wrong behaviour are gone and their correct counterparts,
+// previously skipped, now run.
 
 const test   = require('node:test');
 const assert = require('node:assert');
@@ -59,10 +60,9 @@ test('series battery, resistor, LED: one branch at (9-2)/470', () => {
 });
 
 // ── Parallel: 9V - 470R - two LEDs sharing it ─────────────────
-// Correct: 31.8 mA through the resistor, 15.9 mA per LED.
-// WRONG TODAY: each enumerated path is solved on its own, so both LEDs
-// report the full 31.8 mA and KCL is violated at the shared node.
-// See issue #8.
+// 14.894 mA through the shared resistor, split 7.447 mA per LED.
+// The path walker solved each route on its own and gave both LEDs the
+// full 14.894 mA, which violates KCL at the shared node. Issue #8.
 
 function parallelSharedResistor() {
   const bat  = battery();
@@ -73,32 +73,24 @@ function parallelSharedResistor() {
   return { components: [bat, res, led1, led2], wires };
 }
 
-test('parallel LEDs behind one resistor: WRONG TODAY, full current in both (#8)', () => {
+test('parallel LEDs behind one resistor: KCL holds at the shared node (#8)', () => {
   const { components, wires } = parallelSharedResistor();
   const r = Sim.analyze(components, wires);
 
   assert.equal(r.branches.length, 2);
+  const total = r.branches.reduce((s, b) => s + b.current, 0);
+  assert.ok(Math.abs(mA(total) - 14.894) < 0.01,
+    `branch currents must sum to the resistor current, got ${mA(total)}`);
   r.branches.forEach(b => {
-    assert.ok(Math.abs(mA(b.current) - 14.894) < 0.01,
-      `expected the current 14.894 mA per branch, got ${mA(b.current)}`);
+    assert.ok(Math.abs(mA(b.current) - 7.447) < 0.01,
+      `expected 7.447 mA per LED, got ${mA(b.current)}`);
   });
   assert.equal(r.ledsOn.length, 2);
 });
 
-test('parallel LEDs behind one resistor: KCL holds, 15.9 mA each (#8)', { skip: 'blocked on the solver replacement, issue #8' }, () => {
-  const { components, wires } = parallelSharedResistor();
-  const r = Sim.analyze(components, wires);
-
-  const total = r.branches.reduce((s, b) => s + b.current, 0);
-  assert.ok(Math.abs(mA(total) - 14.894) < 0.01, 'branch currents must sum to the resistor current');
-  r.branches.forEach(b => {
-    assert.ok(Math.abs(mA(b.current) - 7.447) < 0.01);
-  });
-});
-
 // ── Voltage divider: 9V - 470R - node X - 470R - GND ──────────
-// Correct: V(X) = 4.5 V. There is no node voltage anywhere in the
-// output today, only a loop current. See issue #9.
+// V(X) = 4.5 V. The path walker had no concept of a node voltage at
+// all, so it could not express this circuit. Issue #9.
 
 function divider() {
   const bat = battery();
@@ -108,28 +100,21 @@ function divider() {
   return { components: [bat, r1, r2], wires, midNode: 'bb_top_10' };
 }
 
-test('voltage divider: loop current is right, node voltage is absent (#9)', () => {
-  const { components, wires } = divider();
-  const r = Sim.analyze(components, wires);
-
-  assert.equal(r.branches.length, 1);
-  assert.ok(Math.abs(mA(r.branches[0].current) - 9.574) < 0.01,
-    `expected 9.574 mA, got ${mA(r.branches[0].current)}`);
-  assert.equal(r.nodeVoltages, undefined, 'no node voltage is computed today');
-});
-
-test('voltage divider: V(midpoint) = 4.5 V (#9)', { skip: 'blocked on the solver replacement, issue #9' }, () => {
+test('voltage divider: V(midpoint) = 4.5 V and the loop carries 9.574 mA (#9)', () => {
   const { components, wires, midNode } = divider();
   const r = Sim.analyze(components, wires);
 
   assert.ok(r.nodeVoltages, 'solver should report node voltages');
-  assert.ok(Math.abs(r.nodeVoltages[midNode] - 4.5) < 1e-6);
+  assert.ok(Math.abs(r.nodeVoltages[midNode] - 4.5) < 1e-6,
+    `expected 4.5 V at the midpoint, got ${r.nodeVoltages[midNode]}`);
+  assert.equal(r.branches.length, 1);
+  assert.ok(Math.abs(mA(r.branches[0].current) - 9.574) < 0.01,
+    `expected 9.574 mA, got ${mA(r.branches[0].current)}`);
 });
 
 // ── Reverse LED ───────────────────────────────────────────────
 // Same circuit as the series test with the LED turned around, so
-// current enters the cathode. WRONG TODAY: it lights at full
-// brightness. See issue #10.
+// current would have to enter the cathode. Issue #10.
 
 function reversedLED() {
   const bat = battery();
@@ -177,9 +162,9 @@ test('resistor and LED not wired to the battery leave the circuit open', () => {
 });
 
 // ── Two batteries in series ───────────────────────────────────
-// Correct for 18 V: (18 - 2) / 470 = 34.0 mA. WRONG TODAY: each
-// battery is solved alone and the other counts as a 0-ohm wire, so
-// the answer is the single-battery answer. See issue #11.
+// (18 - 2) / 470 = 34.043 mA. The path walker solved one battery at a
+// time and treated the other as a 0-ohm wire, so it reported the
+// single-battery answer. Issue #11.
 
 function twoInSeries() {
   const batA = comp('battery', [h(1, 'tp'),  h(20, 'a')]);
@@ -190,22 +175,13 @@ function twoInSeries() {
   return { components: [batA, batB, res, led], wires };
 }
 
-test('two 9V batteries in series: WRONG TODAY, same current as one (#11)', () => {
+test('two 9V batteries in series: 18 V drives 34.0 mA (#11)', () => {
   const { components, wires } = twoInSeries();
   const r = Sim.analyze(components, wires);
 
-  assert.ok(r.branches.length > 0);
-  r.branches.forEach(b => {
-    assert.ok(Math.abs(mA(b.current) - 14.894) < 0.01,
-      `expected the single-battery current 14.894 mA, got ${mA(b.current)}`);
-  });
-});
-
-test('two 9V batteries in series: 18 V drives 72.7 mA (#11)', { skip: 'blocked on the solver replacement, issue #11' }, () => {
-  const { components, wires } = twoInSeries();
-  const r = Sim.analyze(components, wires);
-
-  assert.ok(Math.abs(mA(r.branches[0].current) - 34.043) < 0.01);
+  assert.ok(Math.abs(mA(r.branches[0].current) - 34.043) < 0.01,
+    `expected 34.043 mA from 18 V, got ${mA(r.branches[0].current)}`);
+  assert.equal(r.ledsOn.length, 1);
 });
 
 // ── Degenerate inputs ─────────────────────────────────────────

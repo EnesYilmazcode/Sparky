@@ -110,7 +110,7 @@ export const BoardHero: React.FC = () => {
           Interactive 3D Breadboard
         </span>
         <span style={{ fontSize: 16, fontFamily: FONTS.primary, fontWeight: 300, color: COLORS.textMuted, marginLeft: 14 }}>
-          830 holes &middot; Real-time simulation &middot; No install required
+          700 holes &middot; Real-time simulation &middot; No install required
         </span>
       </div>
     </AbsoluteFill>

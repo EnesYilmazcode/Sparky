@@ -2,10 +2,19 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <meta http-equiv="refresh" content="0;url=landing.html" />
-  <title>Redirecting to Sparky…</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta http-equiv="refresh" content="0; url=landing.html" />
+  <title>Sparky</title>
+  <style>
+    body { margin: 0; background: #FAF9F6; color: #1A1814; font: 16px/1.5 system-ui, sans-serif; }
+    p { padding: 2rem 1rem; text-align: center; }
+    a { color: #B45309; }
+  </style>
+  <!-- Replace, so Back does not land here and bounce forward again, and keep
+       any query or hash (landing.html#signin opens the sign-in dialog). -->
+  <script>location.replace('landing.html' + location.search + location.hash);</script>
 </head>
 <body>
-  <p>Redirecting to <a href="landing.html">Sparky</a>…</p>
+  <p>Opening <a href="landing.html">Sparky</a>…</p>
 </body>
 </html>

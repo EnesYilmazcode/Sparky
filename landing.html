@@ -1,9 +1,13 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="en" class="no-js">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Sparky — 3D Circuit Designer</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Sparky: 3D circuit workbench</title>
+  <meta name="description" content="A free 3D breadboard in your browser. Place parts, wire them up, simulate the circuit, and ask an AI tutor what is going on." />
+  <meta name="theme-color" content="#FAF9F6" />
+  <link rel="icon" href="logo.svg" type="image/svg+xml" />
+  <script>document.documentElement.className = 'js';</script>
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=Inter:wght@400;500;600&display=swap" rel="stylesheet" />
@@ -11,607 +15,624 @@
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
     :root {
-      --bg:         #FAF9F6;
-      --bg-card:    #F3F1EC;
-      --bg-card-hi: #EDEAE4;
-      --border:     #E0DCD5;
-      --text:       #1A1814;
-      --text-sub:   #6B6560;
-      --text-dim:   #9C9690;
-      --accent:     #D97706;
-      --accent-hi:  #B45309;
-      --accent-lo:  #F59E0B;
-      --accent-bg:  #FEF3C7;
-      --dark:       #1A1814;
-      --dark-card:  #2A2722;
-      --dark-text:  #E8E4DE;
-      --dark-sub:   #9C9690;
+      --paper:      #FAF9F6;
+      --panel:      #F3F1EC;
+      --line:       #E4DFD6;
+      --line-hi:    #D5CFC5;
+      --ink:        #1A1814;
+      --ink-2:      #57514B;
+      --ink-3:      #6E6862;
+      --amber:      #D97706;
+      --amber-lo:   #F59E0B;
+      --amber-ink:  #B45309;
+      --amber-deep: #92400E;
+      --amber-wash: #FEF3C7;
+      --stage:      #DCDAD4;
+      --night:      #1A1814;
+      --night-2:    #2A2722;
+      --night-ink:  #E8E4DE;
+      --night-sub:  #A9A39C;
+      --ok:         #15803D;
+
+      --wrap:   1720px;
+      --edge:   clamp(1rem, 2.2vw, 2rem);
+      --gutter: clamp(1rem, 4vw, 2rem);
+      --head:   'Space Grotesk', system-ui, sans-serif;
+      --body:   'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
     }
 
-    html { scroll-behavior: smooth; }
+    @media (prefers-reduced-motion: no-preference) {
+      html { scroll-behavior: smooth; }
+    }
 
     body {
-      font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
-      background: var(--bg);
-      color: var(--text);
+      font-family: var(--body);
+      font-size: 1rem;
       line-height: 1.6;
+      color: var(--ink);
+      background: var(--paper);
       -webkit-font-smoothing: antialiased;
-      overflow-x: hidden;
+      text-rendering: optimizeLegibility;
     }
 
-    /* ── Dot grid background ─────────────────────────────── */
-    .dot-grid {
-      position: absolute;
-      inset: 0;
-      background-image: radial-gradient(circle, #D5D0C8 0.8px, transparent 0.8px);
-      background-size: 24px 24px;
-      opacity: 0.5;
-      pointer-events: none;
-      mask-image: linear-gradient(to bottom, rgba(0,0,0,0.4) 0%, rgba(0,0,0,0) 70%);
-      -webkit-mask-image: linear-gradient(to bottom, rgba(0,0,0,0.4) 0%, rgba(0,0,0,0) 70%);
+    a { color: inherit; }
+    svg { flex-shrink: 0; }
+
+    :focus-visible {
+      outline: 2px solid var(--amber-ink);
+      outline-offset: 3px;
+      border-radius: 6px;
     }
 
-    /* ── Nav bar ──────────────────────────────────────────── */
+    .wrap {
+      max-width: var(--wrap);
+      margin: 0 auto;
+      padding-inline: var(--gutter);
+    }
+
+    .sr-only {
+      position: absolute; width: 1px; height: 1px; overflow: hidden;
+      clip: rect(0 0 0 0); clip-path: inset(50%); white-space: nowrap;
+    }
+
+    .skip {
+      position: absolute; left: var(--gutter); top: -3rem; z-index: 300;
+      background: var(--ink); color: var(--paper);
+      padding: 0.5rem 0.9rem; border-radius: 8px;
+      font-weight: 600; font-size: 0.875rem; text-decoration: none;
+    }
+    .skip:focus { top: 0.75rem; }
+
+    /* ── Buttons ─────────────────────────────────────────── */
+    .btn {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 0.5rem;
+      min-height: 2.75rem;
+      padding: 0 1.25rem;
+      border-radius: 10px;
+      border: 1px solid transparent;
+      font-family: var(--head);
+      font-size: 1rem;
+      font-weight: 600;
+      letter-spacing: -0.01em;
+      text-decoration: none;
+      white-space: nowrap;
+      cursor: pointer;
+      transition: background-color 0.15s, border-color 0.15s, color 0.15s, box-shadow 0.15s;
+    }
+    .btn-primary {
+      background: var(--amber-ink);
+      color: #fff;
+      box-shadow: inset 0 1px 0 rgba(255,255,255,0.18), 0 1px 2px rgba(146,64,14,0.25);
+    }
+    .btn-primary:hover { background: var(--amber-deep); }
+    .btn-quiet {
+      background: #fff;
+      color: var(--ink);
+      border-color: var(--line-hi);
+    }
+    .btn-quiet:hover { border-color: #BDB5A9; background: var(--panel); }
+    .btn-sm {
+      min-height: 2.25rem;
+      padding: 0 0.9rem;
+      font-size: 0.875rem;
+      border-radius: 8px;
+    }
+
+    /* ── Nav ─────────────────────────────────────────────── */
     .nav {
-      position: fixed;
-      top: 0; left: 0; right: 0;
+      position: sticky;
+      top: 0;
       z-index: 100;
+      background: rgba(250, 249, 246, 0.86);
+      -webkit-backdrop-filter: saturate(1.4) blur(12px);
+      backdrop-filter: saturate(1.4) blur(12px);
+      border-bottom: 1px solid var(--line);
+    }
+    .nav .wrap, .footer .wrap { max-width: none; padding-inline: var(--edge); }
+    .nav-inner {
       display: flex;
       align-items: center;
       justify-content: space-between;
-      padding: 0.85rem 1.75rem;
-      background: rgba(250, 249, 246, 0.85);
-      backdrop-filter: blur(12px);
-      -webkit-backdrop-filter: blur(12px);
-      border-bottom: 1px solid var(--border);
-    }
-    .nav-logo {
-      display: flex;
-      align-items: center;
-      gap: 0.5rem;
-      font-family: 'Space Grotesk', sans-serif;
-      font-size: 1.05rem;
-      font-weight: 700;
-      color: var(--text);
-      text-decoration: none;
-      letter-spacing: -0.02em;
-    }
-    .nav-logo svg {
-      color: var(--accent);
-      filter: drop-shadow(0 0 4px rgba(217, 119, 6, 0.3));
-    }
-    .nav-links {
-      display: flex;
-      align-items: center;
-      gap: 0.5rem;
-    }
-    .nav-link {
-      font-size: 0.8125rem;
-      font-weight: 500;
-      color: var(--text-sub);
-      text-decoration: none;
-      padding: 0.4rem 0.75rem;
-      border-radius: 6px;
-      transition: color 0.15s, background 0.15s;
-    }
-    .nav-link:hover { color: var(--text); background: var(--bg-card); }
-    .nav-cta {
-      font-family: 'Inter', sans-serif;
-      font-size: 0.8125rem;
-      font-weight: 600;
-      color: #fff;
-      background: var(--accent);
-      border: none;
-      padding: 0.4rem 1rem;
-      border-radius: 6px;
-      cursor: pointer;
-      transition: background 0.15s, transform 0.1s;
-    }
-    .nav-cta:hover { background: var(--accent-hi); transform: translateY(-1px); }
-
-    /* ── Hero ─────────────────────────────────────────────── */
-    .hero {
-      position: relative;
-      padding: 7.5rem 2rem 4rem;
-      max-width: 1200px;
-      margin: 0 auto;
-      display: flex;
-      align-items: center;
-      gap: 3rem;
-    }
-    .hero-content {
-      flex: 0 0 42%;
-      min-width: 0;
-    }
-    .hero-preview {
-      flex: 1;
-      min-width: 0;
-    }
-    .hero h1 {
-      font-family: 'Space Grotesk', sans-serif;
-      font-size: clamp(2.25rem, 4vw, 3.25rem);
-      font-weight: 700;
-      letter-spacing: -0.045em;
-      line-height: 1.05;
-      color: var(--text);
-      margin-bottom: 1.25rem;
-    }
-    .hero h1 .accent {
-      color: var(--accent);
-      position: relative;
-    }
-    .hero h1 .accent::after {
-      content: '';
-      position: absolute;
-      bottom: 2px;
-      left: 0;
-      right: 0;
-      height: 3px;
-      background: var(--accent-lo);
-      border-radius: 2px;
-      opacity: 0.4;
-    }
-    .hero-desc {
-      font-size: 1.125rem;
-      color: var(--text-sub);
-      line-height: 1.7;
-      max-width: 480px;
-      margin-bottom: 2rem;
-    }
-    .hero-actions {
-      display: flex;
-      align-items: center;
       gap: 1rem;
-      flex-wrap: wrap;
+      height: 4rem;
     }
-    /* ── Buttons ──────────────────────────────────────────── */
-    .btn-primary {
+    .brand {
       display: inline-flex;
       align-items: center;
       gap: 0.5rem;
-      font-family: 'Space Grotesk', sans-serif;
-      font-size: 0.9375rem;
-      font-weight: 600;
-      color: #fff;
-      text-decoration: none;
-      padding: 0.7rem 1.6rem;
-      border-radius: 8px;
-      background: var(--accent);
-      border: 1px solid var(--accent);
-      cursor: pointer;
-      transition: background 0.15s, transform 0.1s, box-shadow 0.15s;
-      box-shadow: 0 1px 2px rgba(0,0,0,0.05), 0 0 0 0 rgba(217,119,6,0);
-    }
-    .btn-primary:hover {
-      background: var(--accent-hi);
-      border-color: var(--accent-hi);
-      transform: translateY(-1px);
-      box-shadow: 0 4px 12px rgba(217,119,6,0.25);
-    }
-    .btn-primary:active { transform: translateY(0); box-shadow: none; }
-
-    /* ── Preview (inside hero) ────────────────────────────── */
-    .preview-frame {
-      border-radius: 12px;
-      overflow: hidden;
-      background: #D8D4C8;
-      box-shadow:
-        0 0 0 1px rgba(0,0,0,0.06),
-        0 4px 6px rgba(0,0,0,0.04),
-        0 20px 50px rgba(0,0,0,0.08);
-      aspect-ratio: 16/10;
-      position: relative;
-    }
-    .preview-frame iframe {
-      width: 100%;
-      height: 100%;
-      border: none;
-      display: block;
-    }
-    .preview-label {
-      position: absolute;
-      top: 0.75rem;
-      left: 0.75rem;
-      z-index: 2;
-      font-family: 'Space Grotesk', sans-serif;
-      font-size: 0.625rem;
-      font-weight: 600;
-      letter-spacing: 0.06em;
-      text-transform: uppercase;
-      color: rgba(255,255,255,0.8);
-      background: rgba(0,0,0,0.5);
-      backdrop-filter: blur(8px);
-      padding: 0.25rem 0.55rem;
-      border-radius: 5px;
-    }
-    .preview-launch {
-      position: absolute;
-      bottom: 0.75rem;
-      right: 0.75rem;
-      z-index: 2;
-    }
-    .preview-launch .btn-primary {
-      font-size: 0.75rem;
-      padding: 0.4rem 0.85rem;
-      border: none;
-      box-shadow: 0 2px 8px rgba(0,0,0,0.2);
-    }
-
-    /* ── Features bento ──────────────────────────────────── */
-    .features {
-      max-width: 1100px;
-      margin: 0 auto 5rem;
-      padding: 0 2rem;
-    }
-    .features-label {
-      font-family: 'Space Grotesk', sans-serif;
-      font-size: 0.75rem;
-      font-weight: 600;
-      letter-spacing: 0.08em;
-      text-transform: uppercase;
-      color: var(--accent);
-      margin-bottom: 0.75rem;
-    }
-    .features-heading {
-      font-family: 'Space Grotesk', sans-serif;
-      font-size: clamp(1.75rem, 3.5vw, 2.5rem);
+      font-family: var(--head);
+      font-size: 1.125rem;
       font-weight: 700;
-      letter-spacing: -0.035em;
-      line-height: 1.1;
-      color: var(--text);
-      max-width: 500px;
-      margin-bottom: 3rem;
+      letter-spacing: -0.02em;
+      text-decoration: none;
     }
-
-    .bento {
-      display: grid;
-      grid-template-columns: repeat(3, 1fr);
-      gap: 1px;
-      background: var(--border);
-      border-radius: 12px;
-      overflow: hidden;
-    }
-    .bento-card {
-      background: var(--bg-card);
-      padding: 1.75rem;
-      transition: background 0.2s;
-      position: relative;
-    }
-    .bento-card:hover { background: var(--bg-card-hi); }
-    .bento-card.wide { grid-column: span 2; }
-
-    .bento-icon {
-      width: 36px;
-      height: 36px;
-      border-radius: 8px;
+    .brand img { display: block; }
+    .nav-links {
       display: flex;
       align-items: center;
-      justify-content: center;
-      margin-bottom: 1rem;
-      background: var(--accent-bg);
-      color: var(--accent);
+      gap: 0.25rem;
     }
-    .bento-card h3 {
-      font-family: 'Space Grotesk', sans-serif;
+    .nav-link {
       font-size: 0.9375rem;
-      font-weight: 600;
-      color: var(--text);
-      letter-spacing: -0.01em;
-      margin-bottom: 0.4rem;
+      font-weight: 500;
+      color: var(--ink-2);
+      text-decoration: none;
+      padding: 0.45rem 0.75rem;
+      border-radius: 8px;
+      transition: color 0.15s, background-color 0.15s;
     }
-    .bento-card p {
-      font-size: 0.8125rem;
-      color: var(--text-sub);
+    .nav-link:hover { color: var(--ink); background: var(--panel); }
+    #nav-cta { margin-left: 0.5rem; min-width: 6.25rem; }
+
+    /* ── Hero ────────────────────────────────────────────── */
+    .hero {
+      position: relative;
+      padding: clamp(3rem, 7vw, 6rem) 0 clamp(3rem, 5vw, 4.5rem);
+      overflow: hidden;
+    }
+    /* Breadboard hole grid, fading out below the fold line. */
+    .hero::before {
+      content: '';
+      position: absolute;
+      inset: 0;
+      background-image: radial-gradient(circle, #CFC8BD 1px, transparent 1.3px);
+      background-size: 22px 22px;
+      background-position: 11px 11px;
+      -webkit-mask-image: linear-gradient(to bottom, rgba(0,0,0,0.55), transparent 75%);
+      mask-image: linear-gradient(to bottom, rgba(0,0,0,0.55), transparent 75%);
+      pointer-events: none;
+    }
+    .hero-grid {
+      position: relative;
+      display: grid;
+      grid-template-columns: minmax(0, 5fr) minmax(0, 9fr);
+      align-items: center;
+      gap: clamp(2rem, 5vw, 4.5rem);
+    }
+    .hero h1 {
+      font-family: var(--head);
+      font-size: clamp(2.5rem, 2.6vw + 1.9rem, 4.75rem);
+      font-weight: 700;
+      line-height: 1.02;
+      letter-spacing: -0.04em;
+      text-wrap: balance;
+    }
+    .lede {
+      margin-top: 1.5rem;
+      max-width: 32rem;
+      font-size: clamp(1.0625rem, 0.4vw + 0.95rem, 1.1875rem);
       line-height: 1.6;
+      color: var(--ink-2);
+    }
+    .hero-actions {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.75rem;
+      margin-top: 2.25rem;
+    }
+    .hero-actions .btn { min-height: 3rem; padding: 0 1.5rem; font-size: 1.0625rem; }
+    .hero-note {
+      margin-top: 1.25rem;
+      font-size: 0.875rem;
+      color: var(--ink-3);
     }
 
-    /* ── Footer ───────────────────────────────────────────── */
-    .footer {
-      background: var(--dark);
-      border-top: 1px solid var(--dark-card);
-      padding: 1.75rem 2rem;
+    /* ── Live preview ────────────────────────────────────── */
+    .preview {
+      border-radius: 16px;
+      background: #fff;
+      border: 1px solid var(--line-hi);
+      box-shadow:
+        0 1px 0 rgba(255,255,255,0.8) inset,
+        0 2px 4px rgba(60, 40, 10, 0.04),
+        0 24px 60px -28px rgba(90, 58, 20, 0.35);
+      overflow: hidden;
     }
-    .footer-inner {
-      max-width: 1100px;
-      margin: 0 auto;
+    .preview-bar {
+      display: flex;
+      align-items: center;
+      gap: 0.6rem;
+      min-height: 3.25rem;
+      padding: 0.5rem 0.6rem 0.5rem 1rem;
+      background: var(--panel);
+      border-bottom: 1px solid var(--line);
+    }
+    /* Status LED: dim while the 3D board loads, lit once it has. */
+    .preview-led {
+      width: 10px;
+      height: 10px;
+      border-radius: 50%;
+      background: #C9C1B6;
+      box-shadow: inset 0 -1px 1px rgba(0,0,0,0.18);
+      transition: background-color 0.3s, box-shadow 0.3s;
+    }
+    .preview.is-loaded .preview-led {
+      background: var(--amber-lo);
+      box-shadow: 0 0 0 3px rgba(245,158,11,0.18), 0 0 10px 2px rgba(245,158,11,0.55);
+    }
+    .preview-title {
+      font-family: var(--head);
+      font-size: 0.9375rem;
+      font-weight: 600;
+      letter-spacing: -0.01em;
+    }
+    .preview-open { margin-left: auto; }
+
+    .preview-stage {
+      position: relative;
+      aspect-ratio: 16 / 10;
+      background-color: var(--stage);
+      background-image: radial-gradient(circle, rgba(60,52,40,0.16) 1.2px, transparent 1.6px);
+      background-size: 18px 18px;
+    }
+    .preview-stage iframe {
+      position: absolute;
+      inset: 0;
+      width: 100%;
+      height: 100%;
+      border: 0;
+      display: block;
+      transition: opacity 0.5s ease;
+    }
+    .js .preview:not(.is-loaded) iframe { opacity: 0; }
+    .preview-status {
+      position: absolute;
+      left: 0.85rem;
+      bottom: 0.85rem;
+      display: inline-flex;
+      align-items: center;
+      gap: 0.4rem;
+      padding: 0.3rem 0.65rem;
+      border-radius: 999px;
+      background: rgba(255,255,255,0.88);
+      font-size: 0.8125rem;
+      font-weight: 500;
+      color: var(--ink-2);
+      pointer-events: none;
+    }
+    .preview.is-loaded .preview-status { display: none; }
+    .no-js .preview-status { display: none; }
+    /* Touch screens get a picture that turns, not a scroll trap. */
+    @media (hover: none), (pointer: coarse) {
+      .preview-stage iframe { pointer-events: none; }
+      .preview.is-loaded .preview-status { display: none; }
+    }
+
+    /* ── Sections ────────────────────────────────────────── */
+    .section { padding: clamp(2.5rem, 4vw, 4rem) 0 clamp(3.5rem, 6vw, 6rem); }
+    .section + .section { padding-top: 0; }
+    .section-head { max-width: 40rem; margin-bottom: clamp(2rem, 4vw, 3rem); }
+    .section-head h2 {
+      font-family: var(--head);
+      font-size: clamp(1.875rem, 1.6vw + 1.3rem, 2.5rem);
+      font-weight: 700;
+      line-height: 1.1;
+      letter-spacing: -0.035em;
+      text-wrap: balance;
+    }
+    .section-head p {
+      margin-top: 0.85rem;
+      font-size: 1.0625rem;
+      color: var(--ink-2);
+    }
+    #how { scroll-margin-top: 5rem; }
+
+    /* Four things it does, each shown by a short loop of the real models. */
+    .features {
+      list-style: none;
+      display: grid;
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+      gap: 1.25rem;
+    }
+    .features li {
+      border: 1px solid var(--line);
+      border-radius: 18px;
+      background: #fff;
+      overflow: hidden;
+    }
+    .features video {
+      display: block;
+      width: 100%;
+      aspect-ratio: 4 / 3;
+      object-fit: cover;
+      background: #1f2226;
+    }
+    .features .f-text { padding: 1.1rem 1.35rem 1.35rem; }
+    .features h3 {
+      font-family: var(--head);
+      font-size: 1.25rem;
+      font-weight: 600;
+      letter-spacing: -0.02em;
+    }
+    .features p { margin-top: 0.2rem; color: var(--ink-2); }
+
+    /* ── Footer ──────────────────────────────────────────── */
+    .footer {
+      background: var(--night);
+      color: var(--night-ink);
+    }
+    .footer :focus-visible { outline-color: var(--amber-lo); }
+    .footer-meta {
       display: flex;
       align-items: center;
       justify-content: space-between;
       flex-wrap: wrap;
-      gap: 1rem;
+      gap: 0.75rem 1.5rem;
+      padding: 1.75rem 0 2rem;
+      font-size: 0.875rem;
+      color: var(--night-sub);
     }
-    .footer-brand {
-      display: flex;
-      align-items: center;
-      gap: 0.4rem;
-      font-family: 'Space Grotesk', sans-serif;
-      font-size: 0.8125rem;
-      font-weight: 600;
-      color: var(--dark-sub);
-    }
-    .footer-brand svg { color: var(--accent); opacity: 0.6; }
-    .footer-links {
-      display: flex;
-      gap: 1.5rem;
-    }
-    .footer-links a {
-      font-size: 0.75rem;
-      color: var(--dark-sub);
-      text-decoration: none;
-      transition: color 0.15s;
-    }
-    .footer-links a:hover { color: var(--dark-text); }
-    .footer-credit {
-      font-size: 0.75rem;
-      color: var(--dark-sub);
-    }
-    .footer-credit a {
-      color: var(--dark-text);
-      text-decoration: none;
-      transition: color 0.15s;
-    }
-    .footer-credit a:hover { color: var(--accent-lo); }
+    .footer-meta .brand { font-size: 1rem; color: var(--night-ink); }
+    .footer-meta a { color: var(--night-ink); text-underline-offset: 3px; }
+    .footer-meta a:hover { color: var(--amber-lo); }
 
-    /* ── Animations ───────────────────────────────────────── */
-    @keyframes fadeIn {
-      from { opacity: 0; transform: translateY(20px); }
-      to   { opacity: 1; transform: translateY(0); }
+    /* ── Sign-in dialog ──────────────────────────────────── */
+    .auth {
+      width: min(26rem, calc(100vw - 2rem));
+      margin: auto;
+      padding: 2rem;
+      border: 1px solid var(--line);
+      border-radius: 16px;
+      background: var(--paper);
+      color: var(--ink);
+      box-shadow: 0 30px 80px -20px rgba(26, 24, 20, 0.35);
     }
-    @keyframes fadeInRight {
-      from { opacity: 0; transform: translateX(24px); }
-      to   { opacity: 1; transform: translateX(0); }
+    .auth::backdrop {
+      background: rgba(26, 24, 20, 0.5);
+      -webkit-backdrop-filter: blur(4px);
+      backdrop-filter: blur(4px);
     }
-    .hero-content      { animation: fadeIn 0.6s ease both 0.1s; }
-    .hero-preview      { animation: fadeInRight 0.7s ease both 0.25s; }
-
-    /* Scroll-triggered fade for features */
-    .features {
-      opacity: 0;
-      transform: translateY(20px);
-      transition: opacity 0.5s ease, transform 0.5s ease;
-    }
-    .features.visible {
-      opacity: 1;
-      transform: translateY(0);
-    }
-
-    /* ── Auth Modal ────────────────────────────────────────── */
-    .modal-overlay {
-      position: fixed;
-      inset: 0;
-      z-index: 200;
-      background: rgba(26, 24, 20, 0.55);
-      backdrop-filter: blur(6px);
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      opacity: 0;
-      pointer-events: none;
-      transition: opacity 0.2s;
-    }
-    .modal-overlay.open {
-      opacity: 1;
-      pointer-events: auto;
-    }
-    .modal-card {
-      background: var(--bg);
-      border: 1px solid var(--border);
-      border-radius: 14px;
-      box-shadow: 0 24px 64px rgba(0,0,0,0.18);
-      width: 100%;
-      max-width: 400px;
-      padding: 2.25rem;
-      position: relative;
-      transform: translateY(12px) scale(0.97);
-      transition: transform 0.25s cubic-bezier(0.16, 1, 0.3, 1);
-    }
-    .modal-overlay.open .modal-card {
-      transform: translateY(0) scale(1);
-    }
-    .modal-close {
+    .auth-close {
       position: absolute;
-      top: 1rem;
-      right: 1rem;
-      background: none;
-      border: none;
-      font-size: 1.25rem;
-      color: var(--text-dim);
+      top: 0.75rem;
+      right: 0.75rem;
+      display: grid;
+      place-items: center;
+      width: 2.25rem;
+      height: 2.25rem;
+      border: 0;
+      border-radius: 8px;
+      background: transparent;
+      color: var(--ink-2);
       cursor: pointer;
-      padding: 0.3rem;
-      line-height: 1;
-      border-radius: 6px;
-      transition: color 0.15s, background 0.15s;
     }
-    .modal-close:hover { color: var(--text); background: var(--bg-card); }
-    .modal-title {
-      font-family: 'Space Grotesk', sans-serif;
-      font-size: 1.25rem;
+    .auth-close:hover { background: var(--panel); color: var(--ink); }
+    .auth h2 {
+      font-family: var(--head);
+      font-size: 1.375rem;
       font-weight: 700;
-      letter-spacing: -0.02em;
-      color: var(--text);
-      margin-bottom: 0.3rem;
+      letter-spacing: -0.025em;
+      padding-right: 2rem;
     }
-    .modal-subtitle {
-      font-size: 0.8125rem;
-      color: var(--text-sub);
-      margin-bottom: 1.75rem;
-    }
-    .modal-google {
+    .auth-sub { margin-top: 0.4rem; color: var(--ink-2); font-size: 0.9375rem; }
+    .btn-google {
       display: flex;
       align-items: center;
       justify-content: center;
       gap: 0.65rem;
       width: 100%;
-      font-family: 'Inter', sans-serif;
-      font-size: 0.875rem;
-      font-weight: 500;
-      color: var(--text);
+      min-height: 3rem;
+      margin-top: 1.5rem;
+      border: 1px solid var(--line-hi);
+      border-radius: 10px;
       background: #fff;
-      border: 1px solid var(--border);
-      border-radius: 8px;
-      padding: 0.7rem;
+      font-family: var(--body);
+      font-size: 0.9375rem;
+      font-weight: 600;
+      color: var(--ink);
       cursor: pointer;
-      transition: background 0.15s, border-color 0.15s, box-shadow 0.15s;
+      transition: background-color 0.15s, border-color 0.15s;
     }
-    .modal-google:hover {
-      background: var(--bg-card);
-      border-color: #c4c4c0;
-      box-shadow: 0 1px 4px rgba(0,0,0,0.06);
-    }
-    .modal-error {
-      font-size: 0.8125rem;
-      color: #dc2626;
-      min-height: 1.2em;
-      text-align: center;
+    .btn-google:hover { background: var(--panel); border-color: #BDB5A9; }
+    .btn-google[disabled] { opacity: 0.6; cursor: progress; }
+    .auth-error {
       margin-top: 0.75rem;
+      font-size: 0.875rem;
+      color: #B91C1C;
+    }
+    .auth-error:empty { display: none; }
+    .auth-alt {
+      margin-top: 1.25rem;
+      padding-top: 1.25rem;
+      border-top: 1px solid var(--line);
+      font-size: 0.875rem;
+      color: var(--ink-2);
+    }
+    .auth-alt a { color: var(--amber-ink); font-weight: 600; text-underline-offset: 3px; }
+
+    /* ── Motion: one entrance, on load ───────────────────── */
+    @keyframes rise {
+      from { opacity: 0; transform: translateY(14px); }
+      to   { opacity: 1; transform: none; }
+    }
+    @keyframes breathe {
+      50% { opacity: 0.35; }
+    }
+    @keyframes pop {
+      from { opacity: 0; transform: translateY(8px) scale(0.98); }
+      to   { opacity: 1; transform: none; }
+    }
+    @media (prefers-reduced-motion: no-preference) {
+      .hero-copy { animation: rise 0.6s cubic-bezier(0.2, 0.7, 0.2, 1) both 0.05s; }
+      .preview   { animation: rise 0.7s cubic-bezier(0.2, 0.7, 0.2, 1) both 0.18s; }
+      .js .preview:not(.is-loaded) .preview-led { animation: breathe 1.4s ease-in-out infinite; }
+      .auth[open] { animation: pop 0.22s cubic-bezier(0.2, 0.7, 0.2, 1); }
+    }
+    @media (prefers-reduced-motion: reduce) {
+      *, *::before, *::after { transition-duration: 0.01ms !important; }
     }
 
-    /* ── Responsive ───────────────────────────────────────── */
-    @media (max-width: 900px) {
-      .hero {
-        flex-direction: column;
-        padding: 7rem 2rem 3rem;
-        gap: 2.5rem;
-      }
-      .hero-content {
-        flex: none;
-        width: 100%;
-      }
-      .hero-preview {
-        width: 100%;
-      }
-      .hero-preview { animation-name: fadeIn; }
+    /* ── Layout breakpoints ──────────────────────────────── */
+    @media (max-width: 1023px) {
+      .hero-grid { grid-template-columns: minmax(0, 1fr); }
+      .hero-copy { max-width: 40rem; }
     }
-    @media (max-width: 768px) {
-      .bento {
-        grid-template-columns: 1fr;
-      }
-      .bento-card.wide { grid-column: span 1; }
-      .nav-links .nav-link { display: none; }
+    @media (max-width: 1100px) {
+      .features { grid-template-columns: repeat(2, minmax(0, 1fr)); }
     }
-    @media (max-width: 600px) {
-      .hero { padding: 6rem 1.25rem 2.5rem; }
-      .hero h1 { font-size: 2.25rem; }
-      .footer-inner { flex-direction: column; justify-content: center; text-align: center; }
+    @media (max-width: 560px) {
+      .features { grid-template-columns: minmax(0, 1fr); }
+    }
+    @media (max-width: 640px) {
+      .hero-actions .btn { flex: 1 1 auto; }
+      .auth { padding: 1.5rem; }
+    }
+    @media (max-width: 380px) {
+      .nav-link { padding-inline: 0.5rem; }
+      #nav-cta { min-width: 0; }
     }
   </style>
 </head>
 <body>
+  <a class="skip" href="#main">Skip to content</a>
 
-  <!-- Nav -->
-  <nav class="nav">
-    <a href="#" class="nav-logo">
-      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/></svg>
-      Sparky
-    </a>
-    <div class="nav-links">
-      <a href="https://github.com/enesyilmazcode/sparky" class="nav-link" target="_blank">GitHub</a>
-      <button class="nav-cta" id="nav-cta" onclick="openModal()">Sign in</button>
+  <header class="nav">
+    <div class="wrap nav-inner">
+      <a href="landing.html" class="brand">
+          <img src="logo.svg" width="28" height="28" alt="" />
+          Sparky
+        </a>
+      <nav class="nav-links" aria-label="Main">
+        <a href="https://github.com/EnesYilmazcode/Sparky" class="nav-link" target="_blank" rel="noopener">GitHub</a>
+        <a href="dashboard.html" class="btn btn-sm btn-primary" id="nav-cta" data-action="signin">Sign in</a>
+      </nav>
     </div>
-  </nav>
+  </header>
 
-  <!-- Hero -->
-  <section class="hero">
-    <div class="dot-grid"></div>
-    <div class="hero-content">
-      <h1>Your 3D circuit<br /><span class="accent">workbench</span></h1>
-      <p class="hero-desc">
-        Drop components on a virtual breadboard, wire them up,
-        and hit simulate. An AI tutor watches along and helps
-        when you get stuck.
-      </p>
-      <div class="hero-actions" id="hero-actions">
-        <button class="btn-primary" onclick="openModal()" style="cursor:pointer;">
-          Start building
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14"/><path d="m12 5 7 7-7 7"/></svg>
-        </button>
-      </div>
-    </div>
-    <div class="hero-preview">
-      <div class="preview-frame">
-        <span class="preview-label">Live preview</span>
-        <iframe src="circuit3d/viewer.html" loading="lazy" title="Interactive 3D circuit preview"></iframe>
-        <div class="preview-launch">
-          <button onclick="openWithDemo()" class="btn-primary" style="cursor:pointer;">Try it out &rarr;</button>
+  <main id="main">
+    <section class="hero">
+      <div class="wrap hero-grid">
+        <div class="hero-copy">
+          <h1>Your 3D circuit workbench</h1>
+          <p class="lede">Build real circuits in your browser, with an AI tutor that checks its work.</p>
+          <div class="hero-actions">
+            <a href="dashboard.html" class="btn btn-primary" id="hero-cta" data-action="signin">Start building</a>
+            <a href="circuit3d/index.html" class="btn btn-quiet" data-action="demo">Try the demo</a>
+          </div>
+          <p class="hero-note">Free. No account needed to try it.</p>
         </div>
-      </div>
-    </div>
-  </section>
 
-  <!-- Features -->
-  <section class="features">
-    <p class="features-label">How it works</p>
-    <h2 class="features-heading">Place, wire, simulate, learn.</h2>
+        <figure class="preview" id="preview">
+          <div class="preview-bar">
+            <span class="preview-led" aria-hidden="true"></span>
+            <span class="preview-title">Live preview</span>
+            <a href="circuit3d/index.html" class="btn btn-sm btn-primary preview-open" data-action="demo">Open in editor</a>
+          </div>
+          <div class="preview-stage">
+            <iframe src="circuit3d/viewer.html" loading="lazy" tabindex="-1"
+              title="3D preview of the demo circuit: a 9V battery, a resistor, an LED and a push button on a breadboard"></iframe>
+            <p class="preview-status" aria-hidden="true">
+              <span class="when-loading">Loading the 3D board</span>
+            </p>
+          </div>
+          <figcaption class="sr-only">The demo circuit turning slowly on a 3D breadboard. Open it in the editor to change it.</figcaption>
+        </figure>
+      </div>
+    </section>
 
-    <div class="bento">
-      <!-- Row 1 -->
-      <div class="bento-card wide">
-        <div class="bento-icon">
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="6" width="20" height="12" rx="2"/><line x1="6" y1="10" x2="6" y2="14"/><line x1="10" y1="10" x2="10" y2="14"/><line x1="14" y1="10" x2="14" y2="14"/><line x1="18" y1="10" x2="18" y2="14"/></svg>
-        </div>
-        <h3>3D breadboard</h3>
-        <p>830 holes, fully interactive. Spin it around, zoom in, and actually see where your components connect before you power anything on.</p>
+    <section class="section" aria-label="What Sparky does">
+      <div class="wrap">
+        <ul class="features">
+          <li><video src="media/place.mp4" poster="media/place.jpg" autoplay muted loop playsinline preload="metadata" aria-hidden="true"></video><div class="f-text"><h3>Place</h3><p>Real parts, to scale.</p></div></li>
+          <li><video src="media/wire.mp4" poster="media/wire.jpg" autoplay muted loop playsinline preload="metadata" aria-hidden="true"></video><div class="f-text"><h3>Wire</h3><p>Click two holes.</p></div></li>
+          <li><video src="media/simulate.mp4" poster="media/simulate.jpg" autoplay muted loop playsinline preload="metadata" aria-hidden="true"></video><div class="f-text"><h3>Simulate</h3><p>Press it, and it lights.</p></div></li>
+          <li><video src="media/ask.mp4" poster="media/ask.jpg" autoplay muted loop playsinline preload="metadata" aria-hidden="true"></video><div class="f-text"><h3>Ask Sparky</h3><p>It builds and checks for you.</p></div></li>
+        </ul>
       </div>
-      <div class="bento-card">
-        <div class="bento-icon">
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
-        </div>
-        <h3>AI tutor built in</h3>
-        <p>It can see your board. Ask it why your LED isn't lighting up or have it build a whole circuit for you.</p>
-      </div>
+    </section>
+  </main>
 
-      <!-- Row 2 -->
-      <div class="bento-card">
-        <div class="bento-icon">
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/></svg>
-        </div>
-        <h3>Instant simulation</h3>
-        <p>Hit play and your circuit runs. LEDs light up, currents get calculated, and it'll tell you if something's shorted.</p>
-      </div>
-      <div class="bento-card">
-        <div class="bento-icon">
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="5" cy="6" r="2"/><circle cx="19" cy="6" r="2"/><circle cx="12" cy="18" r="2"/><path d="M5 8v2a4 4 0 0 0 4 4h2"/><path d="M19 8v2a4 4 0 0 1-4 4h-2"/></svg>
-        </div>
-        <h3>Click-to-wire</h3>
-        <p>Click two holes and a wire shows up between them. They snap to the grid and get color coded automatically.</p>
-      </div>
-      <div class="bento-card">
-        <div class="bento-icon">
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg>
-        </div>
-        <h3>Save as .sparky</h3>
-        <p>Download your circuit as a file. Send it to someone, load it back up whenever. That's it.</p>
-      </div>
-    </div>
-  </section>
-
-  <!-- Footer -->
   <footer class="footer">
-    <div class="footer-inner">
-      <div class="footer-brand">
-        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/></svg>
+    <div class="wrap">
+    <div class="footer-meta">
+      <a href="landing.html" class="brand" aria-label="Sparky home">
+        <img src="logo.svg" width="24" height="24" alt="" />
         Sparky
-      </div>
-      <div class="footer-credit">Made by <a href="https://enes.web.app" target="_blank">Enes Yilmaz</a> and <a href="https://github.com/ColinL-code" target="_blank">Colin Lee</a></div>
-      <div class="footer-links">
-        <a href="https://github.com/enesyilmazcode/sparky" target="_blank">GitHub</a>
-      </div>
+      </a>
+      <p>By <a href="https://enes.web.app" target="_blank" rel="noopener">Enes Yilmaz</a> and <a href="https://github.com/ColinL-code" target="_blank" rel="noopener">Colin Lee</a></p>
+      <a href="https://github.com/EnesYilmazcode/Sparky" target="_blank" rel="noopener">GitHub</a>
+    </div>
     </div>
   </footer>
 
-  <!-- Auth Modal -->
-  <div class="modal-overlay" id="auth-modal">
-    <div class="modal-card">
-      <button class="modal-close" onclick="closeModal()">&times;</button>
-      <h2 class="modal-title">Sign in to Sparky</h2>
-      <p class="modal-subtitle">Use your Google account to get started</p>
-      <button class="modal-google" onclick="signInWithGoogle()">
-        <svg width="18" height="18" viewBox="0 0 18 18"><path fill="#4285F4" d="M17.64 9.2c0-.637-.057-1.251-.164-1.84H9v3.481h4.844a4.14 4.14 0 0 1-1.796 2.716v2.259h2.908c1.702-1.567 2.684-3.875 2.684-6.615Z"/><path fill="#34A853" d="M9 18c2.43 0 4.467-.806 5.956-2.18l-2.908-2.259c-.806.54-1.837.86-3.048.86-2.344 0-4.328-1.584-5.036-3.711H.957v2.332A8.997 8.997 0 0 0 9 18Z"/><path fill="#FBBC05" d="M3.964 10.71A5.41 5.41 0 0 1 3.682 9c0-.593.102-1.17.282-1.71V4.958H.957A8.997 8.997 0 0 0 0 9c0 1.452.348 2.827.957 4.042l3.007-2.332Z"/><path fill="#EA4335" d="M9 3.58c1.321 0 2.508.454 3.44 1.345l2.582-2.58C13.463.891 11.426 0 9 0A8.997 8.997 0 0 0 .957 4.958L3.964 6.29C4.672 4.163 6.656 2.58 9 2.58Z"/></svg>
-        Continue with Google
+  <dialog class="auth" id="auth-modal" aria-labelledby="auth-title" aria-describedby="auth-sub">
+    <form method="dialog">
+      <button class="auth-close" aria-label="Close">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg>
       </button>
-      <div class="modal-error" id="modal-error"></div>
-    </div>
-  </div>
+    </form>
+    <h2 id="auth-title">Sign in to Sparky</h2>
+    <p class="auth-sub" id="auth-sub">Save your circuits and share them.</p>
+    <button class="btn-google" id="google-btn" type="button" autofocus>
+      <svg width="18" height="18" viewBox="0 0 18 18" aria-hidden="true"><path fill="#4285F4" d="M17.64 9.2c0-.637-.057-1.251-.164-1.84H9v3.481h4.844a4.14 4.14 0 0 1-1.796 2.716v2.259h2.908c1.702-1.567 2.684-3.875 2.684-6.615Z"/><path fill="#34A853" d="M9 18c2.43 0 4.467-.806 5.956-2.18l-2.908-2.259c-.806.54-1.837.86-3.048.86-2.344 0-4.328-1.584-5.036-3.711H.957v2.332A8.997 8.997 0 0 0 9 18Z"/><path fill="#FBBC05" d="M3.964 10.71A5.41 5.41 0 0 1 3.682 9c0-.593.102-1.17.282-1.71V4.958H.957A8.997 8.997 0 0 0 0 9c0 1.452.348 2.827.957 4.042l3.007-2.332Z"/><path fill="#EA4335" d="M9 3.58c1.321 0 2.508.454 3.44 1.345l2.582-2.58C13.463.891 11.426 0 9 0A8.997 8.997 0 0 0 .957 4.958L3.964 6.29C4.672 4.163 6.656 2.58 9 2.58Z"/></svg>
+      Continue with Google
+    </button>
+    <p class="auth-error" id="auth-error" role="alert"></p>
+    <p class="auth-alt">No account? <a href="circuit3d/index.html">Open the editor without one</a>.</p>
+  </dialog>
+
+  <script>
+    // Page behaviour that does not need Firebase, so it still works when the
+    // Firebase scripts are blocked or slow.
+    const modal = document.getElementById('auth-modal');
+    let signedIn = false;
+
+    function openModal() {
+      document.getElementById('auth-error').textContent = '';
+      if (!modal.open) modal.showModal();
+    }
+    // A click on the backdrop lands on the dialog itself, outside its box.
+    modal.addEventListener('click', e => {
+      if (e.target !== modal) return;
+      const r = modal.getBoundingClientRect();
+      if (e.clientX < r.left || e.clientX > r.right || e.clientY < r.top || e.clientY > r.bottom) modal.close();
+    });
+
+    // Load the demo circuit into the editor.
+    function openWithDemo() {
+      fetch('demo.sparky')
+        .then(r => r.json())
+        .then(data => sessionStorage.setItem('sparky_load_circuit', JSON.stringify(data)))
+        .catch(() => {})
+        .finally(() => { window.location.href = 'circuit3d/index.html'; });
+    }
+
+    // Links keep real hrefs for new tabs and no-JS; a plain click is upgraded.
+    document.addEventListener('click', e => {
+      const el = e.target.closest('[data-action]');
+      if (!el || e.defaultPrevented || e.button !== 0 || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
+      if (el.dataset.action === 'demo') { e.preventDefault(); openWithDemo(); }
+      if (el.dataset.action === 'signin' && !signedIn) { e.preventDefault(); openModal(); }
+    });
+
+    // Reduced motion: the tiles keep their posters.
+    if (matchMedia('(prefers-reduced-motion: reduce)').matches) {
+      document.querySelectorAll('.features video').forEach(v => { v.removeAttribute('autoplay'); v.pause(); });
+    }
+
+    // ── Live preview ─────────────────────────────────────────
+    const preview = document.getElementById('preview');
+    const frame = preview.querySelector('iframe');
+
+    function previewReady() {
+      // The iframe's load fires before the first 3D frame is drawn.
+      setTimeout(() => preview.classList.add('is-loaded'), 250);
+      // Stop the wheel reaching the 3D controls so the page scrolls over
+      // the preview instead of zooming it. Drag to orbit still works.
+      try {
+        frame.contentWindow.addEventListener('wheel', ev => ev.stopImmediatePropagation(), { capture: true, passive: true });
+      } catch (e) { /* not same-origin: leave it */ }
+    }
+    frame.addEventListener('load', previewReady);
+    // The frame may have finished before this script ran.
+    try {
+      const d = frame.contentDocument;
+      if (d && d.readyState === 'complete' && d.location.href !== 'about:blank') previewReady();
+    } catch (e) {}
+  </script>
 
   <!-- Firebase SDKs (compat for vanilla JS) -->
   <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
@@ -625,74 +646,53 @@
       messagingSenderId: "596770160500",
       appId: "1:596770160500:web:8b3761e163291ab759f621"
     };
-    firebase.initializeApp(firebaseConfig);
-    const auth = firebase.auth();
+    const googleBtn = document.getElementById('google-btn');
+    const authError = document.getElementById('auth-error');
 
-    // ── Modal ────────────────────────────────────────────────
-    function openModal() {
-      document.getElementById('auth-modal').classList.add('open');
-    }
-    function closeModal() {
-      document.getElementById('auth-modal').classList.remove('open');
-      document.getElementById('modal-error').textContent = '';
-    }
-
-    // ── Firebase Google sign-in ──────────────────────────────
-    function signInWithGoogle() {
-      const provider = new firebase.auth.GoogleAuthProvider();
-      auth.signInWithPopup(provider)
-        .then(() => {
-          closeModal();
-          window.location.href = 'dashboard.html';
-        })
-        .catch(err => {
-          document.getElementById('modal-error').textContent = err.message;
-        });
-    }
-
-    // ── Close modal on backdrop click ────────────────────────
-    document.getElementById('auth-modal').addEventListener('click', function(e) {
-      if (e.target === this) closeModal();
-    });
-
-    // ── Open designer with demo circuit ─────────────────────
-    function openWithDemo() {
-      fetch('demo.sparky')
-        .then(r => r.json())
-        .then(data => {
-          sessionStorage.setItem('sparky_load_circuit', JSON.stringify(data));
-          window.location.href = 'circuit3d/index.html';
-        })
-        .catch(() => {
-          window.location.href = 'circuit3d/index.html';
-        });
-    }
-
-    // ── Check auth state on load ─────────────────────────────
-    auth.onAuthStateChanged(user => {
-      if (!user) return;
-      // Update hero CTA
-      document.getElementById('hero-actions').innerHTML =
-        '<a href="dashboard.html" class="btn-primary">Go to Dashboard <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14"/><path d="m12 5 7 7-7 7"/></svg></a>';
-      // Update nav
-      const navCta = document.getElementById('nav-cta');
-      if (navCta) {
-        navCta.textContent = 'Dashboard';
-        navCta.onclick = function() { window.location.href = 'dashboard.html'; };
+    // Firebase error codes, said plainly. A closed popup is not an error.
+    function signInErrorText(err) {
+      switch (err && err.code) {
+        case 'auth/popup-closed-by-user':
+        case 'auth/cancelled-popup-request':
+          return '';
+        case 'auth/popup-blocked':
+          return 'Your browser blocked the sign-in window. Allow pop-ups for this site and try again.';
+        case 'auth/network-request-failed':
+          return 'Could not reach Google. Check your connection and try again.';
+        case 'auth/unauthorized-domain':
+          return 'Sign-in is not set up for this address. Try the site at its usual address.';
+        default:
+          return 'Sign-in did not work. Try again in a moment.';
       }
-    });
+    }
 
-    // ── Scroll reveal ────────────────────────────────────────
-    const observer = new IntersectionObserver((entries) => {
-      entries.forEach(entry => {
-        if (entry.isIntersecting) {
-          entry.target.classList.add('visible');
-          observer.unobserve(entry.target);
+    if (!window.firebase) {
+      googleBtn.addEventListener('click', () => {
+        authError.textContent = 'Sign-in is unavailable right now. You can still use the editor without an account.';
+      });
+    } else {
+      firebase.initializeApp(firebaseConfig);
+      const auth = firebase.auth();
+
+      googleBtn.addEventListener('click', () => {
+        authError.textContent = '';
+        googleBtn.disabled = true;
+        auth.signInWithPopup(new firebase.auth.GoogleAuthProvider())
+          .then(() => { window.location.href = 'dashboard.html'; })
+          .catch(err => { authError.textContent = signInErrorText(err); })
+          .finally(() => { googleBtn.disabled = false; });
+      });
+
+      auth.onAuthStateChanged(user => {
+        signedIn = !!user;
+        document.getElementById('nav-cta').textContent = user ? 'Dashboard' : 'Sign in';
+        // The dashboard sends signed-out visitors here with #signin.
+        if (!user && location.hash === '#signin') {
+          history.replaceState(null, '', location.pathname + location.search);
+          openModal();
         }
       });
-    }, { threshold: 0.15 });
-
-    document.querySelectorAll('.features').forEach(el => observer.observe(el));
+    }
   </script>
 </body>
 </html>

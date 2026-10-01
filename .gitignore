@@ -7,3 +7,5 @@ node_modules/
 
 .vscode/
 .firebase/
+# agent worktrees and local tooling
+.claude/

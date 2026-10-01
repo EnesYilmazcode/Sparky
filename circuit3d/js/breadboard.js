@@ -1,9 +1,14 @@
 // ─────────────────────────────────────────────────────────────
-//  breadboard.js — Realistic 3D breadboard
+//  breadboard.js — The 3D breadboard
 //
-//  Rail polarity (+ − + − reading near-viewer → far-viewer):
+//  Rail polarity (+ − + − reading far-viewer → near-viewer):
 //    tp = + (red)   tn = − (blue)
 //    bn = + (red)   bp = − (blue)
+//
+//  The holes are drawn, not modelled: a square socket in the colour
+//  texture plus a matching dip in the bump map. They used to be 700
+//  cylinders taller than the board, which rendered as a field of black
+//  pegs sticking out of it.
 // ─────────────────────────────────────────────────────────────
 
 (function (App) {
@@ -14,7 +19,7 @@
   //  the two runtimes share no module, so it has to be kept in step by hand.
   const GEOMETRY = {
     COLS:        50,
-    HS:          0.40,   // hole pitch  (world units)
+    HS:          0.40,   // hole pitch  (world units; 0.1 inch)
     BOARD_THICK: 0.38,
     MARGIN_X:    0.90,   // space left/right of first/last column
     BOARD_D:     7.9,
@@ -30,7 +35,7 @@
       bn:  2.95, bp:  3.35,                                    // bottom rails
     },
 
-    // + − + −  (near-to-far):  tp=+  tn=−  bn=+  bp=−
+    // + − + −  (far-to-near):  tp=+  tn=−  bn=+  bp=−
     RAIL_IS_POS: { tp: true, tn: false, bn: true, bp: false },
 
     ALL_ROWS:  ['tp','tn','a','b','c','d','e','f','g','h','i','j','bn','bp'],
@@ -56,6 +61,7 @@
 - tp = positive top rail (+9V), tn = negative top rail (GND).
 - bn = positive bottom rail (+9V), bp = negative bottom rail (GND).
 - Rails are NOT connected to body rows — you must wire from rail to a body hole explicitly.
+- Every hole holds exactly one lead or one wire end.
 - ${GEOMETRY.TOTAL_HOLES} holes total: ${COLS} columns × ${ALL_ROWS.length} rows.`;
   };
 
@@ -86,174 +92,157 @@
   App.formatHole = formatHole;   // { col, row } -> "e14" / "tp_14"
   App.parseHole  = parseHole;    // "tp_14" -> { col, row }, throws if it cannot
 
+  const colX = c => (c - (COLS - 1) / 2) * HS;
+
   // ─────────────────────────────────────────────────────────────
-  //  Canvas texture — all visual labelling lives here
+  //  Printed face: colour texture and bump map, drawn together
   // ─────────────────────────────────────────────────────────────
-  function buildTexture() {
-    const CW = 2048, CH = 1024;
-    const el  = document.createElement('canvas');
-    el.width  = CW;
-    el.height = CH;
-    const ctx = el.getContext('2d');
+  const TEX_W = 4096;
+  const TEX_H = Math.round(TEX_W * BOARD_D / BOARD_W);
+  const PX    = TEX_W / BOARD_W;                     // texels per world unit
 
-    // World → canvas coordinate helpers
-    const wx = x => (x + BOARD_W / 2) / BOARD_W * CW;
-    const wz = z => (z + BOARD_D / 2) / BOARD_D * CH;
+  const wx = x => (x + BOARD_W / 2) * PX;
+  const wz = z => (z + BOARD_D / 2) * PX;
 
-    // Pre-compute canvas X for every column centre
-    const colPx = Array.from({ length: COLS }, (_, c) =>
-      wx((c - (COLS - 1) / 2) * HS));
+  const FONT = '"Inter", "Segoe UI", Arial, sans-serif';
 
-    // Body row Y extents (with a little padding)
-    const PAD    = 26;  // px
-    const topY1  = wz(ROW_Z.a) - PAD;
-    const topY2  = wz(ROW_Z.e) + PAD;
-    const botY1  = wz(ROW_Z.f) - PAD;
-    const botY2  = wz(ROW_Z.j) + PAD;
+  function drawFace(ctx, bump) {
+    const W = TEX_W, H = TEX_H;
+    const base = bump ? '#8a8a8a' : '#f2efe8';
+    ctx.fillStyle = base;
+    ctx.fillRect(0, 0, W, H);
 
-    // ── 1. Board base ────────────────────────────────────────
-    ctx.fillStyle = '#e5e0d2';
-    ctx.fillRect(0, 0, CW, CH);
-
-    // ── 2. Body half backgrounds (very subtle cream tint) ────
-    ctx.fillStyle = 'rgba(200,192,170,0.18)';
-    ctx.fillRect(0, topY1, CW, topY2 - topY1);
-    ctx.fillRect(0, botY1, CW, botY2 - botY1);
-
-    // ── 3. Rail colour bands (+ = red tint, − = blue tint) ──
-    const bandH = (0.29 / BOARD_D) * CH;
-    for (const rail of RAIL_ROWS) {
-      const cy  = wz(ROW_Z[rail]);
-      const isP = RAIL_IS_POS[rail];
-      ctx.fillStyle = isP ? 'rgba(210,38,38,0.20)' : 'rgba(38,68,210,0.20)';
-      ctx.fillRect(0, cy - bandH, CW, bandH * 2);
-      // Thin solid centre stripe
-      ctx.fillStyle = isP ? 'rgba(195,28,28,0.45)' : 'rgba(28,58,198,0.45)';
-      ctx.fillRect(0, cy - 2, CW, 4);
+    // plastic grain, colour only
+    if (!bump) {
+      const img = ctx.getImageData(0, 0, W, H);
+      const d = img.data;
+      for (let i = 0; i < d.length; i += 4) {
+        const n = (Math.random() - 0.5) * 5;
+        d[i] += n; d[i + 1] += n; d[i + 2] += n;
+      }
+      ctx.putImageData(img, 0, 0);
     }
 
-    // ── 4. Centre DIP channel ───────────────────────────────
-    const chanY1 = wz(-0.31);
-    const chanY2 = wz( 0.31);
-    const cg = ctx.createLinearGradient(0, chanY1, 0, chanY2);
-    cg.addColorStop(0,    '#9e9480');
-    cg.addColorStop(0.45, '#877e6c');
-    cg.addColorStop(0.55, '#877e6c');
-    cg.addColorStop(1,    '#9e9480');
+    // ── Centre channel: a groove, darker in the middle ──────
+    const c1 = wz(-0.31), c2 = wz(0.31);
+    const cg = ctx.createLinearGradient(0, c1, 0, c2);
+    if (bump) {
+      cg.addColorStop(0, '#6a6a6a'); cg.addColorStop(0.18, '#262626');
+      cg.addColorStop(0.82, '#262626'); cg.addColorStop(1, '#6a6a6a');
+    } else {
+      cg.addColorStop(0,    '#c9c3b6');
+      cg.addColorStop(0.12, '#a39c8e');
+      cg.addColorStop(0.5,  '#b8b1a3');
+      cg.addColorStop(0.88, '#a39c8e');
+      cg.addColorStop(1,    '#d9d4c8');
+    }
     ctx.fillStyle = cg;
-    ctx.fillRect(0, chanY1, CW, chanY2 - chanY1);
-    ctx.strokeStyle = '#605848';
-    ctx.lineWidth = 1.5;
-    for (const y of [chanY1, chanY2]) {
-      ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(CW, y); ctx.stroke();
+    ctx.fillRect(0, c1, W, c2 - c1);
+
+    // ── Rail separation grooves (rails are separate strips) ──
+    for (const z of [-2.55, 2.55]) {
+      ctx.fillStyle = bump ? '#5a5a5a' : '#dcd7cb';
+      ctx.fillRect(0, wz(z) - 3, W, 6);
     }
 
-    // ── 5. Column-group dividers every 5 (inside body rows) ─
-    ctx.lineWidth = 1.5;
-    for (let c = 5; c < COLS; c += 5) {
-      const lx = (colPx[c - 1] + colPx[c]) / 2;
-      ctx.strokeStyle = 'rgba(138,125,100,0.28)';
-      for (const [y1, y2] of [[topY1, topY2], [botY1, botY2]]) {
-        ctx.beginPath(); ctx.moveTo(lx, y1); ctx.lineTo(lx, y2); ctx.stroke();
+    if (!bump) {
+      // ── Printed rail stripes: red beside +, blue beside − ──
+      const stripe = (z, color) => { ctx.fillStyle = color; ctx.fillRect(wx(-BOARD_W / 2 + 0.5), wz(z) - 4, wx(BOARD_W / 2 - 0.5) - wx(-BOARD_W / 2 + 0.5), 8); };
+      stripe(ROW_Z.tp - 0.24, '#d64541');
+      stripe(ROW_Z.tn + 0.24, '#3867d6');
+      stripe(ROW_Z.bn - 0.24, '#d64541');
+      stripe(ROW_Z.bp + 0.24, '#3867d6');
+
+      // ── + / − at both ends of every rail ─────────────────
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.font = `700 50px ${FONT}`;
+      for (const rail of RAIL_ROWS) {
+        const pos = RAIL_IS_POS[rail];
+        ctx.fillStyle = pos ? '#c0392b' : '#2d5bc4';
+        const z = wz(ROW_Z[rail]);
+        ctx.fillText(pos ? '+' : '−', wx(-BOARD_W / 2 + MARGIN_X * 0.45), z);
+        ctx.fillText(pos ? '+' : '−', wx(BOARD_W / 2 - MARGIN_X * 0.45), z);
       }
-    }
 
-    // ── 6. Edge tick marks every 5 columns ──────────────────
-    const TICK_LEN = 14;
-    for (let c = 0; c < COLS; c++) {
-      const isMajor = (c + 1) % 10 === 0;
-      const isMid   = (c + 1) % 5  === 0;
-      if (c === 0 || isMid || isMajor) {
-        const cx = colPx[c];
-        ctx.lineWidth   = isMajor ? 2.5 : 1.8;
-        ctx.strokeStyle = isMajor
-          ? 'rgba(82,72,52,0.85)'
-          : (c === 0 ? 'rgba(100,88,64,0.70)' : 'rgba(120,108,82,0.50)');
-        const tl = isMajor ? TICK_LEN : TICK_LEN * 0.7;
-        ctx.beginPath(); ctx.moveTo(cx, 0);       ctx.lineTo(cx, tl);       ctx.stroke();
-        ctx.beginPath(); ctx.moveTo(cx, CH - tl); ctx.lineTo(cx, CH);       ctx.stroke();
-      }
-    }
-
-    // ── 7. Column numbers (every 5, plus col 1) ─────────────
-    const numTopY = (wz(ROW_Z.tn) + wz(ROW_Z.a)) / 2;
-    const numBotY = (wz(ROW_Z.j)  + wz(ROW_Z.bn)) / 2;
-    ctx.font         = 'bold 17px "Courier New", monospace';
-    ctx.textAlign    = 'center';
-    ctx.textBaseline = 'middle';
-    ctx.fillStyle    = '#4c4230';
-    for (let c = 0; c < COLS; c++) {
-      if (c === 0 || (c + 1) % 5 === 0) {
-        const label = String(c + 1);
-        ctx.fillText(label, colPx[c], numTopY);
-        ctx.fillText(label, colPx[c], numBotY);
-      }
-    }
-
-    // ── 8. Row letters (a – j) on both sides ─────────────────
-    const leftX  = wx(-(BOARD_W / 2) + MARGIN_X * 0.50);
-    const rightX = wx(  BOARD_W / 2  - MARGIN_X * 0.50);
-
-    ctx.font      = 'bold 20px "Courier New", monospace';
-    ctx.textAlign = 'center';
-    ctx.fillStyle = '#48402e';
-    for (const row of BODY_ROWS) {
-      const cy = wz(ROW_Z[row]);
-      ctx.fillText(row, leftX,  cy);
-      ctx.fillText(row, rightX, cy);
-    }
-
-    // ── 9. Rail + / − symbols on both sides ─────────────────
-    ctx.font = 'bold 23px "Courier New", monospace';
-    for (const rail of RAIL_ROWS) {
-      const cy  = wz(ROW_Z[rail]);
-      const isP = RAIL_IS_POS[rail];
-      ctx.fillStyle = isP ? '#be2020' : '#2032be';
-      const sym = isP ? '+' : '−';
-      ctx.fillText(sym, leftX,  cy);
-      ctx.fillText(sym, rightX, cy);
-    }
-
-    // ── 10. Hole rings ───────────────────────────────────────
-    // Each hole: brass rim + dark socket + depth shadow
-    const RIM   = 10;   // canvas px — outer brass rim radius
-    const HOLE  =  7;   // canvas px — inner hole radius
-    for (const row of ALL_ROWS) {
-      const cy = wz(ROW_Z[row]);
+      // ── Column numbers every 5, row letters at both ends ──
+      ctx.fillStyle = '#5f594e';
+      ctx.font = `600 30px ${FONT}`;
+      const topNum = wz((ROW_Z.tn + ROW_Z.a) / 2 + 0.06);
+      const botNum = wz((ROW_Z.j + ROW_Z.bn) / 2 - 0.06);
       for (let c = 0; c < COLS; c++) {
-        const cx = colPx[c];
-
-        // Brass rim with radial gradient for metallic sheen
-        const rimG = ctx.createRadialGradient(cx - 1.5, cy - 2, 1, cx, cy, RIM);
-        rimG.addColorStop(0,   '#ddb858');
-        rimG.addColorStop(0.5, '#b08e38');
-        rimG.addColorStop(1,   '#8a6c20');
-        ctx.beginPath();
-        ctx.arc(cx, cy, RIM, 0, Math.PI * 2);
-        ctx.fillStyle = rimG;
-        ctx.fill();
-
-        // Dark socket
-        ctx.beginPath();
-        ctx.arc(cx, cy, HOLE, 0, Math.PI * 2);
-        ctx.fillStyle = '#0d0b08';
-        ctx.fill();
-
-        // Depth shadow inside socket
-        const shdG = ctx.createRadialGradient(cx, cy + 2, 1, cx, cy, HOLE);
-        shdG.addColorStop(0,   'rgba(0,0,0,0.60)');
-        shdG.addColorStop(0.65,'rgba(0,0,0,0.25)');
-        shdG.addColorStop(1,   'rgba(0,0,0,0)');
-        ctx.beginPath();
-        ctx.arc(cx, cy, HOLE, 0, Math.PI * 2);
-        ctx.fillStyle = shdG;
-        ctx.fill();
+        if (c !== 0 && (c + 1) % 5 !== 0) continue;
+        ctx.fillText(String(c + 1), wx(colX(c)), topNum);
+        ctx.fillText(String(c + 1), wx(colX(c)), botNum);
+      }
+      ctx.font = `600 32px ${FONT}`;
+      for (const row of BODY_ROWS) {
+        const z = wz(ROW_Z[row]);
+        ctx.fillText(row, wx(-BOARD_W / 2 + MARGIN_X * 0.45), z);
+        ctx.fillText(row, wx(BOARD_W / 2 - MARGIN_X * 0.45), z);
       }
     }
 
-    const tex = new THREE.CanvasTexture(el);
-    tex.anisotropy = 4;
-    return tex;
+    // ── Holes: square sockets with a chamfered rim ───────────
+    const OUT = Math.round(0.155 * PX), IN = Math.round(0.105 * PX);
+    for (const row of ALL_ROWS) {
+      const cy = Math.round(wz(ROW_Z[row]));
+      for (let c = 0; c < COLS; c++) {
+        const cx = Math.round(wx(colX(c)));
+        if (bump) {
+          ctx.fillStyle = '#4a4a4a';
+          ctx.fillRect(cx - OUT / 2, cy - OUT / 2, OUT, OUT);
+          ctx.fillStyle = '#000000';
+          ctx.fillRect(cx - IN / 2, cy - IN / 2, IN, IN);
+          continue;
+        }
+        // chamfer: lit on the far edge, shaded on the near edge
+        const ch = ctx.createLinearGradient(0, cy - OUT / 2, 0, cy + OUT / 2);
+        ch.addColorStop(0, '#b9b3a6');
+        ch.addColorStop(1, '#e6e2d8');
+        ctx.fillStyle = ch;
+        ctx.fillRect(cx - OUT / 2, cy - OUT / 2, OUT, OUT);
+        // the socket, with the metal clip just visible at the bottom
+        const s = ctx.createLinearGradient(0, cy - IN / 2, 0, cy + IN / 2);
+        s.addColorStop(0, '#1a1814');
+        s.addColorStop(0.7, '#2b2822');
+        s.addColorStop(1, '#6f6a60');
+        ctx.fillStyle = s;
+        ctx.fillRect(cx - IN / 2, cy - IN / 2, IN, IN);
+      }
+    }
+  }
+
+  function buildFaceTextures(renderer) {
+    const make = bump => {
+      const el = document.createElement('canvas');
+      el.width = TEX_W; el.height = TEX_H;
+      drawFace(el.getContext('2d'), bump);
+      const t = new THREE.CanvasTexture(el);
+      t.anisotropy = renderer ? renderer.capabilities.getMaxAnisotropy() : 8;
+      if (!bump) t.encoding = THREE.sRGBEncoding;
+      return { el, t };
+    };
+    const color = make(false), bump = make(true);
+    // The labels use Inter; redraw once the web font is actually available.
+    if (document.fonts && document.fonts.load) {
+      document.fonts.load(`600 30px Inter`).then(() => {
+        drawFace(color.el.getContext('2d'), false);
+        color.t.needsUpdate = true;
+      }).catch(() => {});
+    }
+    return { map: color.t, bumpMap: bump.t };
+  }
+
+  function roundedRect(w, d, r) {
+    const s = new THREE.Shape();
+    const x = -w / 2, y = -d / 2;
+    s.moveTo(x + r, y);
+    s.lineTo(x + w - r, y); s.quadraticCurveTo(x + w, y, x + w, y + r);
+    s.lineTo(x + w, y + d - r); s.quadraticCurveTo(x + w, y + d, x + w - r, y + d);
+    s.lineTo(x + r, y + d); s.quadraticCurveTo(x, y + d, x, y + d - r);
+    s.lineTo(x, y + r); s.quadraticCurveTo(x, y, x + r, y);
+    return s;
   }
 
   // ─────────────────────────────────────────────────────────────
@@ -264,54 +253,42 @@
     bbGroup.name   = 'breadboard';
     const holeData = [];
 
-    // ── 1. Body ──────────────────────────────────────────────
-    const bodyGeo = new THREE.BoxGeometry(BOARD_W, BOARD_THICK, BOARD_D);
-    const body    = new THREE.Mesh(bodyGeo,
-      new THREE.MeshLambertMaterial({ color: 0xd8d4c8 }));
-    body.position.y = -BOARD_THICK / 2;
-    body.receiveShadow = body.castShadow = true;
+    const plastic = new THREE.MeshStandardMaterial({ color: new THREE.Color(0xebe7de).convertSRGBToLinear(), roughness: 0.62, metalness: 0, envMapIntensity: 0.7 });
+
+    // ── 1. Body: rounded slab with a soft bevel ──────────────
+    const BEV = 0.035;
+    const bodyGeo = new THREE.ExtrudeGeometry(roundedRect(BOARD_W - 2 * BEV, BOARD_D - 2 * BEV, 0.16), {
+      depth: BOARD_THICK - 2 * BEV, bevelEnabled: true, bevelThickness: BEV, bevelSize: BEV, bevelSegments: 3, curveSegments: 6,
+    });
+    bodyGeo.rotateX(-Math.PI / 2);           // extrusion now points up
+    bodyGeo.translate(0, -BOARD_THICK + BEV, 0);
+    const body = new THREE.Mesh(bodyGeo, plastic);
+    body.receiveShadow = true;
+    body.castShadow = true;
     body.name = 'bb-body';
     bbGroup.add(body);
 
-    // ── 2. Top face — full canvas texture ────────────────────
-    const topFace = new THREE.Mesh(
-      new THREE.PlaneGeometry(BOARD_W, BOARD_D),
-      new THREE.MeshLambertMaterial({ map: buildTexture() })
+    // ── 2. Printed face ──────────────────────────────────────
+    const tex = buildFaceTextures(App.renderer);
+    const face = new THREE.Mesh(
+      new THREE.PlaneGeometry(BOARD_W - 0.02, BOARD_D - 0.02),
+      new THREE.MeshStandardMaterial({
+        map: tex.map, bumpMap: tex.bumpMap, bumpScale: 0.018,
+        roughness: 0.58, metalness: 0, envMapIntensity: 0.7,
+      })
     );
-    topFace.rotation.x = -Math.PI / 2;
-    topFace.position.y = 0.001;
-    topFace.name = 'bb-top';
-    bbGroup.add(topFace);
+    face.rotation.x = -Math.PI / 2;
+    face.position.y = 0.0015;
+    face.receiveShadow = true;
+    face.name = 'bb-top';
+    bbGroup.add(face);
 
-    // ── 3. 3-D rail colour strips (thin, reinforce canvas) ───
-    const sW = BOARD_W - 1.4;
-    function addRailStrip(zPos, isPos) {
-      const col = isPos ? 0xbb1e1e : 0x1e30bb;
-      const m   = new THREE.Mesh(
-        new THREE.BoxGeometry(sW, 0.005, 0.21),
-        new THREE.MeshLambertMaterial({ color: col, transparent: true, opacity: 0.60 })
-      );
-      m.position.set(0, 0.003, zPos);
-      bbGroup.add(m);
-    }
-    addRailStrip(ROW_Z.tp, true);    // + red
-    addRailStrip(ROW_Z.tn, false);   // − blue
-    addRailStrip(ROW_Z.bn, true);    // + red   ← CORRECTED
-    addRailStrip(ROW_Z.bp, false);   // − blue  ← CORRECTED
-
-    // ── 4. Centre DIP channel groove ─────────────────────────
-    const chan = new THREE.Mesh(
-      new THREE.BoxGeometry(BOARD_W - 0.3, 0.010, 0.62),
-      new THREE.MeshLambertMaterial({ color: 0x8c8270 })
-    );
-    chan.position.set(0, 0.002, 0);
-    bbGroup.add(chan);
-
-    // ── 5. Holes  (InstancedMesh — tapered for socket look) ──
+    // ── 3. Hole pick targets (never drawn) ───────────────────
+    //  Kept as an InstancedMesh so hover and click can raycast holes
+    //  directly; the material is invisible, the geometry is a flat pad.
     const totalHoles = COLS * ALL_ROWS.length;
-    const holeGeo    = new THREE.CylinderGeometry(0.058, 0.046, BOARD_THICK + 0.04, 8);
-    const holeMat    = new THREE.MeshLambertMaterial({ color: 0x0c0a08 });
-    const holesMesh  = new THREE.InstancedMesh(holeGeo, holeMat, totalHoles);
+    const pickMat    = new THREE.MeshBasicMaterial({ visible: false });
+    const holesMesh  = new THREE.InstancedMesh(new THREE.BoxGeometry(HS * 0.9, 0.02, HS * 0.9), pickMat, totalHoles);
     holesMesh.name   = 'bb-holes';
 
     const dummy = new THREE.Object3D();
@@ -319,8 +296,8 @@
     ALL_ROWS.forEach(row => {
       const z = ROW_Z[row];
       for (let col = 0; col < COLS; col++) {
-        const x = (col - (COLS - 1) / 2) * HS;
-        dummy.position.set(x, 0, z);
+        const x = colX(col);
+        dummy.position.set(x, 0.01, z);
         dummy.updateMatrix();
         holesMesh.setMatrixAt(idx, dummy.matrix);
         holeData.push({ idx, col, row, x, z,
@@ -330,27 +307,6 @@
     });
     holesMesh.instanceMatrix.needsUpdate = true;
     bbGroup.add(holesMesh);
-
-    // ── 6. Edge banding (plastic lips around the board) ──────
-    const edgeMat = new THREE.MeshLambertMaterial({ color: 0xb4aca0 });
-    // Long sides
-    for (const s of [-1, 1]) {
-      const m = new THREE.Mesh(
-        new THREE.BoxGeometry(BOARD_W + 0.12, BOARD_THICK + 0.05, 0.07),
-        edgeMat
-      );
-      m.position.set(0, -BOARD_THICK / 2, s * (BOARD_D / 2 + 0.035));
-      bbGroup.add(m);
-    }
-    // Short sides
-    for (const s of [-1, 1]) {
-      const m = new THREE.Mesh(
-        new THREE.BoxGeometry(0.07, BOARD_THICK + 0.05, BOARD_D + 0.14),
-        edgeMat
-      );
-      m.position.set(s * (BOARD_W / 2 + 0.035), -BOARD_THICK / 2, 0);
-      bbGroup.add(m);
-    }
 
     // ── Helpers ───────────────────────────────────────────────
 
@@ -388,7 +344,6 @@
       COLS, HS, ROW_Z,
       BOARD_W, BOARD_D,
       BODY_ROWS, RAIL_ROWS,
-      BODY_ROWS,
     };
   }
 

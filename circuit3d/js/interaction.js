@@ -3,36 +3,46 @@
 //                   rotation, hole-based wire placement
 //
 //  KEY BEHAVIOURS
-//  • Place mode: hover shows a transparent ghost; click places component.
-//    R key rotates the ghost 90°.
-//  • Wire mode:  click any breadboard HOLE or component pin sphere to start
-//    a wire; click again to complete it.  The wire plugs into both holes.
-//  • Select mode: click a component body or wire tube to select it.
+//  • Place mode: hover shows a ghost of the real part at the real holes,
+//    blue if it fits and red if a hole is taken. Click places it.
+//    R rotates between lying along a row and standing along a column.
+//  • Wire mode: click a hole or a battery terminal to start, click again
+//    to finish. A click on a hole that already holds a lead lands in the
+//    nearest free hole of the same strip, which is the same connection.
+//  • Select mode: click a part or a wire to select it.
 // ─────────────────────────────────────────────────────────────
 
 (function (App) {
 
   function initInteraction() {
-    const { scene, camera, controls, state } = App;
+    const { scene, camera, state } = App;
     const canvas    = document.getElementById('canvas');
     const holeLabel = document.getElementById('hole-label');
 
     // ── Raycasting ──────────────────────────────────────────
-    const raycaster = new THREE.Raycaster();
-    const mouseNDC  = new THREE.Vector2();
+    const raycaster  = new THREE.Raycaster();
+    const mouseNDC   = new THREE.Vector2();
     const boardPlane = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0);
+    let   lastEvent  = null;
 
     function updateRay(e) {
-      const r   = canvas.getBoundingClientRect();
+      const r = canvas.getBoundingClientRect();
       mouseNDC.x =  ((e.clientX - r.left) / r.width)  * 2 - 1;
       mouseNDC.y = -((e.clientY - r.top)  / r.height) * 2 + 1;
       raycaster.setFromCamera(mouseNDC, camera);
     }
 
-    function getAllComponentMeshes() {
-      const out = [];
-      state.components.forEach(c => c.group.traverse(o => { if (o.isMesh) out.push(o); }));
-      return out;
+    function boardPoint() {
+      const p = new THREE.Vector3();
+      return raycaster.ray.intersectPlane(boardPlane, p) ? p : null;
+    }
+
+    function holeUnderRay() {
+      const p = boardPoint();
+      if (!p) return null;
+      const bb = state.breadboard;
+      if (Math.abs(p.x) > bb.BOARD_W / 2 + 0.2 || Math.abs(p.z) > bb.BOARD_D / 2 + 0.2) return null;
+      return bb.getNearestHole(p.x, p.z, null);
     }
 
     function getAllPinMeshes() {
@@ -41,74 +51,94 @@
       return out;
     }
 
-    // ── Ghost management ─────────────────────────────────────
-    // The ghost preview group, recreated when type or rotation changes.
-    let ghostGroup   = null;
-    let ghostType    = null;
-    let ghostRot     = null;  // 0 or 1
+    // ── Hover markers: flat rings on target holes ────────────
+    function ring(color) {
+      const m = new THREE.Mesh(
+        new THREE.RingGeometry(0.12, 0.19, 40),
+        new THREE.MeshBasicMaterial({ color: App.lin(color), transparent: true, opacity: 0.95, toneMapped: false, depthWrite: false })
+      );
+      m.rotation.x = -Math.PI / 2;
+      m.renderOrder = 3;
+      m.visible = false;
+      scene.add(m);
+      return m;
+    }
+    const GOOD = 0x22c55e, BAD = 0xef4444, PIN = 0xf59e0b;
+    const markA = ring(GOOD), markB = ring(GOOD);
 
-    function syncGhost() {
-      const t = state.pickedType;
-      const r = state.placementRotation;
-      if (state.mode !== 'place' || !t) {
-        destroyGhost();
-        return;
+    function mark(m, hole, color, y) {
+      if (!hole) { m.visible = false; return; }
+      m.material.color.copy(App.lin(color));
+      m.position.set(hole.x, y == null ? 0.012 : y, hole.z);
+      m.visible = true;
+    }
+
+    App.addTicker(t => {
+      const s = 1 + Math.sin(t * 6) * 0.08;
+      markA.scale.set(s, s, 1);
+      markB.scale.set(s, s, 1);
+    });
+
+    function hideHover() {
+      markA.visible = markB.visible = false;
+      holeLabel.style.display = 'none';
+    }
+
+    // ── Ghost of the part being placed ──────────────────────
+    let ghost = null, ghostKey = '';
+
+    function setGhost(type, holeA, holeB, ok) {
+      const key = type + '|' + (holeA ? holeA.idx : 'x') + '|' + (holeB ? holeB.idx : 'x') + '|' + ok;
+      if (key === ghostKey) return;
+      clearGhost();
+      ghostKey = key;
+      if (!holeA || !holeB) return;
+      ghost = App.buildPreview(type, holeA, holeB, ok);
+      if (ghost) scene.add(ghost);
+    }
+
+    function clearGhost() {
+      if (ghost) { scene.remove(ghost); App.disposeGroup(ghost); }
+      ghost = null;
+      ghostKey = '';
+    }
+
+    let batteryGhost = null;
+    function showBatteryGhost(x, z) {
+      if (!batteryGhost) {
+        batteryGhost = App.buildPreview('battery', null, null, true);
+        scene.add(batteryGhost);
       }
-      if (ghostGroup && ghostType === t && ghostRot === r) return; // already built
-
-      destroyGhost();
-      const bb   = state.breadboard;
-      const SPANS = { led: App.LED_SPAN, resistor: App.RESISTOR_SPAN, buzzer: App.BUZZER_SPAN, button: App.BUTTON_SPAN };
-      const span = SPANS[t] || 0;
-      ghostGroup = App.buildPreview(t, span, bb.HS, r);
-      ghostGroup.visible = false;
-      scene.add(ghostGroup);
-      ghostType = t;
-      ghostRot  = r;
+      batteryGhost.position.set(x, 0, z);
+      batteryGhost.visible = true;
     }
+    function hideBatteryGhost() { if (batteryGhost) batteryGhost.visible = false; }
 
-    function destroyGhost() {
-      if (ghostGroup) { scene.remove(ghostGroup); ghostGroup = null; }
-      ghostType = ghostRot = null;
-    }
+    const SPANS = () => ({ led: App.LED_SPAN, resistor: App.RESISTOR_SPAN, buzzer: App.BUZZER_SPAN, button: App.BUTTON_SPAN });
 
-    // Holes under the current ray: the anchor hole and the far end of the
-    // component footprint. Hover and click both resolve through this, so a tap
-    // that never produced a hover still commits the hole it landed on.
-    function holesUnderRay(type) {
-      const bbBody = scene.getObjectByName('bb-body');
-      if (!bbBody) return null;
-      const hits = raycaster.intersectObject(bbBody, false);
-      if (!hits.length) return null;
-
-      const pt    = hits[0].point;
-      const holeA = state.breadboard.getNearestHole(pt.x, pt.z, null);
+    // Holes a part would use from the hovered anchor, and whether it fits.
+    function footprint(type) {
+      const holeA = holeUnderRay();
       if (!holeA) return null;
-
-      const SPANS = { led: App.LED_SPAN, resistor: App.RESISTOR_SPAN, buzzer: App.BUZZER_SPAN, button: App.BUTTON_SPAN };
-      const span  = SPANS[type] || App.RESISTOR_SPAN;
-      return { holeA, holeB: state.breadboard.getSpanHole(holeA, span, state.placementRotation) };
-    }
-
-    function positionGhost(holeA, holeB) {
-      if (!ghostGroup || !holeA) { if (ghostGroup) ghostGroup.visible = false; return; }
-      if (!holeB) { ghostGroup.visible = false; return; }
-
-      const midX = (holeA.x + holeB.x) / 2;
-      const midZ = (holeA.z + holeB.z) / 2;
-      ghostGroup.position.set(midX, 0, midZ);
-      ghostGroup.visible = true;
+      const span  = SPANS()[type] || App.RESISTOR_SPAN;
+      const holeB = state.breadboard.getSpanHole(holeA, span, state.placementRotation);
+      const inRails = h => h && state.breadboard.RAIL_ROWS.includes(h.row);
+      let ok = !!holeB && !inRails(holeA) && !inRails(holeB) &&
+               App.isHoleFree(holeA) && App.isHoleFree(holeB);
+      let why = '';
+      if (!holeB) why = 'no room';
+      else if (inRails(holeA) || inRails(holeB)) why = 'parts go in rows a to j';
+      else if (!ok) why = 'a hole is taken';
+      else if (App.overlapsPart(type, holeA, holeB)) { ok = false; why = 'it would sit on another part'; }
+      return { holeA, holeB, ok, why };
     }
 
     // ── Drag detection ──────────────────────────────────────
-    // Pointer events, not mouse events: they cover mouse, touch and pen, and
-    // OrbitControls calls preventDefault() on pointerdown, which suppresses the
-    // compatibility mousedown entirely — so the old mousedown guard never ran
-    // and every orbit ended in a placement.
-    let downPos       = null;
-    let downPointerId = null;
-    let wasDragged    = false;
-    const DRAG_THRESH = 8;  // px — must exceed this to be treated as orbit, not click
+    //  Pointer events cover mouse, touch and pen. OrbitControls calls
+    //  preventDefault() on pointerdown, so a click is a pointerup that
+    //  did not travel.
+    let downPos = null, downPointerId = null, wasDragged = false;
+    const DRAG_THRESH = 8;
 
     canvas.addEventListener('pointerdown', e => {
       if (!e.isPrimary || e.button !== 0) return;
@@ -123,177 +153,123 @@
       downPos       = null;
     });
 
-    // ── Hover indicator spheres (show both pin snap positions) ─
-    const hoverSphere = new THREE.Mesh(
-      new THREE.SphereGeometry(0.11, 12, 12),
-      new THREE.MeshLambertMaterial({ color: 0x22cc55, emissive: 0x115522, emissiveIntensity: 0.9 })
-    );
-    hoverSphere.visible = false;
-    scene.add(hoverSphere);
-
-    // Second sphere for the second pin (holeB)
-    const hoverSphereB = new THREE.Mesh(
-      new THREE.SphereGeometry(0.11, 12, 12),
-      new THREE.MeshLambertMaterial({ color: 0x22cc55, emissive: 0x115522, emissiveIntensity: 0.9 })
-    );
-    hoverSphereB.visible = false;
-    scene.add(hoverSphereB);
-
-    // Highlighted wire-start pin (stored so we can reset it)
-    let wireStartPinMesh = null;
-
-    // ── pointermove ─────────────────────────────────────────
     canvas.addEventListener('pointermove', e => {
       if (downPos && e.pointerId === downPointerId) {
-        const dx = e.clientX - downPos.x;
-        const dy = e.clientY - downPos.y;
+        const dx = e.clientX - downPos.x, dy = e.clientY - downPos.y;
         if (dx * dx + dy * dy > DRAG_THRESH * DRAG_THRESH) wasDragged = true;
       }
+      lastEvent = e;
       handleHover(e);
     });
 
+    canvas.addEventListener('pointerleave', () => {
+      hideHover();
+      clearGhost();
+      hideBatteryGhost();
+    });
+
+    function label(text) {
+      holeLabel.style.display = 'block';
+      holeLabel.textContent = text;
+    }
+
+    // ── Wire targets ─────────────────────────────────────────
+    //  A hole, moved to a free neighbour on its strip when taken, or a
+    //  battery terminal.
+    function wireTarget() {
+      const pinHits = raycaster.intersectObjects(getAllPinMeshes(), false);
+      if (pinHits.length) {
+        const pm = pinHits[0].object;
+        return { world: pm.userData.world.clone(), holeRef: null, pinMesh: pm, pin: true };
+      }
+      const hole = holeUnderRay();
+      if (!hole) return null;
+      const free = App.isHoleFree(hole) ? hole : App.freeHoleOnStrip(hole);
+      if (!free) return { hole, full: true };
+      return { world: free.world.clone(), holeRef: { col: free.col, row: free.row }, pinMesh: null,
+               hole: free, movedFrom: free === hole ? null : hole };
+    }
+
+    // ── Hover ────────────────────────────────────────────────
     function handleHover(e) {
-      const mode = state.mode;
       updateRay(e);
+      const mode = state.mode;
 
-      // ── PLACE mode ──────────────────────────────────────
       if (mode === 'place') {
-        syncGhost();
         const type = state.pickedType;
-
         if (type === 'battery') {
-          hoverSphere.visible  = false;
-          hoverSphereB.visible = false;
-          holeLabel.style.display = 'none';
-          // Position ghost at cursor, clamped outside the board
-          const pt  = new THREE.Vector3();
-          const hit = raycaster.ray.intersectPlane(boardPlane, pt);
-          if (hit && ghostGroup) {
-            const margin  = state.breadboard.BOARD_W / 2 + 2.5;
-            const clampX  = pt.x >= 0 ? Math.max(pt.x, margin) : Math.min(pt.x, -margin);
-            ghostGroup.position.set(clampX, 0, pt.z);
-            ghostGroup.visible = true;
-          } else if (ghostGroup) {
-            ghostGroup.visible = false;
-          }
+          hideHover();
+          clearGhost();
+          const p = boardPoint();
+          if (!p) { hideBatteryGhost(); return; }
+          const margin = state.breadboard.BOARD_W / 2 + 2.2;
+          showBatteryGhost(p.x >= 0 ? Math.max(p.x, margin) : Math.min(p.x, -margin), p.z);
           return;
         }
-
-        const holes = holesUnderRay(type);
-        if (!holes) {
-          hoverSphere.visible  = false;
-          hoverSphereB.visible = false;
-          holeLabel.style.display = 'none';
-          if (ghostGroup) ghostGroup.visible = false;
-          return;
-        }
-
-        const holeA = holes.holeA;
-        const holeB = holes.holeB;
-
-        // Update hover spheres on holeA and holeB
-        hoverSphere.position.set(holeA.x, 0.12, holeA.z);
-        hoverSphere.visible = true;
-        if (holeB) {
-          hoverSphereB.position.set(holeB.x, 0.12, holeB.z);
-          hoverSphereB.visible = true;
-        } else {
-          hoverSphereB.visible = false;
-        }
-
-        // Update ghost
-        syncGhost();
-        positionGhost(holeA, holeB);
-        if (ghostGroup) {
-          ghostGroup.rotation.y = state.placementRotation === 1 ? Math.PI / 2 : 0;
-        }
-
-        // Hole label
-        holeLabel.style.display = 'block';
-        holeLabel.textContent   = `Col ${holeA.col + 1}  Row ${holeA.row.toUpperCase()}` +
-          (holeB ? `  →  Col ${holeB.col + 1}  Row ${holeB.row.toUpperCase()}` : '  (no room)');
+        hideBatteryGhost();
+        const fp = footprint(type);
+        if (!fp) { hideHover(); clearGhost(); return; }
+        const color = fp.ok ? GOOD : BAD;
+        mark(markA, fp.holeA, color);
+        mark(markB, fp.holeB, color);
+        setGhost(type, fp.holeA, fp.holeB, fp.ok);
+        const a = App.formatHole(fp.holeA);
+        label(fp.holeB ? `${a} → ${App.formatHole(fp.holeB)}${fp.ok ? '' : '  ·  ' + fp.why}` : `${a}  ·  no room`);
         return;
       }
 
-      // ── WIRE mode ───────────────────────────────────────
       if (mode === 'wire') {
-        destroyGhost();
-        hoverSphere.visible  = false;
-        hoverSphereB.visible = false;
-        holeLabel.style.display = 'none';
-
-        // Highlight nearest hole (breadboard InstancedMesh)
-        const { holesMesh, holeData } = state.breadboard;
-        const holeHits = raycaster.intersectObject(holesMesh, false);
-        const pinHits  = raycaster.intersectObjects(getAllPinMeshes(), false);
-
-        // Reset all pin emissives
-        getAllPinMeshes().forEach(pm => {
-          if (pm === wireStartPinMesh) return;
-          pm.material.emissive.setHex(0x3a2800);
-          pm.material.emissiveIntensity = 0.4;
-        });
-
-        // Highlight hovered hole or pin
-        if (pinHits.length) {
-          const pm = pinHits[0].object;
-          if (pm !== wireStartPinMesh) {
-            pm.material.emissive.setHex(0x00aa44);
-            pm.material.emissiveIntensity = 1.0;
-          }
-          hoverSphere.position.copy(pm.userData.world);
-          hoverSphere.position.y += 0.06;
-          hoverSphere.visible = true;
-        } else if (holeHits.length) {
-          const h = holeData[holeHits[0].instanceId];
-          if (h) {
-            hoverSphere.position.set(h.x, 0.12, h.z);
-            hoverSphere.visible = true;
-            holeLabel.style.display = 'block';
-            holeLabel.textContent   = `Col ${h.col + 1}  Row ${h.row.toUpperCase()}`;
-          }
+        clearGhost();
+        hideBatteryGhost();
+        const t = wireTarget();
+        markB.visible = false;
+        if (!t) { hideHover(); updateTempWire(null); return; }
+        if (t.full) {
+          mark(markA, t.hole, BAD);
+          label(`${App.formatHole(t.hole)}  ·  this strip is full`);
+          updateTempWire(null);
+          return;
         }
-
-        // Update temp-wire preview
-        updateTempWire(e);
+        if (t.pin) {
+          mark(markA, { x: t.world.x, z: t.world.z }, PIN, t.world.y + 0.01);
+          label(t.pinMesh.userData.pinIndex === 0 ? 'battery +' : 'battery −');
+        } else {
+          mark(markA, t.hole, GOOD);
+          label(t.movedFrom
+            ? `${App.formatHole(t.hole)}  ·  ${App.formatHole(t.movedFrom)} is taken, same strip`
+            : App.formatHole(t.hole));
+        }
+        updateTempWire(t);
         return;
       }
 
-      // ── SELECT mode ─────────────────────────────────────
-      destroyGhost();
-      hoverSphere.visible  = false;
-      hoverSphereB.visible = false;
-      holeLabel.style.display = 'none';
+      clearGhost();
+      hideBatteryGhost();
+      hideHover();
     }
 
-    // ── Temp wire preview line (while mid-draw) ─────────────
-    function updateTempWire(e) {
-      if (!state.wireStart) {
-        if (state.tempWire) { scene.remove(state.tempWire); state.tempWire = null; }
+    // ── Live wire preview while drawing ──────────────────────
+    const tempMat = new THREE.MeshStandardMaterial({ color: 0x22c55e, transparent: true, opacity: 0.55, depthWrite: false });
+    let tempKey = '';
+    function updateTempWire(t) {
+      if (!state.wireStart || !t || t.full) {
+        if (state.tempWire) { scene.remove(state.tempWire); App.disposeGroup(state.tempWire); state.tempWire = null; tempKey = ''; }
         return;
       }
-      if (state.tempWire) scene.remove(state.tempWire);
-
-      const target = new THREE.Vector3();
-      raycaster.ray.intersectPlane(boardPlane, target);
-      if (!target) return;
-
-      const pts = [state.wireStart.world, target];
-      const geo = new THREE.BufferGeometry().setFromPoints(pts);
-      const mat = new THREE.LineDashedMaterial({ color: 0x22cc55, dashSize: 0.3, gapSize: 0.15 });
-      const line = new THREE.Line(geo, mat);
-      line.computeLineDistances();
-      scene.add(line);
-      state.tempWire = line;
+      const key = t.world.toArray().map(v => v.toFixed(2)).join(',');
+      if (key === tempKey) return;
+      if (state.tempWire) { scene.remove(state.tempWire); App.disposeGroup(state.tempWire); }
+      tempMat.color.copy(App.lin(state.wireColor));
+      state.tempWire = App.buildWire(state.wireStart.world, t.world, state.wireColor, { material: tempMat });
+      scene.add(state.tempWire);
+      tempKey = key;
     }
 
-    // ── pointerup ────────────────────────────────────────────
+    // ── Click ────────────────────────────────────────────────
     canvas.addEventListener('pointerup', e => {
       if (e.pointerId !== downPointerId) return;
-      // Final distance check — catches drags pointermove may have missed
       if (downPos) {
-        const dx = e.clientX - downPos.x;
-        const dy = e.clientY - downPos.y;
+        const dx = e.clientX - downPos.x, dy = e.clientY - downPos.y;
         if (dx * dx + dy * dy > DRAG_THRESH * DRAG_THRESH) wasDragged = true;
       }
       downPointerId = null;
@@ -306,109 +282,58 @@
     function handleClick(e) {
       const mode = state.mode;
 
-      // ── PLACE ──────────────────────────────────────────
       if (mode === 'place') {
         const type = state.pickedType;
-
         if (type === 'battery') {
-          const pt  = new THREE.Vector3();
-          const hit = raycaster.ray.intersectPlane(boardPlane, pt);
-          if (hit) App.placeBattery(pt.x, pt.z);
+          const p = boardPoint();
+          if (p) App.placeBattery(p.x, p.z);
           return;
         }
-
-        const holes = holesUnderRay(type);
-        if (!holes || !holes.holeB) return;
-        const hA = holes.holeA;
-        const hB = holes.holeB;
-
-        if (type === 'resistor') App.placeResistor(hA, hB);
-        if (type === 'led')      App.placeLED(hA, hB);
-        if (type === 'buzzer')   App.placeBuzzer(hA, hB);
-        if (type === 'button')   App.placeButton(hA, hB);
+        const fp = footprint(type);
+        if (!fp || !fp.holeB) return;
+        if (!fp.ok) { App.setHint(`Can't place here: ${fp.why}`, 2000); return; }
+        if (type === 'resistor') App.placeResistor(fp.holeA, fp.holeB);
+        if (type === 'led')      App.placeLED(fp.holeA, fp.holeB);
+        if (type === 'buzzer')   App.placeBuzzer(fp.holeA, fp.holeB);
+        if (type === 'button')   App.placeButton(fp.holeA, fp.holeB);
+        clearGhost();
+        handleHover(e);
         return;
       }
 
-      // ── SELECT ─────────────────────────────────────────
       if (mode === 'select') {
-        const compMeshes = getAllComponentMeshes();
-        const wireMeshes = state.wires.map(w => w.group).filter(Boolean)
-          .concat(state.wires.map(w => w.tube).filter(Boolean));
-
-        // also allow clicking wire tubes (stored as group children)
-        const allWireMeshes = [];
-        state.wires.forEach(w => {
-          if (w.group) w.group.traverse(o => { if (o.isMesh) allWireMeshes.push(o); });
-        });
-
-        const all  = [...compMeshes, ...allWireMeshes];
-        if (!all.length) { App.deselect(); return; }
-
-        const hits = raycaster.intersectObjects(all, false);
+        const meshes = [];
+        state.components.forEach(c => c.group.traverse(o => { if (o.isMesh) meshes.push(o); }));
+        state.wires.forEach(w => w.group && w.group.traverse(o => { if (o.isMesh) meshes.push(o); }));
+        const hits = raycaster.intersectObjects(meshes, false);
         if (!hits.length) { App.deselect(); return; }
-
-        const hitObj = hits[0].object;
-
-        // Is it a wire?
-        for (const w of state.wires) {
-          let found = false;
-          if (w.group) w.group.traverse(o => { if (o === hitObj) found = true; });
-          if (found) { App.selectItem(w, 'wire'); return; }
-        }
-
-        // Walk up to find owning component group
-        for (const comp of state.components) {
-          let found = false;
-          comp.group.traverse(o => { if (o === hitObj) found = true; });
-          if (found) { App.selectItem(comp, 'component'); return; }
-        }
-
+        const hit = hits[0].object;
+        const owns = g => { let f = false; g.traverse(o => { if (o === hit) f = true; }); return f; };
+        const w = state.wires.find(w => w.group && owns(w.group));
+        if (w) { App.selectItem(w, 'wire'); return; }
+        const c = state.components.find(c => owns(c.group));
+        if (c) { App.selectItem(c, 'component'); return; }
         App.deselect();
         return;
       }
 
-      // ── WIRE ───────────────────────────────────────────
       if (mode === 'wire') {
-        // Resolve click target: prefer pin sphere, then hole
-        const pinHits  = raycaster.intersectObjects(getAllPinMeshes(), false);
-        const { holesMesh, holeData } = state.breadboard;
-        const holeHits = raycaster.intersectObject(holesMesh, false);
-
-        let clickHoleRef  = null;  // { col, row }
-        let clickWorld    = null;  // Vector3
-        let clickPinMesh  = null;
-
-        if (pinHits.length) {
-          const pm = pinHits[0].object;
-          // Map pin back to its breadboard hole ref via ownerComp.holeRefs
-          const comp    = pm.userData.ownerComp;
-          const pidx    = pm.userData.pinIndex;
-          const hRef    = comp?.holeRefs?.[pidx];
-          clickHoleRef  = hRef || null;
-          clickWorld    = pm.userData.world.clone();
-          clickPinMesh  = pm;
-        } else if (holeHits.length) {
-          const h = holeData[holeHits[0].instanceId];
-          if (h) { clickHoleRef = { col: h.col, row: h.row }; clickWorld = h.world.clone(); }
-        }
-
-        if (!clickWorld) return;
-
+        const t = wireTarget();
+        if (!t || t.full) return;
+        const end = { world: t.world, holeRef: t.holeRef, pinMesh: t.pinMesh };
         if (!state.wireStart) {
-          // Start wire
-          state.wireStart = { world: clickWorld, holeRef: clickHoleRef, pinMesh: clickPinMesh };
-          wireStartPinMesh = clickPinMesh;
-          if (clickPinMesh) {
-            clickPinMesh.userData.isWireStart = true;
-            clickPinMesh.material.emissive.setHex(0x884400);
-            clickPinMesh.material.emissiveIntensity = 1.1;
-          }
-          App.setHint('Click another hole or pin to complete the wire · ESC to cancel');
+          state.wireStart = end;
+          if (t.pinMesh) t.pinMesh.userData.isWireStart = true;
+          App.setHint('Now click a second hole');
         } else {
-          // Complete wire — pass pinMesh so simulate.js can resolve component pins
-          App.finishWire({ world: clickWorld, holeRef: clickHoleRef, pinMesh: clickPinMesh });
-          wireStartPinMesh = null;
+          const s = state.wireStart;
+          const same = (s.holeRef && end.holeRef && s.holeRef.col === end.holeRef.col && s.holeRef.row === end.holeRef.row) ||
+                       (s.pinMesh && s.pinMesh === end.pinMesh);
+          if (same) return;
+          App.finishWire(end);
         }
+        updateTempWire(null);
+        if (lastEvent) handleHover(lastEvent);
       }
     }
 
@@ -422,15 +347,13 @@
         if (e.shiftKey) App.redo(); else App.undo();
         return;
       }
-      if (e.ctrlKey || e.metaKey) return;   // leave browser shortcuts alone
+      if (e.ctrlKey || e.metaKey) return;
 
       if (e.key === 'r' || e.key === 'R') {
-        // Toggle rotation (0 ↔ 1)
         state.placementRotation = state.placementRotation === 0 ? 1 : 0;
-        // Force ghost rebuild
-        ghostType = null;
-        syncGhost();
-        App.setHint(`Rotation: ${state.placementRotation === 0 ? 'Horizontal' : 'Vertical'} · R to rotate`, 1800);
+        clearGhost();
+        if (lastEvent) handleHover(lastEvent);
+        App.setHint(state.placementRotation === 0 ? 'Along a row' : 'Along a column', 1200);
         return;
       }
 
@@ -450,28 +373,23 @@
     });
 
     // ── Clear All guard ──────────────────────────────────────
-    // The button calls App.clearAll() from an inline onclick and there is no
-    // undo, so confirm here in the capture phase, before the event reaches it.
-    // App.clearAll itself stays silent: loading and AI actions call it too.
     document.addEventListener('click', e => {
       if (!e.target.closest?.('#clear-all-btn')) return;
       const n = state.components.length + state.wires.length;
       if (!n) return;
-      if (!confirm(`Delete all ${n} item${n === 1 ? '' : 's'} on the board? This cannot be undone.`)) {
+      if (!confirm(`Delete all ${n} item${n === 1 ? '' : 's'} on the board? You can undo this with Ctrl+Z.`)) {
         e.preventDefault();
         e.stopPropagation();
       }
     }, true);
 
-    // Clean up ghost when mode changes
+    // Tidy up the hover state whenever the mode changes
     const _origSetMode = App.setMode.bind(App);
     App.setMode = function (m) {
       _origSetMode(m);
-      if (m !== 'place') destroyGhost();
-      hoverSphere.visible  = false;
-      hoverSphereB.visible = false;
-      holeLabel.style.display = 'none';
-      wireStartPinMesh = null;
+      if (m !== 'place') { clearGhost(); hideBatteryGhost(); }
+      updateTempWire(null);
+      hideHover();
     };
   }
 
